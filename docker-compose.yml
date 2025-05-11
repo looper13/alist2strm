@@ -1,0 +1,25 @@
+version: '3'
+
+services:
+  alist-strm:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/data
+      - /Users/mccray/test:/Users/mccray/test
+      - ./db:/app/data
+    environment:
+      - ALIST_HOST=http://alist:5244
+      - ALIST_TOKEN=${ALIST_TOKEN}
+      - GENERATOR_PATH=/data
+      - GENERATOR_TARGET_PATH=/Users/mccray/test
+      - GENERATOR_FILE_SUFFIX=mp4,mkv,avi
+      - CRON_ENABLE=true
+      - CRON_EXPRESSION=*/1 * * * *
+    networks:
+      - alist-network
+
+networks:
+  alist-network:
+    external: true
