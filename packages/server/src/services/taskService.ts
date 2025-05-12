@@ -1,10 +1,19 @@
 import type { ScheduledTask } from 'node-cron'
 import cron from 'node-cron'
 import { Op } from 'sequelize'
-import type { TaskAttributes, TaskCreationAttributes } from '../types'
+import type {
+  TaskAttributes,
+  TaskCreationAttributes,
+  TaskInstance,
+  TaskLogInstance,
+} from '../types'
 import db from '../models'
 import generatorService from './generator'
+import { logger } from '../utils/logger'
 
+/**
+ * 任务服务
+ */
 class TaskService {
   private cronJobs: Map<number, ScheduledTask>
 
@@ -12,57 +21,92 @@ class TaskService {
     this.cronJobs = new Map()
   }
 
-  async createTask(taskData: Omit<TaskCreationAttributes, 'id'>) {
+  /**
+   * 创建任务
+   * @param taskData 任务数据
+   * @returns 任务
+   */
+  async createTask(taskData: Omit<TaskCreationAttributes, 'id'>): Promise<TaskInstance> {
     const task = await db.Task.create(taskData)
+    logger.info.info('创建任务成功', { taskId: task.id, taskData })
+
     if (task.enabled && task.cronExpression) {
       this.scheduleCronJob(task)
+      logger.debug.debug('定时任务已调度', {
+        taskId: task.id,
+        cronExpression: task.cronExpression,
+      })
     }
     return task
   }
 
-  async updateTask(id: number, taskData: Partial<TaskAttributes>) {
+  /**
+   * 更新任务
+   * @param id 任务ID
+   * @param taskData 任务数据
+   * @returns 任务
+   */
+  async updateTask(id: number, taskData: Partial<TaskAttributes>): Promise<TaskInstance | null> {
     const task = await db.Task.findByPk(id)
     if (!task) {
-      throw new Error('Task not found')
+      logger.error.error('更新任务失败：任务不存在', { taskId: id })
+      throw new Error('任务不存在')
     }
 
     if (this.cronJobs.has(task.id)) {
       this.cronJobs.get(task.id)?.stop()
       this.cronJobs.delete(task.id)
+      logger.debug.debug('已停止现有定时任务', { taskId: task.id })
     }
 
     await task.update(taskData)
+    logger.info.info('更新任务成功', { taskId: id, updates: taskData })
 
     if (task.enabled && task.cronExpression) {
       this.scheduleCronJob(task)
+      logger.debug.debug('新的定时任务已调度', {
+        taskId: task.id,
+        cronExpression: task.cronExpression,
+      })
     }
 
     return task
   }
 
-  async deleteTask(id: number) {
+  /**
+   * 删除任务
+   * @param id 任务ID
+   */
+  async deleteTask(id: number): Promise<void> {
     const task = await db.Task.findByPk(id)
     if (!task) {
-      throw new Error('Task not found')
+      logger.error.error('删除任务失败：任务不存在', { taskId: id })
+      throw new Error('任务不存在')
     }
 
     if (this.cronJobs.has(task.id)) {
       this.cronJobs.get(task.id)?.stop()
       this.cronJobs.delete(task.id)
+      logger.debug.debug('已移除定时任务', { taskId: task.id })
     }
 
     await task.destroy()
+    logger.info.info('删除任务成功', { taskId: id })
   }
 
-  async getTasks() {
+  /**
+   * 获取所有任务
+   * @returns 任务列表
+   */
+  async getTasks(): Promise<TaskInstance[]> {
     return db.Task.findAll()
   }
 
-  async getTask(id: number) {
+  async getTask(id: number): Promise<TaskInstance | null> {
     return db.Task.findByPk(id)
   }
 
-  async getTaskLogs(taskId: number, limit = 10) {
+  async getTaskLogs(taskId: number, limit = 10): Promise<TaskLogInstance[]> {
     return db.TaskLog.findAll({
       where: { taskId },
       order: [['createdAt', 'DESC']],
@@ -70,63 +114,111 @@ class TaskService {
     })
   }
 
+  /**
+   * 执行任务
+   * @param id 任务ID
+   */
   async executeTask(id: number) {
     const task = await db.Task.findByPk(id)
     if (!task) {
-      throw new Error('Task not found')
+      logger.error.error('执行任务失败：任务不存在', { taskId: id })
+      throw new Error('任务不存在')
     }
 
+    const startTime = new Date()
     const taskLog = await db.TaskLog.create({
-      taskId: task.dataValues.id,
-      startTime: new Date(),
+      taskId: task.id,
+      startTime,
       status: 'pending',
     })
 
     try {
       const result = await generatorService.generateStrm({
-        sourcePath: task.dataValues.sourcePath,
-        targetPath: task.dataValues.targetPath,
-        fileSuffix: task.dataValues.fileSuffix.split(','),
-        overwrite: task.dataValues.overwrite,
+        sourcePath: task.sourcePath,
+        targetPath: task.targetPath,
+        fileSuffix: task.fileSuffix.split(','),
+        overwrite: task.overwrite,
       })
 
-      await taskLog.update({
-        status: 'success',
-        totalFiles: result.totalFiles,
-        generatedFiles: result.generatedFiles,
-        skippedFiles: result.skippedFiles,
-        endTime: new Date(),
-      })
+      const endTime = new Date()
 
-      await task.update({ lastRunAt: new Date() })
+      await db.TaskLog.update(
+        {
+          status: 'success',
+          totalFiles: result.totalFiles,
+          generatedFiles: result.generatedFiles,
+          skippedFiles: result.skippedFiles,
+          endTime,
+        },
+        {
+          where: {
+            id: taskLog.id,
+          },
+        },
+      )
+
+      await task.update({ lastRunAt: endTime })
 
       return result
     } catch (error) {
-      await taskLog.update({
-        status: 'error',
-        error: (error as Error).message,
-        endTime: new Date(),
+      const errorMessage = (error as Error).message
+      const endTime = new Date()
+
+      await db.TaskLog.update(
+        {
+          status: 'error',
+          error: errorMessage,
+          endTime,
+        },
+        {
+          where: {
+            id: taskLog.id,
+          },
+        },
+      )
+
+      logger.error.error('任务执行失败', {
+        taskId: id,
+        error: errorMessage,
+        stack: (error as Error).stack,
+        duration: endTime.getTime() - startTime.getTime(),
       })
       throw error
     }
   }
 
-  private scheduleCronJob(task: TaskAttributes) {
+  /**
+   * 调度任务
+   * @param task 任务
+   */
+  private scheduleCronJob(task: TaskInstance) {
     if (!task.enabled || !task.cronExpression) {
       return
     }
 
     const job = cron.schedule(task.cronExpression, async () => {
       try {
+        logger.debug.debug('开始执行定时任务', { taskId: task.id })
         await this.executeTask(task.id)
       } catch (error) {
-        console.error(`Cron job error for task ${task.id}:`, error)
+        logger.error.error('定时任务执行失败', {
+          taskId: task.id,
+          error: (error as Error).message,
+          stack: (error as Error).stack,
+        })
       }
     })
 
     this.cronJobs.set(task.id, job)
+    logger.debug.debug('定时任务已设置', {
+      taskId: task.id,
+      cronExpression: task.cronExpression,
+    })
   }
 
+  /**
+   * 初始化任务
+   */
   async initializeCronJobs() {
     const tasks = await db.Task.findAll({
       where: {
@@ -136,7 +228,7 @@ class TaskService {
         },
       },
     })
-
+    logger.info.info('正在初始化定时任务', { taskCount: tasks.length })
     for (const task of tasks) {
       this.scheduleCronJob(task)
     }

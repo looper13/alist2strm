@@ -3,17 +3,17 @@ import type { TaskAttributes, TaskCreationAttributes } from '../types'
 import { sequelize } from './index'
 
 class Task extends Model<TaskAttributes, TaskCreationAttributes> {
-  public id!: number
-  public name!: string
-  public sourcePath!: string
-  public targetPath!: string
-  public fileSuffix!: string
-  public overwrite!: boolean
-  public enabled!: boolean
-  public cronExpression!: string | null
-  public lastRunAt!: Date | null
-  public createdAt!: Date
-  public updatedAt!: Date
+  declare id: number
+  declare name: string
+  declare sourcePath: string
+  declare targetPath: string
+  declare fileSuffix: string
+  declare overwrite: boolean
+  declare enabled: boolean
+  declare cronExpression: string | null
+  declare lastRunAt: Date | null
+  declare createdAt: Date
+  declare updatedAt: Date
 
   static associate(models: any) {
     Task.hasMany(models.TaskLog, { foreignKey: 'taskId' })

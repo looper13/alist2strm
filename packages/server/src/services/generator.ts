@@ -3,6 +3,7 @@ import path from 'node:path'
 import type { GenerateResult, AlistStorage } from '../types'
 import alistService from './alist'
 import config from '../config'
+import { logger } from '../utils/logger'
 
 interface GenerateOptions {
   sourcePath?: string
@@ -26,17 +27,22 @@ class GeneratorService {
     fileSuffix = config.generator.fileSuffix,
     overwrite = false,
   }: GenerateOptions): Promise<GenerateResult> {
+    logger.info.info('开始生成 STRM 文件', { sourcePath, targetPath, fileSuffix, overwrite })
+
     if (!targetPath) {
-      throw new Error('Target path is required')
+      logger.error.error('目标路径不能为空')
+      throw new Error('目标路径不能为空')
     }
 
     // 确保目标目录存在
     await fs.mkdir(targetPath, { recursive: true })
+    logger.debug.debug('已创建/验证目标目录', { targetPath })
 
     // 获取存储信息
     const storage = await alistService.findStorage(sourcePath)
     if (!storage) {
-      throw new Error(`Storage not found for path: ${sourcePath}`)
+      logger.error.error('未找到存储', { sourcePath })
+      throw new Error(`未找到路径对应的存储: ${sourcePath}`)
     }
 
     // 初始化结果统计
@@ -56,6 +62,7 @@ class GeneratorService {
       result,
     )
 
+    logger.info.info('STRM 文件生成完成', { result })
     return result
   }
 
@@ -77,6 +84,7 @@ class GeneratorService {
     storage: AlistStorage,
     result: GenerateResult,
   ) {
+    logger.debug.debug('正在处理目录', { sourcePath, targetPath })
     const files = await alistService.listFiles(sourcePath)
 
     for (const file of files) {
@@ -87,7 +95,7 @@ class GeneratorService {
       )
 
       if (file.is_dir) {
-        // 如果是目录，递归处理
+        // 递归处理子目录
         await fs.mkdir(targetFilePath, { recursive: true })
         await this._generateStrmRecursive(
           sourceFilePath,
@@ -98,40 +106,53 @@ class GeneratorService {
           result,
         )
       } else {
-        // 如果是文件，检查后缀名
-        const ext = path.extname(file.name).toLowerCase().slice(1)
-        if (fileSuffix.includes(ext)) {
-          result.totalFiles++
-          // strmPath  去除文件名称后缀
-          const strmPath = path.join(targetPath, file.name.replace(`.${ext}`, '.strm'))
-          // 检查是否需要覆盖
-          const fileExists = await this._fileExists(strmPath)
-          if (!overwrite && fileExists) {
-            result.skippedFiles++
-            continue
-          }
+        result.totalFiles++
+        const ext = path.extname(file.name).toLowerCase()
+        if (!fileSuffix.includes(ext.slice(1))) {
+          result.skippedFiles++
+          continue
+        }
 
-          try {
-            // 获取文件详情以获取 sign
-            const fileInfo = await alistService.getFileInfo(sourceFilePath)
-            // 生成 AList 直接访问地址
-            const alistUrl = `${config.alist.host}/d${sourceFilePath}`
+        const strmPath = targetFilePath + '.strm'
+        if (!overwrite && (await fs.stat(strmPath).catch(() => null))) {
+          result.skippedFiles++
+          continue
+        }
 
-            // 如果存储需要签名，添加从文件详情获取的 sign
-            const finalUrl =
-              storage.enable_sign && fileInfo.sign ? `${alistUrl}?sign=${fileInfo.sign}` : alistUrl
+        try {
+          // 获取文件详情以获取 sign
+          const fileInfo = await alistService.getFileInfo(sourceFilePath)
+          // 生成 AList 直接访问地址
+          const alistUrl = `${config.alist.host}/d${sourceFilePath}`
 
-            // 生成 STRM 文件内容
-            await fs.writeFile(strmPath, finalUrl)
-            result.generatedFiles++
-          } catch (error) {
-            console.error(`Error generating STRM for ${sourceFilePath}:`, error)
-          }
+          // 如果存储需要签名，添加从文件详情获取的 sign
+          const finalUrl =
+            storage.enable_sign && fileInfo.sign ? `${alistUrl}?sign=${fileInfo.sign}` : alistUrl
+
+          // 生成 STRM 文件内容
+          await fs.writeFile(strmPath, finalUrl)
+          result.generatedFiles++
+          logger.debug.debug('已生成 STRM 文件', {
+            source: sourceFilePath,
+            target: strmPath,
+            hasSign: Boolean(storage.enable_sign && fileInfo.sign),
+          })
+        } catch (error) {
+          logger.error.error('生成 STRM 文件失败', {
+            source: sourceFilePath,
+            error: (error as Error).message,
+            stack: (error as Error).stack,
+          })
         }
       }
     }
   }
 
+  /**
+   * 检查文件是否存在
+   * @param filePath 文件路径
+   * @returns 是否存在
+   */
   private async _fileExists(filePath: string): Promise<boolean> {
     try {
       await fs.access(filePath)

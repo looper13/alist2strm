@@ -4,17 +4,17 @@ import { sequelize } from './index'
 import Task from './task'
 
 class TaskLog extends Model<TaskLogAttributes, TaskLogCreationAttributes> {
-  public id!: number
-  public taskId!: number
-  public status!: 'pending' | 'success' | 'error'
-  public startTime!: Date
-  public endTime!: Date | null
-  public totalFiles!: number | null
-  public generatedFiles!: number | null
-  public skippedFiles!: number | null
-  public error!: string | null
-  public createdAt!: Date
-  public updatedAt!: Date
+  declare id: number
+  declare taskId: number
+  declare status: 'pending' | 'success' | 'error'
+  declare startTime: Date
+  declare endTime: Date | null
+  declare totalFiles: number | null
+  declare generatedFiles: number | null
+  declare skippedFiles: number | null
+  declare error: string | null
+  declare createdAt: Date
+  declare updatedAt: Date
 
   static associate(models: any) {
     TaskLog.belongsTo(models.Task, { foreignKey: 'taskId' })
