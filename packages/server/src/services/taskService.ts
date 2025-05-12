@@ -102,6 +102,56 @@ class TaskService {
     return db.Task.findAll()
   }
 
+  /**
+   * 分页获取任务列表
+   * @param page 页码（从1开始）
+   * @param pageSize 每页大小
+   * @returns 任务列表和总数
+   */
+  async getTasksWithPagination(
+    page = 1,
+    pageSize = 10,
+  ): Promise<{ tasks: TaskInstance[]; total: number }> {
+    // 确保参数为数字且有效
+    const validPage = Math.max(1, Number(page))
+    const validPageSize = Math.max(1, Math.min(50, Number(pageSize)))
+    const offset = (validPage - 1) * validPageSize
+
+    logger.debug.debug('执行分页查询', {
+      page: validPage,
+      pageSize: validPageSize,
+      offset,
+    })
+
+    try {
+      const { count, rows } = await db.Task.findAndCountAll({
+        offset,
+        limit: validPageSize,
+        order: [['createdAt', 'DESC']],
+        distinct: true, // 确保正确的总数计算
+      })
+
+      logger.debug.debug('查询结果', {
+        total: count,
+        currentPageSize: rows.length,
+        page: validPage,
+        pageSize: validPageSize,
+      })
+
+      return {
+        tasks: rows,
+        total: count,
+      }
+    } catch (error) {
+      logger.error.error('分页查询失败', {
+        error: (error as Error).message,
+        stack: (error as Error).stack,
+        params: { page: validPage, pageSize: validPageSize },
+      })
+      throw error
+    }
+  }
+
   async getTask(id: number): Promise<TaskInstance | null> {
     return db.Task.findByPk(id)
   }

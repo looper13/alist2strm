@@ -11,6 +11,16 @@ export const taskService = {
     return data
   },
 
+  async getTasksWithPagination(page: number, pageSize: number) {
+    const { data } = await api.get<{
+      tasks: Task[]
+      total: number
+    }>('/tasks', {
+      params: { page, pageSize },
+    })
+    return data
+  },
+
   async createTask(task: CreateTaskDto) {
     const { data } = await api.post<Task>('/tasks', task)
     return data
@@ -33,4 +43,4 @@ export const taskService = {
     const { data } = await api.get<TaskLog[]>(`/tasks/${id}/logs`)
     return data
   },
-} 
+}

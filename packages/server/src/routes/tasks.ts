@@ -8,21 +8,31 @@ const router = Router()
 // 获取所有任务
 router.get('/', async (req, res, next) => {
   try {
-    logger.info.info('正在获取所有任务', {
+    const page = parseInt(req.query.page as string) || 1
+    const pageSize = parseInt(req.query.pageSize as string) || 10
+
+    logger.info.info('正在获取任务列表', {
       query: req.query,
+      page,
+      pageSize,
     })
 
-    const tasks = await taskService.getTasks()
+    const result = await taskService.getTasksWithPagination(page, pageSize)
 
     logger.debug.debug('成功获取任务列表', {
-      taskCount: tasks.length,
+      page,
+      pageSize,
+      total: result.total,
+      currentPageSize: result.tasks.length,
+      requestQuery: req.query,
     })
 
-    res.json(tasks)
+    res.json(result)
   } catch (error) {
     logger.error.error('获取任务列表失败', {
       error: (error as Error).message,
       stack: (error as Error).stack,
+      query: req.query,
     })
     next(error)
   }
