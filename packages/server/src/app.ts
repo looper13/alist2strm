@@ -6,6 +6,7 @@ import db from './models'
 import taskService from './services/taskService'
 import { errorHandler } from './middleware/errorHandler'
 import taskRoutes from './routes/tasks'
+import { logger, errorLogger } from './utils/logger'
 
 const app = express()
 
@@ -14,7 +15,7 @@ app.use(express.json())
 
 // 添加基本的请求日志中间件
 app.use((req: Request, _res: Response, next: NextFunction) => {
-  console.log(`${new Date().toISOString()} ${req.method} ${req.url}`, req.body)
+  logger.info(`${new Date().toISOString()} ${req.method} ${req.url}`, req.body)
   next()
 })
 
@@ -95,6 +96,11 @@ app.get('/api/tasks/:id/logs', async (req: Request, res: Response) => {
 })
 
 // 错误处理
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+  errorLogger.error(`Error occurred: ${err.message}`, { stack: err.stack })
+  next(err)
+})
+
 app.use(errorHandler)
 
 // 初始化数据库并启动服务器

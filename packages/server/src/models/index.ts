@@ -17,6 +17,7 @@ TaskLog.initModel(sequelize)
 Task.hasMany(TaskLog, { foreignKey: 'taskId' })
 TaskLog.belongsTo(Task, { foreignKey: 'taskId' })
 
+// 导出模型和数据库连接
 const db = {
   sequelize,
   Sequelize,

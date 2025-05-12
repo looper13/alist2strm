@@ -1,7 +1,7 @@
 import axios from 'axios'
 import type { AlistStorage } from '../types'
 import config from '../config'
-import { alistLogger as logger, errorLogger } from '../utils/logger'
+import { logger, errorLogger } from '../utils/logger'
 
 interface AlistListResponse<T> {
   code: number

@@ -57,14 +57,16 @@ const rules: FormRules = {
   ],
   targetPath: [
     { required: true, message: '请输入目标路径', trigger: 'blur' },
-    {
-      validator: (rule, value) => {
-        if (!value.startsWith('/'))
-          return new Error('路径必须以 / 开头')
-        return true
-      },
-      trigger: 'blur',
-    },
+    // 兼容Windows、 Linux 路径
+
+    // {
+    //   validator: (rule, value) => {
+    //     if (!value.startsWith('/'))
+    //       return new Error('路径必须以 / 开头')
+    //     return true
+    //   },
+    //   trigger: 'blur',
+    // },
   ],
   fileSuffix: [
     { required: true, message: '请输入文件后缀', trigger: 'blur' },

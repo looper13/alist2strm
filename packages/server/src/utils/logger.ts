@@ -27,14 +27,14 @@ log4js.configure({
   categories: {
     default: { appenders: ['console', 'file'], level: 'info' },
     error: { appenders: ['console', 'error'], level: 'error' },
-    alist: { appenders: ['console', 'file'], level: 'debug' },
+    debug: { appenders: ['console', 'file'], level: 'debug' },
   },
 })
 
 // 创建不同的日志记录器
 export const logger = log4js.getLogger('default')
 export const errorLogger = log4js.getLogger('error')
-export const alistLogger = log4js.getLogger('alist')
+export const debugLogger = log4js.getLogger('debug')
 
 // 确保在应用退出时正确关闭日志
 process.on('exit', () => {

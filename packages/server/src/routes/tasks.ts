@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { AppError } from '../middleware/errorHandler'
 import taskService from '../services/taskService'
+import { logger, errorLogger } from '../utils/logger'
 
 const router = Router()
 
@@ -51,8 +52,10 @@ router.delete('/:id', async (req, res, next) => {
 router.post('/:id/execute', async (req, res, next) => {
   try {
     const result = await taskService.executeTask(Number(req.params.id))
+    logger.info(`Task executed successfully: ${req.params.id}`)
     res.json(result)
   } catch (error) {
+    errorLogger.error(`Failed to execute task: ${req.params.id}`, { error })
     next(error)
   }
 })
@@ -61,8 +64,10 @@ router.post('/:id/execute', async (req, res, next) => {
 router.get('/:id/logs', async (req, res, next) => {
   try {
     const logs = await taskService.getTaskLogs(Number(req.params.id))
+    logger.info(`Fetched logs for task: ${req.params.id}`)
     res.json(logs)
   } catch (error) {
+    errorLogger.error(`Failed to fetch logs for task: ${req.params.id}`, { error })
     next(error)
   }
 })
