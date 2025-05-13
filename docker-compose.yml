@@ -1,25 +1,24 @@
-version: '3'
-
 services:
-  alist-strm:
-    build: .
+  strm-generator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      platforms:
+        - linux/amd64 # x86_64 架构
+        - linux/arm64 # ARM 架构
     ports:
-      - "3000:3000"
+      - "3000:3000" # 后端 API 端口
+      - "5255:80" # 前端页面端口
+    environment:
+      - NODE_ENV=production
+      - DATABASE_PATH=/data/database
+      - ALIST_HOST=http://192.168.92.120:5244
+      - ALIST_TOKEN=alist-d8bc1b41-78a0-4707-b59e-2fcf83edc9f8b7cz4OtGfTxpCRrpDfbMJSZ3mQcJLQysNU8W9qeXOstIBDslUPTxd8v3w7bLqISX
+      - LOG_BASE_DIR=/data/logs
+      - LOG_LEVEL=info
     volumes:
       - ./data:/data
-      - /Users/mccray/test:/Users/mccray/test
-      - ./db:/app/data
-    environment:
-      - ALIST_HOST=http://alist:5244
-      - ALIST_TOKEN=${ALIST_TOKEN}
-      - GENERATOR_PATH=/data
-      - GENERATOR_TARGET_PATH=/Users/mccray/test
-      - GENERATOR_FILE_SUFFIX=mp4,mkv,avi
-      - CRON_ENABLE=true
-      - CRON_EXPRESSION=*/1 * * * *
-    networks:
-      - alist-network
+    restart: unless-stopped
 
-networks:
-  alist-network:
-    external: true
+volumes:
+  data:
