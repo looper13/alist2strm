@@ -186,6 +186,7 @@ const columns = [
     :columns="columns"
     :data="tasks"
     :loading="loading"
+    remote
     :pagination="{
       page: pagination.page,
       pageSize: pagination.pageSize,
@@ -194,7 +195,6 @@ const columns = [
       pageSizes: pagination.pageSizes,
       onUpdatePage: (page: number) => emit('update:page', page),
       onUpdatePageSize: (pageSize: number) => emit('update:pageSize', pageSize),
-      showQuickJumper: true,
     }"
     :bordered="false"
     :single-line="false"

@@ -18,8 +18,8 @@ const editingTaskId = ref<number | null>(null)
 
 const pagination = ref({
   page: 1,
-  pageSize: 10,
-  itemCount: 0,
+  pageSize: 1,
+  itemCount: 10,
   showSizePicker: true,
   pageSizes: [10, 20, 30, 50],
 })
