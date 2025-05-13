@@ -2,6 +2,7 @@ import { DataTypes, Model, Sequelize } from 'sequelize'
 import type { TaskLogAttributes, TaskLogCreationAttributes } from '../types'
 import { sequelize } from './index'
 import Task from './task'
+import { TASK_STATUS } from '../constants'
 
 class TaskLog extends Model<TaskLogAttributes, TaskLogCreationAttributes> {
   declare id: number
@@ -37,9 +38,9 @@ class TaskLog extends Model<TaskLogAttributes, TaskLogCreationAttributes> {
           },
         },
         status: {
-          type: DataTypes.ENUM('pending', 'success', 'error'),
+          type: DataTypes.ENUM(TASK_STATUS.PENDING, TASK_STATUS.SUCCESS, TASK_STATUS.ERROR),
           allowNull: false,
-          defaultValue: 'pending',
+          defaultValue: TASK_STATUS.PENDING,
         },
         startTime: {
           type: DataTypes.DATE,

@@ -1,4 +1,5 @@
 import { Model, Optional } from 'sequelize'
+import { TASK_STATUS } from '../constants'
 
 /**
  * 任务属性
@@ -13,6 +14,7 @@ export interface TaskAttributes {
   enabled: boolean
   cronExpression: string | null
   lastRunAt: Date | null
+  running: boolean
   createdAt: Date
   updatedAt: Date
 }
@@ -24,12 +26,20 @@ export interface TaskCreationAttributes
   extends Optional<TaskAttributes, 'id' | 'createdAt' | 'updatedAt'> {}
 
 /**
+ * 任务状态类型
+ */
+export type TaskStatusType =
+  | typeof TASK_STATUS.PENDING
+  | typeof TASK_STATUS.SUCCESS
+  | typeof TASK_STATUS.ERROR
+
+/**
  * 任务日志属性
  */
 export interface TaskLogAttributes {
   id: number
   taskId: number
-  status: 'pending' | 'success' | 'error'
+  status: TaskStatusType
   startTime: Date
   endTime: Date | null
   totalFiles: number | null

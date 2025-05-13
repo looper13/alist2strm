@@ -1,5 +1,7 @@
 import type { ErrorRequestHandler } from 'express'
 import { logger } from '../utils/logger'
+import { fail } from '../utils/response'
+import { HTTP_STATUS, API_CODE, ERROR_MSG } from '../constants'
 
 export class AppError extends Error {
   constructor(
@@ -31,10 +33,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
       statusCode: err.statusCode,
     })
 
-    return res.status(err.statusCode).json({
-      status: 'error',
-      message: err.message,
-    })
+    return res.status(err.statusCode).json(fail(err.message, err.statusCode))
   }
 
   // Sequelize validation errors
@@ -49,11 +48,9 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
       validationErrors,
     })
 
-    return res.status(400).json({
-      status: 'error',
-      message: '数据验证失败',
-      errors: validationErrors,
-    })
+    return res
+      .status(HTTP_STATUS.BAD_REQUEST)
+      .json(fail(ERROR_MSG.PARAM_ERROR, API_CODE.PARAM_ERROR, { errors: validationErrors }))
   }
 
   // Sequelize unique constraint errors
@@ -68,18 +65,15 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
       constraintErrors,
     })
 
-    return res.status(400).json({
-      status: 'error',
-      message: '数据已存在',
-      errors: constraintErrors,
-    })
+    return res
+      .status(HTTP_STATUS.BAD_REQUEST)
+      .json(fail('数据已存在', API_CODE.CONFLICT, { errors: constraintErrors }))
   }
 
   // Default error
   logger.error.error('Unhandled error occurred', errorContext)
 
-  return res.status(500).json({
-    status: 'error',
-    message: '服务器内部错误',
-  })
+  return res
+    .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
+    .json(fail(ERROR_MSG.INTERNAL_ERROR, API_CODE.INTERNAL_ERROR))
 }

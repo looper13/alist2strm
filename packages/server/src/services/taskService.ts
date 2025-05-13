@@ -6,10 +6,12 @@ import type {
   TaskCreationAttributes,
   TaskInstance,
   TaskLogInstance,
+  TaskStatusType,
 } from '../types'
 import db from '../models'
 import generatorService from './generator'
 import { logger } from '../utils/logger'
+import { TASK_STATUS, ERROR_MSG } from '../constants'
 
 /**
  * 任务服务
@@ -50,7 +52,7 @@ class TaskService {
     const task = await db.Task.findByPk(id)
     if (!task) {
       logger.error.error('更新任务失败：任务不存在', { taskId: id })
-      throw new Error('任务不存在')
+      throw new Error(ERROR_MSG.TASK_NOT_FOUND)
     }
 
     if (this.cronJobs.has(task.id)) {
@@ -81,7 +83,7 @@ class TaskService {
     const task = await db.Task.findByPk(id)
     if (!task) {
       logger.error.error('删除任务失败：任务不存在', { taskId: id })
-      throw new Error('任务不存在')
+      throw new Error(ERROR_MSG.TASK_NOT_FOUND)
     }
 
     if (this.cronJobs.has(task.id)) {
@@ -111,7 +113,7 @@ class TaskService {
   async getTasksWithPagination(
     page = 1,
     pageSize = 10,
-  ): Promise<{ tasks: TaskInstance[]; total: number }> {
+  ): Promise<{ records: TaskInstance[]; total: number }> {
     // 确保参数为数字且有效
     const validPage = Math.max(1, Number(page))
     const validPageSize = Math.max(1, Math.min(50, Number(pageSize)))
@@ -139,7 +141,7 @@ class TaskService {
       })
 
       return {
-        tasks: rows,
+        records: rows,
         total: count,
       }
     } catch (error) {
@@ -172,14 +174,33 @@ class TaskService {
     const task = await db.Task.findByPk(id)
     if (!task) {
       logger.error.error('执行任务失败：任务不存在', { taskId: id })
-      throw new Error('任务不存在')
+      throw new Error(ERROR_MSG.TASK_NOT_FOUND)
     }
+
+    // 检查任务是否正在运行中
+    if (task.running) {
+      logger.warn.warn('任务已在执行中，跳过本次执行', {
+        taskId: id,
+        name: task.name,
+        lastRunAt: task.lastRunAt,
+      })
+      return {
+        success: false,
+        message: ERROR_MSG.TASK_RUNNING,
+        taskId: id,
+        taskName: task.name,
+      }
+    }
+
+    // 设置任务为运行中状态
+    await task.update({ running: true })
+    logger.debug.debug('任务状态已设置为运行中', { taskId: id, name: task.name })
 
     const startTime = new Date()
     const taskLog = await db.TaskLog.create({
       taskId: task.id,
       startTime,
-      status: 'pending',
+      status: TASK_STATUS.PENDING,
     })
 
     try {
@@ -194,7 +215,7 @@ class TaskService {
 
       await db.TaskLog.update(
         {
-          status: 'success',
+          status: TASK_STATUS.SUCCESS,
           totalFiles: result.totalFiles,
           generatedFiles: result.generatedFiles,
           skippedFiles: result.skippedFiles,
@@ -207,7 +228,15 @@ class TaskService {
         },
       )
 
-      await task.update({ lastRunAt: endTime })
+      // 更新任务状态并记录最后运行时间
+      await task.update({
+        lastRunAt: endTime,
+        running: false,
+      })
+      logger.debug.debug('任务执行完成，状态已重置', {
+        taskId: id,
+        duration: endTime.getTime() - startTime.getTime(),
+      })
 
       return result
     } catch (error) {
@@ -216,7 +245,7 @@ class TaskService {
 
       await db.TaskLog.update(
         {
-          status: 'error',
+          status: TASK_STATUS.ERROR,
           error: errorMessage,
           endTime,
         },
@@ -226,6 +255,10 @@ class TaskService {
           },
         },
       )
+
+      // 即使出错也要重置任务状态
+      await task.update({ running: false })
+      logger.debug.debug('任务执行失败，状态已重置', { taskId: id })
 
       logger.error.error('任务执行失败', {
         taskId: id,
@@ -249,7 +282,26 @@ class TaskService {
     const job = cron.schedule(task.cronExpression, async () => {
       try {
         logger.debug.debug('开始执行定时任务', { taskId: task.id })
-        await this.executeTask(task.id)
+        const result = await this.executeTask(task.id)
+
+        // 检查任务是否已在运行中
+        if (
+          result &&
+          typeof result === 'object' &&
+          'success' in result &&
+          result.success === false
+        ) {
+          logger.debug.debug('定时任务已在执行中，跳过本次执行', {
+            taskId: task.id,
+            message: result.message,
+          })
+          return
+        }
+
+        logger.debug.debug('定时任务执行完成', {
+          taskId: task.id,
+          result,
+        })
       } catch (error) {
         logger.error.error('定时任务执行失败', {
           taskId: task.id,
@@ -267,9 +319,43 @@ class TaskService {
   }
 
   /**
+   * 重置所有卡住的任务状态
+   * 在系统启动时调用，确保没有任务因为系统崩溃等原因卡在running状态
+   */
+  async resetStuckTasks() {
+    try {
+      const runningTasks = await db.Task.findAll({
+        where: { running: true },
+      })
+
+      if (runningTasks.length > 0) {
+        logger.warn.warn('发现处于运行状态的任务，准备重置', { count: runningTasks.length })
+
+        for (const task of runningTasks) {
+          await task.update({ running: false })
+          logger.info.info('重置任务运行状态', {
+            taskId: task.id,
+            name: task.name,
+          })
+        }
+      } else {
+        logger.debug.debug('没有发现需要重置的任务')
+      }
+    } catch (error) {
+      logger.error.error('重置任务状态失败', {
+        error: (error as Error).message,
+        stack: (error as Error).stack,
+      })
+    }
+  }
+
+  /**
    * 初始化任务
    */
   async initializeCronJobs() {
+    // 先重置所有任务的运行状态
+    await this.resetStuckTasks()
+
     const tasks = await db.Task.findAll({
       where: {
         enabled: true,

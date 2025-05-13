@@ -12,6 +12,7 @@ class Task extends Model<TaskAttributes, TaskCreationAttributes> {
   declare enabled: boolean
   declare cronExpression: string | null
   declare lastRunAt: Date | null
+  declare running: boolean
   declare createdAt: Date
   declare updatedAt: Date
 
@@ -61,6 +62,11 @@ class Task extends Model<TaskAttributes, TaskCreationAttributes> {
         lastRunAt: {
           type: DataTypes.DATE,
           allowNull: true,
+        },
+        running: {
+          type: DataTypes.BOOLEAN,
+          allowNull: false,
+          defaultValue: false,
         },
         createdAt: {
           type: DataTypes.DATE,

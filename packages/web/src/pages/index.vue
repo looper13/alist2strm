@@ -34,15 +34,16 @@ async function loadTasks() {
   loadingBar.start()
   isLoading.value = true
   try {
-    const { tasks: taskList, total } = await taskService.getTasksWithPagination(
+    const { records, total } = await taskService.getTasksWithPagination(
       pagination.value.page,
       pagination.value.pageSize,
     )
-    tasks.value = taskList
+    tasks.value = records
     pagination.value.itemCount = total
   }
-  catch {
+  catch (error) {
     message.error('加载任务列表失败')
+    console.error('加载任务列表失败:', error)
   }
   finally {
     loadingBar.finish()
