@@ -3,11 +3,25 @@ import type { TaskInstance, TaskLogInstance } from '../types'
 import Task from './task'
 import TaskLog from './taskLog'
 import { logger } from '../utils/logger'
+import config from '../config'
+import path from 'path'
+import fs from 'fs'
+
+// 确保数据库目录存在
+const dbDir = config.database.path
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true })
+  logger.info.info('创建数据库目录', { path: dbDir })
+}
+
+// 数据库文件完整路径
+const dbFilePath = path.join(dbDir, config.database.name)
+logger.debug.debug('数据库文件路径', { path: dbFilePath })
 
 // 创建 Sequelize 实例
 export const sequelize = new Sequelize({
   dialect: 'sqlite',
-  storage: './database.sqlite',
+  storage: dbFilePath,
   logging: (msg) => logger.debug.debug('数据库查询', { query: msg }),
   logQueryParameters: true,
   benchmark: true,

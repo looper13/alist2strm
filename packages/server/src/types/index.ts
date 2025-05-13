@@ -71,6 +71,14 @@ export interface LoggerConfig {
 }
 
 /**
+ * 数据库配置
+ */
+export interface DatabaseConfig {
+  path: string
+  name: string
+}
+
+/**
  * 配置
  */
 export interface Config {
@@ -91,6 +99,7 @@ export interface Config {
     port: number
   }
   logger: LoggerConfig
+  database: DatabaseConfig
 }
 
 export interface AlistStorage {

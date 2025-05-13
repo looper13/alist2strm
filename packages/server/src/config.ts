@@ -45,6 +45,12 @@ const config: Config = {
     // 单个日志文件大小限制（MB）
     maxFileSize: parseInt(process.env.LOG_MAX_FILE_SIZE || '10', 10),
   },
+  database: {
+    // 数据库文件存储路径
+    path: process.env.DB_PATH || path.join(projectRoot, 'data/db'),
+    // 数据库文件名
+    name: process.env.DB_NAME || 'database.sqlite',
+  },
 }
 
 export default config

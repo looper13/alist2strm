@@ -134,6 +134,10 @@ async function start() {
         config: {
           alistHost: config.alist.host,
           fileSuffix: config.generator.fileSuffix,
+          database: {
+            path: config.database.path,
+            name: config.database.name,
+          },
         },
       })
     })
