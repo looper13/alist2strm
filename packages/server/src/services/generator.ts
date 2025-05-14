@@ -19,27 +19,19 @@ interface FileTask {
   targetFilePath: string
   strmPath: string
   name: string
+  sign?: string
 }
 
 class GeneratorService {
   // 并发处理数量
-  private readonly DEFAULT_CONCURRENCY = 5
+  private readonly DEFAULT_CONCURRENCY = 100 // 由于不需要获取文件信息，可以提高并发数
   // 批量处理任务数量
-  private readonly DEFAULT_BATCH_SIZE = 50
-  // 重试次数
-  private readonly MAX_RETRIES = 3
-  // 重试延迟
-  private readonly RETRY_DELAY = 1000
-  // 文件信息缓存
-  private fileInfoCache = new Map<string, any>()
+  private readonly DEFAULT_BATCH_SIZE = 100 // 增加批量处理大小
+  // 请求间隔（毫秒）
+  private readonly REQUEST_DELAY = 200
 
   /**
    * 生成 STRM 文件
-   *
-   * @param options 配置选项
-   * @returns 生成结果
-   * @throws 如果目标路径未指定，则抛出错误
-   * @throws 如果指定路径未找到存储，则抛出错误
    */
   async generateStrm({
     sourcePath = config.generator.path,
@@ -49,9 +41,6 @@ class GeneratorService {
     concurrency = this.DEFAULT_CONCURRENCY,
     batchSize = this.DEFAULT_BATCH_SIZE,
   }: GenerateOptions): Promise<GenerateResult> {
-    // 重置缓存
-    this.fileInfoCache.clear()
-
     logger.info.info('开始生成 STRM 文件', {
       sourcePath,
       targetPath,
@@ -84,17 +73,29 @@ class GeneratorService {
       skippedFiles: 0,
     }
 
-    // 收集所有任务
-    const allTasks = await this._collectTasks(sourcePath, targetPath, fileSuffix, overwrite, result)
+    try {
+      // 收集所有任务
+      const allTasks = await this._collectTasks(
+        sourcePath,
+        targetPath,
+        fileSuffix,
+        overwrite,
+        result,
+      )
+      logger.info.info('任务收集完成', { totalTasks: allTasks.length })
 
-    // 批量处理任务
-    await this._processTasks(allTasks, storage, result, concurrency, batchSize)
+      // 批量处理任务
+      await this._processTasks(allTasks, storage, result, concurrency, batchSize)
 
-    // 清理缓存
-    this.fileInfoCache.clear()
-
-    logger.info.info('STRM 文件生成完成', { result })
-    return result
+      logger.info.info('STRM 文件生成完成', { result })
+      return result
+    } catch (error) {
+      logger.error.error('生成过程中发生错误', {
+        error: (error as Error).message,
+        stack: (error as Error).stack,
+      })
+      throw error
+    }
   }
 
   /**
@@ -110,47 +111,57 @@ class GeneratorService {
     const allTasks: FileTask[] = []
 
     const collectInDir = async (currentPath: string, targetBase: string) => {
-      const files = await alistService.listFiles(currentPath)
-      const dirs = files.filter((f) => f.is_dir)
-      const mediaFiles = files.filter(
-        (f) => !f.is_dir && fileSuffix.includes(path.extname(f.name).toLowerCase().slice(1)),
-      )
+      try {
+        const files = await alistService.listFiles(currentPath)
+        const dirs = files.filter((f) => f.is_dir)
+        const mediaFiles = files.filter(
+          (f) => !f.is_dir && fileSuffix.includes(path.extname(f.name).toLowerCase().slice(1)),
+        )
 
-      result.totalFiles += mediaFiles.length
+        result.totalFiles += mediaFiles.length
 
-      // 收集当前目录的文件任务
-      for (const file of mediaFiles) {
-        const sourceFilePath = path.join(currentPath, file.name)
-        const relativePath = path.relative(sourcePath, currentPath)
-        const targetFilePath = path.join(targetBase, relativePath, file.name)
-        const strmPath = targetFilePath + '.strm'
+        // 收集当前目录的文件任务
+        for (const file of mediaFiles) {
+          const sourceFilePath = path.join(currentPath, file.name)
+          const relativePath = path.relative(sourcePath, currentPath)
+          const targetFilePath = path.join(targetBase, relativePath, file.name)
+          const strmPath = targetFilePath + '.strm'
 
-        // 如果文件不存在或需要覆盖
-        if (overwrite || !(await this._fileExists(strmPath))) {
-          allTasks.push({
-            sourceFilePath,
-            targetFilePath,
-            strmPath,
-            name: file.name,
-          })
-        } else {
-          result.skippedFiles++
+          // 如果文件不存在或需要覆盖
+          if (overwrite || !(await this._fileExists(strmPath))) {
+            allTasks.push({
+              sourceFilePath,
+              targetFilePath,
+              strmPath,
+              name: file.name,
+              sign: file.sign,
+            })
+          } else {
+            result.skippedFiles++
+          }
         }
-      }
 
-      // 递归处理子目录
-      await Promise.all(
-        dirs.map(async (dir) => {
-          const nextSourcePath = path.join(currentPath, dir.name)
-          const nextTargetPath = path.join(
-            targetBase,
-            path.relative(sourcePath, currentPath),
-            dir.name,
-          )
-          await fs.mkdir(nextTargetPath, { recursive: true })
-          await collectInDir(nextSourcePath, targetBase)
-        }),
-      )
+        // 递归处理子目录
+        await Promise.all(
+          dirs.map(async (dir) => {
+            const nextSourcePath = path.join(currentPath, dir.name)
+            const nextTargetPath = path.join(
+              targetBase,
+              path.relative(sourcePath, currentPath),
+              dir.name,
+            )
+            await fs.mkdir(nextTargetPath, { recursive: true })
+            await collectInDir(nextSourcePath, targetBase)
+          }),
+        )
+      } catch (error) {
+        logger.error.error('扫描目录失败', {
+          path: currentPath,
+          error: (error as Error).message,
+          stack: (error as Error).stack,
+        })
+        throw error
+      }
     }
 
     await collectInDir(sourcePath, targetPath)
@@ -176,8 +187,17 @@ class GeneratorService {
       for (const chunk of chunks) {
         await Promise.all(chunk.map((task) => this._processTask(task, storage, result)))
         // 每个并发块处理完后添加短暂延迟
-        await this._sleep(200)
+        await this._sleep(this.REQUEST_DELAY)
       }
+
+      // 输出进度
+      logger.info.info('批次处理进度', {
+        processed: Math.min(i + batchSize, tasks.length),
+        total: tasks.length,
+        success: result.generatedFiles,
+        skipped: result.skippedFiles,
+        percentage: Math.round((Math.min(i + batchSize, tasks.length) / tasks.length) * 100),
+      })
     }
   }
 
@@ -189,78 +209,26 @@ class GeneratorService {
     storage: AlistStorage,
     result: GenerateResult,
   ): Promise<void> {
-    for (let retry = 0; retry < this.MAX_RETRIES; retry++) {
-      try {
-        // 检查缓存
-        let fileInfo = this.fileInfoCache.get(task.sourceFilePath)
-        if (!fileInfo) {
-          // 添加随机延迟，避免同时请求过多
-          if (retry > 0) {
-            await this._sleep(Math.random() * this.RETRY_DELAY * (retry + 1))
-          }
-          fileInfo = await alistService.getFileInfo(task.sourceFilePath)
-          this.fileInfoCache.set(task.sourceFilePath, fileInfo)
-        }
+    try {
+      const alistUrl = `${config.alist.host}/d${task.sourceFilePath}`
+      // 如果存储启用了签名并且文件有签名，则添加签名参数
+      const finalUrl = storage.enable_sign && task.sign ? `${alistUrl}?sign=${task.sign}` : alistUrl
 
-        const alistUrl = `${config.alist.host}/d${task.sourceFilePath}`
-        const finalUrl =
-          storage.enable_sign && fileInfo.sign ? `${alistUrl}?sign=${fileInfo.sign}` : alistUrl
-
-        await fs.writeFile(task.strmPath, finalUrl)
-        result.generatedFiles++
-        logger.debug.debug('已生成 STRM 文件', {
-          source: task.sourceFilePath,
-          target: task.strmPath,
-          hasSign: Boolean(storage.enable_sign && fileInfo.sign),
-        })
-
-        break // 成功后跳出重试循环
-      } catch (error: any) {
-        const isRetryable = this._isRetryableError(error)
-
-        if (!isRetryable || retry === this.MAX_RETRIES - 1) {
-          logger.error.error('生成 STRM 文件失败', {
-            source: task.sourceFilePath,
-            error: error.message,
-            stack: error.stack,
-            retries: retry + 1,
-            isRetryable,
-          })
-
-          if (!isRetryable) {
-            break
-          }
-        } else {
-          logger.warn.warn('重试获取文件信息', {
-            source: task.sourceFilePath,
-            retry: retry + 1,
-            error: error.message,
-          })
-        }
-      }
+      await fs.writeFile(task.strmPath, finalUrl)
+      result.generatedFiles++
+      logger.debug.debug('已生成 STRM 文件', {
+        source: task.sourceFilePath,
+        target: task.strmPath,
+        hasSign: Boolean(storage.enable_sign && task.sign),
+      })
+    } catch (error) {
+      logger.error.error('生成 STRM 文件失败', {
+        source: task.sourceFilePath,
+        error: (error as Error).message,
+        stack: (error as Error).stack,
+      })
+      throw error
     }
-  }
-
-  private _isRetryableError(error: any): boolean {
-    if (!error) return false
-
-    const errorMessage = error.message?.toLowerCase() || ''
-    const retryablePatterns = [
-      'timeout',
-      'failed link',
-      'econnrefused',
-      'econnreset',
-      'socket hang up',
-      'network error',
-      'code: 0',
-      'code: 429', // Too Many Requests
-      'code: 500',
-      'code: 502',
-      'code: 503',
-      'code: 504',
-    ]
-
-    return retryablePatterns.some((pattern) => errorMessage.includes(pattern))
   }
 
   private async _sleep(ms: number): Promise<void> {
@@ -275,11 +243,6 @@ class GeneratorService {
     return chunks
   }
 
-  /**
-   * 检查文件是否存在
-   * @param filePath 文件路径
-   * @returns 是否存在
-   */
   private async _fileExists(filePath: string): Promise<boolean> {
     try {
       await fs.access(filePath)
