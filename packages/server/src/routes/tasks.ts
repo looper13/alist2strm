@@ -3,7 +3,7 @@ import { AppError } from '../middleware/errorHandler'
 import taskService from '../services/taskService'
 import { logger } from '../utils/logger'
 import { success, fail } from '../utils/response'
-import { HTTP_STATUS, API_CODE, ERROR_MSG, SUCCESS_MSG, TASK_STATUS } from '../constants'
+import { HTTP_STATUS, API_CODE, ERROR_MSG, SUCCESS_MSG } from '../constants'
 
 const router = Router()
 

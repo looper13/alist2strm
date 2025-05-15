@@ -6,6 +6,7 @@ import db from './models'
 import taskService from './services/taskService'
 import { errorHandler } from './middleware/errorHandler'
 import taskRoutes from './routes/tasks'
+import alistRoutes from './routes/alist'
 import { logger } from './utils/logger'
 
 const app = express()
@@ -26,7 +27,7 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 
 // 使用任务路由模块
 app.use('/api/tasks', taskRoutes)
-
+app.use('/api/alist', alistRoutes)
 // 错误处理
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   logger.error.error('发生未处理的错误', {

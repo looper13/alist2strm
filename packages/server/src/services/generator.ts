@@ -10,7 +10,6 @@ interface GenerateOptions {
   targetPath: string
   fileSuffix?: string[]
   overwrite?: boolean
-  concurrency?: number
   batchSize?: number
 }
 
@@ -23,12 +22,12 @@ interface FileTask {
 }
 
 class GeneratorService {
-  // 并发处理数量
-  private readonly DEFAULT_CONCURRENCY = 100 // 由于不需要获取文件信息，可以提高并发数
+  // 本地文件操作并发数
+  private readonly LOCAL_CONCURRENCY = 100
   // 批量处理任务数量
-  private readonly DEFAULT_BATCH_SIZE = 100 // 增加批量处理大小
+  private readonly DEFAULT_BATCH_SIZE = 1000
   // 请求间隔（毫秒）
-  private readonly REQUEST_DELAY = 200
+  private readonly REQUEST_DELAY = 300
 
   /**
    * 生成 STRM 文件
@@ -38,15 +37,13 @@ class GeneratorService {
     targetPath,
     fileSuffix = config.generator.fileSuffix,
     overwrite = false,
-    concurrency = this.DEFAULT_CONCURRENCY,
     batchSize = this.DEFAULT_BATCH_SIZE,
-  }: GenerateOptions): Promise<GenerateResult> {
+  }: Omit<GenerateOptions, 'concurrency'>): Promise<GenerateResult> {
     logger.info.info('开始生成 STRM 文件', {
       sourcePath,
       targetPath,
       fileSuffix,
       overwrite,
-      concurrency,
       batchSize,
     })
 
@@ -85,7 +82,7 @@ class GeneratorService {
       logger.info.info('任务收集完成', { totalTasks: allTasks.length })
 
       // 批量处理任务
-      await this._processTasks(allTasks, storage, result, concurrency, batchSize)
+      await this._processTasks(allTasks, storage, result, batchSize)
 
       logger.info.info('STRM 文件生成完成', { result })
       return result
@@ -142,18 +139,16 @@ class GeneratorService {
         }
 
         // 递归处理子目录
-        await Promise.all(
-          dirs.map(async (dir) => {
-            const nextSourcePath = path.join(currentPath, dir.name)
-            const nextTargetPath = path.join(
-              targetBase,
-              path.relative(sourcePath, currentPath),
-              dir.name,
-            )
-            await fs.mkdir(nextTargetPath, { recursive: true })
-            await collectInDir(nextSourcePath, targetBase)
-          }),
-        )
+        for (const dir of dirs) {
+          const nextSourcePath = path.join(currentPath, dir.name)
+          const nextTargetPath = path.join(
+            targetBase,
+            path.relative(sourcePath, currentPath),
+            dir.name,
+          )
+          await fs.mkdir(nextTargetPath, { recursive: true })
+          await collectInDir(nextSourcePath, targetBase)
+        }
       } catch (error) {
         logger.error.error('扫描目录失败', {
           path: currentPath,
@@ -175,59 +170,54 @@ class GeneratorService {
     tasks: FileTask[],
     storage: AlistStorage,
     result: GenerateResult,
-    concurrency: number,
     batchSize: number,
   ) {
-    // 将任务分成批次
+    // 将任务分成批次，每批次并发处理本地文件生成
     for (let i = 0; i < tasks.length; i += batchSize) {
       const batch = tasks.slice(i, i + batchSize)
-      const chunks = this._chunkArray(batch, concurrency)
+      const chunks = this._chunkArray(batch, this.LOCAL_CONCURRENCY)
 
       // 处理每个并发块
       for (const chunk of chunks) {
-        await Promise.all(chunk.map((task) => this._processTask(task, storage, result)))
-        // 每个并发块处理完后添加短暂延迟
-        await this._sleep(this.REQUEST_DELAY)
+        // 并发生成本地文件
+        await Promise.all(
+          chunk.map(async (task) => {
+            try {
+              const alistUrl = `${config.alist.host}/d${task.sourceFilePath}`
+              // 如果存储启用了签名并且文件有签名，则添加签名参数
+              const finalUrl =
+                storage.enable_sign && task.sign ? `${alistUrl}?sign=${task.sign}` : alistUrl
+
+              await fs.writeFile(task.strmPath, finalUrl)
+              result.generatedFiles++
+              logger.debug.debug('已生成 STRM 文件', {
+                source: task.sourceFilePath,
+                target: task.strmPath,
+                hasSign: Boolean(storage.enable_sign && task.sign),
+              })
+            } catch (error) {
+              logger.error.error('生成 STRM 文件失败', {
+                source: task.sourceFilePath,
+                error: (error as Error).message,
+                stack: (error as Error).stack,
+              })
+              throw error
+            }
+          }),
+        )
       }
 
       // 输出进度
-      logger.info.info('批次处理进度', {
+      logger.info.info('处理进度', {
         processed: Math.min(i + batchSize, tasks.length),
         total: tasks.length,
         success: result.generatedFiles,
         skipped: result.skippedFiles,
         percentage: Math.round((Math.min(i + batchSize, tasks.length) / tasks.length) * 100),
       })
-    }
-  }
 
-  /**
-   * 处理单个文件任务
-   */
-  private async _processTask(
-    task: FileTask,
-    storage: AlistStorage,
-    result: GenerateResult,
-  ): Promise<void> {
-    try {
-      const alistUrl = `${config.alist.host}/d${task.sourceFilePath}`
-      // 如果存储启用了签名并且文件有签名，则添加签名参数
-      const finalUrl = storage.enable_sign && task.sign ? `${alistUrl}?sign=${task.sign}` : alistUrl
-
-      await fs.writeFile(task.strmPath, finalUrl)
-      result.generatedFiles++
-      logger.debug.debug('已生成 STRM 文件', {
-        source: task.sourceFilePath,
-        target: task.strmPath,
-        hasSign: Boolean(storage.enable_sign && task.sign),
-      })
-    } catch (error) {
-      logger.error.error('生成 STRM 文件失败', {
-        source: task.sourceFilePath,
-        error: (error as Error).message,
-        stack: (error as Error).stack,
-      })
-      throw error
+      // 批次间添加短暂延迟
+      await this._sleep(this.REQUEST_DELAY)
     }
   }
 

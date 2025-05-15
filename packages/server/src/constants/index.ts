@@ -41,6 +41,8 @@ export const ERROR_MSG = {
   TASK_NOT_FOUND: '任务不存在',
   TASK_RUNNING: '任务已在执行中',
   DB_ERROR: '数据库错误',
+  DIR_NOT_FOUND: '目录不存在',
+  FILE_NOT_FOUND: '文件不存在',
 }
 
 /**
@@ -58,6 +60,8 @@ export const SUCCESS_MSG = {
   TASK_LIST_SUCCESS: '获取任务列表成功',
   TASK_DETAIL_SUCCESS: '获取任务成功',
   TASK_LOG_SUCCESS: '获取任务日志成功',
+
+  FOLDER_LIST_SUCCESS: '获取目录列表成功',
 }
 
 /**
