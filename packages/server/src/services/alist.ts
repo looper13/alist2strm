@@ -173,8 +173,8 @@ class AlistService {
       while (hasMore) {
         try {
           // 每3次请求后添加8秒间隔
-          if (requestCount > 0 && requestCount % 3 === 0) {
-            const waitTime = 8000 + consecutiveErrors * 2000 // 每次连续错误增加2秒等待
+          if (requestCount > 0 && requestCount % 10 === 0) {
+            const waitTime = 2000 + consecutiveErrors * 2000 // 每次连续错误增加2秒等待
             logger.info.info('达到请求限制，等待中', { requestCount, waitTime })
             await new Promise((resolve) => setTimeout(resolve, waitTime))
           }
@@ -192,13 +192,17 @@ class AlistService {
               refresh: false,
             })
 
-            if (!resp.data?.data?.content) {
-              throw new Error('AList API 未返回文件列表')
+            if (resp.data?.code !== 200) {
+              throw new Error(resp.data?.message || 'AList API 返回非200状态码')
             }
+
+            // if (!resp.data?.data?.content) {
+            //   throw new Error('AList API 未返回文件列表')
+            // }
             return resp
           })
 
-          const files = response.data.data.content
+          const files = response.data.data.content || []
           allFiles = allFiles.concat(files)
           requestCount++
           consecutiveErrors = 0 // 重置连续错误计数
@@ -217,7 +221,7 @@ class AlistService {
           page++
 
           // 每次请求后添加基础延迟
-          await new Promise((resolve) => setTimeout(resolve, 2000))
+          await new Promise((resolve) => setTimeout(resolve, 300))
         } catch (error) {
           consecutiveErrors++
           logger.warn.warn('获取文件列表失败，准备重试', {
