@@ -183,7 +183,12 @@ class GeneratorService {
         await Promise.all(
           chunk.map(async (task) => {
             try {
-              const alistUrl = `${config.alist.host}/d${task.sourceFilePath}`
+              const enCodedPath = task.sourceFilePath
+                .split('/')
+                .map((item) => encodeURIComponent(item))
+                .join('/')
+              const alistUrl = `${config.alist.host}/d${enCodedPath}`
+
               // 如果存储启用了签名并且文件有签名，则添加签名参数
               const finalUrl =
                 storage.enable_sign && task.sign ? `${alistUrl}?sign=${task.sign}` : alistUrl
