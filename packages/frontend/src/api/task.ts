@@ -23,6 +23,10 @@ export class TaskAPI {
   async findAll(query: { name?: string }): Promise<HttpResponse<Api.Task[]>> {
     return http.get(`${this.baseUrl}/all`, { params: query })
   }
+
+  async execute(id: number): Promise<HttpResponse<void>> {
+    return http.post(`${this.baseUrl}/${id}/execute`)
+  }
 }
 
 export const taskAPI = new TaskAPI()

@@ -1,15 +1,15 @@
-import { parentPort, workerData } from 'worker_threads'
+const { parentPort, workerData } = require('worker_threads')
+const { generatorService } = require('@/services/generator.service')
 
-interface TaskWorkerData {
-  taskId: number
-  sourcePath: string
-  targetPath: string
-  // 其他任务配置...
-}
-
-async function executeTask(data: TaskWorkerData): Promise<void> {
+async function executeTask(
+  taskId: number,
+  sourcePath: string,
+  targetPath: string,
+  fileSuffix: string[],
+  overwrite: boolean,
+  batchSize: number
+): Promise<void> {
   try {
-    const { taskId } = data
 
     // 模拟任务进度
     for (let progress = 0; progress <= 100; progress += 10) {
@@ -18,9 +18,7 @@ async function executeTask(data: TaskWorkerData): Promise<void> {
         type: 'progress',
         data: { progress },
       })
-
-      // 模拟任务执行
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      await generatorService.generateStrm(sourcePath, targetPath, fileSuffix, overwrite, batchSize)
     }
 
     // 发送完成消息
@@ -34,7 +32,7 @@ async function executeTask(data: TaskWorkerData): Promise<void> {
     parentPort?.postMessage({
       type: 'error',
       data: {
-        taskId: data.taskId,
+        taskId: taskId,
         error: error instanceof Error ? error.message : '未知错误',
       },
     })
@@ -42,4 +40,4 @@ async function executeTask(data: TaskWorkerData): Promise<void> {
 }
 
 // 开始执行任务
-executeTask(workerData as TaskWorkerData) 
+// executeTask(workerData as TaskWorkerData) 

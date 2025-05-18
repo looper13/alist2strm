@@ -192,6 +192,18 @@ async function handleDelete(row: Api.Task) {
   }
 }
 
+// 执行任务
+async function handleExecute(row: Api.Task) {
+  try {
+    await taskAPI.execute(row.id)
+    message.success('执行成功')
+    loadTasks()
+  }
+  catch (error: any) {
+    message.error(error.message || '执行失败')
+  }
+}
+
 // 表格列定义
 const columns: DataTableColumns<Api.Task> = [
   { title: '任务名称', key: 'name' },
@@ -258,6 +270,15 @@ const columns: DataTableColumns<Api.Task> = [
             type: 'info',
             onClick: () => handleCopy(row),
           }, { default: () => '复制' }),
+          h(
+            NButton,
+            {
+              type: 'warning',
+              size: 'small',
+              onClick: () => handleExecute(row),
+            },
+            { default: () => '执行' },
+          ),
           h(NPopconfirm, {
             onPositiveClick: () => handleDelete(row),
           }, {

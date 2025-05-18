@@ -214,13 +214,15 @@ export class TaskService {
       })
 
       // 创建工作线程
-      const worker = new Worker(path.resolve(__dirname, '../workers/task.worker.js'), {
+      const worker = new Worker(path.resolve(__dirname, '../workers/task.worker.ts'), {
         workerData: {
           taskId: id,
           sourcePath: task.sourcePath,
           targetPath: task.targetPath,
-          // 其他任务配置...
-        },
+          fileSuffix: task.fileSuffix,
+          overwrite: task.overwrite,
+          batchSize: 200
+        }
       })
 
       // 存储任务执行器信息

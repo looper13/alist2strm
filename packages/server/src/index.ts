@@ -6,6 +6,7 @@ import { getLogger } from 'log4js'
 import { setupLogger, httpLogger } from './utils/logger'
 import { setupDatabase } from './database'
 import { setupRoutes } from './routes'
+import { configCache } from './services/config-cache.service'
 
 const logger = getLogger('app')
 const app: Express = express()
@@ -22,6 +23,8 @@ async function bootstrap() {
   app.use(httpLogger) // 添加日志中间件
   app.use(express.json())
   app.use(express.urlencoded({ extended: true }))
+
+  configCache.initialize()
 
   // 路由
   setupRoutes(app)
