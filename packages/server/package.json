@@ -1,34 +1,33 @@
 {
-  "name": "@alist-strm/server",
+  "name": "@alist2strm/server",
   "version": "1.0.0",
-  "private": true,
-  "description": "AList STRM Generator",
-  "main": "dist/app.js",
+  "description": "AList2Strm server application",
+  "main": "dist/index.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn src/app.ts",
+    "dev": "cross-env NODE_ENV=development tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/app.js",
+    "start": "cross-env NODE_ENV=production node dist/index.js",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "lint:fix": "eslint . --fix"
   },
   "dependencies": {
     "axios": "^1.6.7",
-    "cors": "^2.8.5",
-    "dotenv": "^16.5.0",
-    "express": "^4.18.2",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.3",
     "log4js": "^6.9.1",
-    "node-cron": "^3.0.3",
-    "sequelize": "^6.37.1",
+    "reflect-metadata": "^0.2.2",
+    "sequelize": "^6.37.7",
+    "sequelize-typescript": "^2.1.6",
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.17",
+    "@antfu/eslint-config": "^2.8.0",
     "@types/express": "^4.17.21",
-    "@types/node": "^20.11.19",
-    "@types/node-cron": "^3.0.11",
-    "eslint": "^8.56.0",
-    "prettier": "^3.2.5",
-    "ts-node-dev": "^2.0.0",
+    "@types/node": "^20.11.24",
+    "@types/validator": "^13.11.9",
+    "eslint": "^8.57.0",
+    "tsx": "^4.7.1",
     "typescript": "^5.3.3"
   }
 }

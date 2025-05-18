@@ -1,89 +1,78 @@
-import { DataTypes, Model, Sequelize } from 'sequelize'
-import type { TaskAttributes, TaskCreationAttributes } from '../types'
-import { sequelize } from './index'
+import { Column, Table, DataType, HasMany } from 'sequelize-typescript'
+import { BaseModel } from './base'
+import { TaskLog } from './task-log'
 
-class Task extends Model<TaskAttributes, TaskCreationAttributes> {
-  declare id: number
-  declare name: string
-  declare sourcePath: string
-  declare targetPath: string
-  declare fileSuffix: string
-  declare overwrite: boolean
-  declare enabled: boolean
-  declare cronExpression: string | null
-  declare lastRunAt: Date | null
-  declare running: boolean
-  declare createdAt: Date
-  declare updatedAt: Date
+@Table({
+  tableName: 'tasks',
+  timestamps: true,
+})
+export class Task extends BaseModel {
+  @Column({
+    type: DataType.STRING,
+    allowNull: false,
+    comment: '任务名称',
+  })
+  name!: string
 
-  static associate(models: any) {
-    Task.hasMany(models.TaskLog, { foreignKey: 'taskId' })
-  }
+  @Column({
+    type: DataType.STRING,
+    allowNull: false,
+    comment: '源路径',
+  })
+  sourcePath!: string
 
-  static initModel(sequelize: Sequelize): typeof Task {
-    Task.init(
-      {
-        id: {
-          type: DataTypes.INTEGER,
-          autoIncrement: true,
-          primaryKey: true,
-        },
-        name: {
-          type: DataTypes.STRING,
-          allowNull: false,
-        },
-        sourcePath: {
-          type: DataTypes.STRING,
-          allowNull: false,
-        },
-        targetPath: {
-          type: DataTypes.STRING,
-          allowNull: false,
-        },
-        fileSuffix: {
-          type: DataTypes.STRING,
-          allowNull: false,
-          defaultValue: 'mp4,mkv,avi',
-        },
-        overwrite: {
-          type: DataTypes.BOOLEAN,
-          allowNull: false,
-          defaultValue: false,
-        },
-        enabled: {
-          type: DataTypes.BOOLEAN,
-          allowNull: false,
-          defaultValue: true,
-        },
-        cronExpression: {
-          type: DataTypes.STRING,
-          allowNull: true,
-        },
-        lastRunAt: {
-          type: DataTypes.DATE,
-          allowNull: true,
-        },
-        running: {
-          type: DataTypes.BOOLEAN,
-          allowNull: false,
-          defaultValue: false,
-        },
-        createdAt: {
-          type: DataTypes.DATE,
-          allowNull: false,
-        },
-        updatedAt: {
-          type: DataTypes.DATE,
-          allowNull: false,
-        },
-      },
-      {
-        sequelize,
-        modelName: 'Task',
-      },
-    )
-    return Task
-  }
-}
+  @Column({
+    type: DataType.STRING,
+    allowNull: false,
+    comment: '目标路径',
+  })
+  targetPath!: string
 
-export default Task
+  @Column({
+    type: DataType.STRING,
+    allowNull: false,
+    comment: '文件后缀',
+  })
+  fileSuffix!: string
+
+  @Column({
+    type: DataType.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+    comment: '是否覆盖',
+  })
+  overwrite!: boolean
+
+  @Column({
+    type: DataType.BOOLEAN,
+    allowNull: false,
+    defaultValue: true,
+    comment: '是否启用',
+  })
+  enabled!: boolean
+
+  @Column({
+    type: DataType.STRING,
+    allowNull: true,
+    comment: 'Cron 表达式',
+  })
+  cron!: string
+
+  @Column({
+    type: DataType.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+    comment: '是否正在运行',
+  })
+  running!: boolean
+
+  @Column({
+    type: DataType.DATE,
+    allowNull: true,
+    comment: '最后运行时间',
+  })
+  lastRunAt!: Date | null
+
+  @HasMany(() => TaskLog)
+  logs!: TaskLog[]
+} 
