@@ -18,10 +18,6 @@ const validateLogLevel = (level: string | undefined): Config['logger']['level'] 
 }
 
 const config: Config = {
-  alist: {
-    host: process.env.ALIST_HOST || 'http://localhost:5244',
-    token: process.env.ALIST_TOKEN || '',
-  },
   server: {
     port: parseInt(process.env.PORT || '3000', 10),
   },

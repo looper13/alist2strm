@@ -26,11 +26,6 @@ declare namespace NodeJS {
 
 // 应用配置类型声明
 declare namespace App {
-  // 基础配置类型
-  interface AlistConfig {
-    host: string
-    token: string
-  }
   // 服务配置类型
   interface ServerConfig {
     port: number
@@ -50,7 +45,6 @@ declare namespace App {
   }
 
   interface Config {
-    alist: AlistConfig
     server: ServerConfig
     logger: LoggerConfig
     database: DatabaseConfig
