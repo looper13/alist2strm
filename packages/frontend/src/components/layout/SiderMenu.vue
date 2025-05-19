@@ -21,7 +21,7 @@ const menuOptions = ref<MenuOption[]>([
   },
   {
     label: '生成记录',
-    key: '/history',
+    key: '/file-history',
     icon: renderIcon(IconFiles),
   },
 ])

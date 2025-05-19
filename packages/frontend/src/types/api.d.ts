@@ -79,6 +79,14 @@ declare namespace Api {
     updatedAt: string
   }
 
+  interface FileHistoryQuery extends PaginationQuery {
+    keyword?: string
+    fileType?: string
+    fileSuffix?: string
+    startTime?: string
+    endTime?: string
+  }
+
   // 任务进度相关类型
   interface TaskProgress {
     progress: number
