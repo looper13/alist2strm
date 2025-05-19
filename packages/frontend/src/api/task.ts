@@ -32,7 +32,7 @@ export class TaskAPI {
    * 获取任务日志
    */
   findLogs(taskId: number) {
-    return http.get<Api.TaskLog[]>(`/api/tasks/${taskId}/logs`)
+    return http.get<HttpResponse<Api.TaskLog[]>>(`${this.baseUrl}/${taskId}/logs`)
   }
 }
 

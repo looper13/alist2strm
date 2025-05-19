@@ -238,22 +238,52 @@ const columns: DataTableColumns<Api.Task> = [
     })
   } },
   { title: '覆盖', key: 'overwrite', width: 80, render: (row: Api.Task) => {
-    return h(NTag, {
-      type: row.overwrite ? 'warning' : 'info',
-      size: 'small',
-    }, {
-      default: () => row.overwrite ? '是' : '否',
-    })
-  } },
-  { title: '任务状态', key: 'enabled', width: 80, render: (row: Api.Task) => {
-    return h('div', { class: 'flex items-center gap-2' }, [
+    return h('div', [
       h(
-        NTag,
+        NSwitch,
         {
-          type: row.enabled ? 'info' : 'warning',
+          value: row.overwrite,
           size: 'small',
+          loading: loading.value,
+          onUpdateValue: async (value: boolean) => {
+            try {
+              await taskAPI.update(row.id, {
+                ...row,
+                overwrite: value,
+              })
+              message.success(value ? '已开启覆盖' : '已关闭覆盖')
+              loadTasks()
+            }
+            catch (error: any) {
+              message.error(error.message || '操作失败')
+            }
+          },
         },
-        { default: () => row.enabled ? '已启用' : '已停用' },
+      ),
+    ])
+  } },
+  { title: '启用', key: 'enabled', width: 80, render: (row: Api.Task) => {
+    return h('div', [
+      h(
+        NSwitch,
+        {
+          value: row.enabled,
+          size: 'small',
+          loading: loading.value,
+          onUpdateValue: async (value: boolean) => {
+            try {
+              await taskAPI.update(row.id, {
+                ...row,
+                enabled: value,
+              })
+              message.success(value ? '任务已启用' : '任务已停用')
+              loadTasks()
+            }
+            catch (error: any) {
+              message.error(error.message || '操作失败')
+            }
+          },
+        },
       ),
     ])
   } },
