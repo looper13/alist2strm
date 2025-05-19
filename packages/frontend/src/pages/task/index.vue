@@ -248,11 +248,12 @@ async function loadTaskLogs() {
     return
   try {
     logLoading.value = true
-    const { data } = await taskAPI.findLogs(currentId.value, {
+    const { data } = await taskAPI.findLogs({
+      taskId: currentId.value,
       page: logPagination.page,
       pageSize: logPagination.pageSize,
     })
-    if (data) {
+    if (data && data.list) {
       taskLogs.value = data.list || []
       logPagination.itemCount = data.total || 0
     }
@@ -456,31 +457,6 @@ const logColumns: DataTableColumns<Api.TaskLog> = [
   },
 ]
 
-// 定时刷新日志
-let logTimer: ReturnType<typeof setInterval> | null = null
-watch(showLogDrawer, (show) => {
-  if (show && currentId.value) {
-    // 每5秒刷新一次日志
-    logTimer = setInterval(async () => {
-      await loadTaskLogs()
-    }, 5000)
-  }
-  else {
-    if (logTimer) {
-      clearInterval(logTimer)
-      logTimer = null
-    }
-  }
-})
-
-// 组件卸载时清理定时器
-onUnmounted(() => {
-  if (logTimer) {
-    clearInterval(logTimer)
-    logTimer = null
-  }
-})
-
 // 初始化加载
 onMounted(() => {
   loadTasks()
@@ -597,6 +573,22 @@ onMounted(() => {
       :block-scroll="false"
     >
       <NDrawerContent title="任务日志" closable>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <span>任务日志</span>
+            <NButton
+              type="primary"
+              size="small"
+              :loading="logLoading"
+              @click="loadTaskLogs"
+            >
+              <template #icon>
+                <div class="i-material-symbols:refresh" />
+              </template>
+              刷新
+            </NButton>
+          </div>
+        </template>
         <NSpin :show="logLoading">
           <NDataTable
             :columns="logColumns"

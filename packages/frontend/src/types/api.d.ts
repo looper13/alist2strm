@@ -79,6 +79,10 @@ declare namespace Api {
     updatedAt: string
   }
 
+  interface TaskLogQuery extends PaginationQuery {
+    taskId?: number
+  }
+
   // 文件历史相关类型
   interface FileHistory {
     id: number

@@ -42,8 +42,8 @@ export class TaskAPI {
   /**
    * 获取任务日志
    */
-  findLogs(taskId: number, query?: { page?: number, pageSize?: number }): Promise<HttpResponse<Api.PageResult<Api.TaskLog>>> {
-    return http.get<Api.PageResult<Api.TaskLog>>(`${this.baseUrl}/${taskId}/logs`, { params: query })
+  findLogs(query: Api.TaskLogQuery) {
+    return http.get<Api.PaginationResponse<Api.TaskLog>>(`${this.baseUrl}/${query.taskId}/logs`, { params: query })
   }
 }
 
