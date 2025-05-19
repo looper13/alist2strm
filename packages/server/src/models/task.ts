@@ -2,6 +2,8 @@ import { Column, Table, DataType, HasMany } from 'sequelize-typescript'
 import { BaseModel } from './base.js'
 import { TaskLog } from './task-log.js'
 
+export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'stopped'
+
 @Table({
   tableName: 'tasks',
   timestamps: true,

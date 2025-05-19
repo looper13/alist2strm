@@ -6,9 +6,12 @@ import { taskAPI } from '~/api/task'
 // 状态定义
 const loading = ref(false)
 const showModal = ref(false)
+const showLogModal = ref(false)
 const isEdit = ref(false)
 const currentId = ref<number | null>(null)
 const tasks = ref<Api.Task[]>([])
+const taskLogs = ref<Api.TaskLog[]>([])
+const logLoading = ref(false)
 
 // 搜索
 const searchForm = reactive({
@@ -204,6 +207,23 @@ async function handleExecute(row: Api.Task) {
   }
 }
 
+// 查看任务日志
+async function handleViewLogs(row: Api.Task) {
+  try {
+    currentId.value = row.id
+    logLoading.value = true
+    const { data } = await taskAPI.findLogs(row.id)
+    taskLogs.value = data || []
+    showLogModal.value = true
+  }
+  catch (error: any) {
+    message.error(error.message || '加载日志失败')
+  }
+  finally {
+    logLoading.value = false
+  }
+}
+
 // 表格列定义
 const columns: DataTableColumns<Api.Task> = [
   { title: '任务名称', key: 'name' },
@@ -257,7 +277,7 @@ const columns: DataTableColumns<Api.Task> = [
   {
     title: '操作',
     key: 'actions',
-    width: 250,
+    width: 300,
     render: (row) => {
       return h(NSpace, {}, {
         default: () => [
@@ -276,9 +296,15 @@ const columns: DataTableColumns<Api.Task> = [
               type: 'warning',
               size: 'small',
               onClick: () => handleExecute(row),
+              disabled: row.running,
             },
-            { default: () => '执行' },
+            { default: () => row.running ? '执行中' : '执行' },
           ),
+          h(NButton, {
+            size: 'small',
+            type: 'info',
+            onClick: () => handleViewLogs(row),
+          }, { default: () => '日志' }),
           h(NPopconfirm, {
             onPositiveClick: () => handleDelete(row),
           }, {
@@ -293,6 +319,75 @@ const columns: DataTableColumns<Api.Task> = [
     },
   },
 ]
+
+// 日志表格列定义
+const logColumns: DataTableColumns<Api.TaskLog> = [
+  {
+    title: '状态',
+    key: 'status',
+    width: 100,
+    render: (row) => {
+      const statusMap = {
+        running: { type: 'info', text: '运行中' },
+        completed: { type: 'success', text: '已完成' },
+        failed: { type: 'error', text: '失败' },
+        stopped: { type: 'warning', text: '已停止' },
+      }
+      const status = statusMap[row.status as keyof typeof statusMap] || { type: 'default', text: row.status }
+      return h(NTag, { type: status.type as any, size: 'small' }, { default: () => status.text })
+    },
+  },
+  {
+    title: '开始时间',
+    key: 'startTime',
+    width: 180,
+    render: row => h(NTime, { time: new Date(row.startTime), type: 'datetime' }),
+  },
+  {
+    title: '结束时间',
+    key: 'endTime',
+    width: 180,
+    render: row => row.endTime
+      ? h(NTime, { time: new Date(row.endTime), type: 'datetime' })
+      : h(NText, { depth: 3 }, { default: () => '-' }),
+  },
+  {
+    title: '消息',
+    key: 'message',
+    render: row => h(NText, { type: row.status === 'failed' ? 'error' : undefined }, { default: () => row.message || '-' }),
+  },
+]
+
+// 定时刷新日志
+let logTimer: NodeJS.Timer | null = null
+watch(showLogModal, (show) => {
+  if (show && currentId.value) {
+    // 每5秒刷新一次日志
+    logTimer = setInterval(async () => {
+      try {
+        const { data } = await taskAPI.findLogs(currentId.value!)
+        taskLogs.value = data || []
+      }
+      catch (error) {
+        console.error('刷新日志失败:', error)
+      }
+    }, 5000)
+  }
+  else {
+    if (logTimer) {
+      clearInterval(logTimer)
+      logTimer = null
+    }
+  }
+})
+
+// 组件卸载时清理定时器
+onUnmounted(() => {
+  if (logTimer) {
+    clearInterval(logTimer)
+    logTimer = null
+  }
+})
 
 // 初始化加载
 onMounted(() => {
@@ -399,6 +494,22 @@ onMounted(() => {
           </NButton>
         </NSpace>
       </template>
+    </NModal>
+
+    <!-- 日志查看对话框 -->
+    <NModal
+      v-model:show="showLogModal"
+      title="任务日志"
+      preset="card"
+      :style="{ width: '800px' }"
+    >
+      <NSpin :show="logLoading">
+        <NDataTable
+          :columns="logColumns"
+          :data="taskLogs"
+          :pagination="{ pageSize: 10 }"
+        />
+      </NSpin>
     </NModal>
   </NSpin>
 </template>

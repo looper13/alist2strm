@@ -24,7 +24,7 @@ export class ConfigCacheService extends EventEmitter {
     try {
       const configs = await Config.findAll()
       this.configCache.clear()
-      configs.forEach(config => this.configCache.set(config.code, config.value))
+      configs.forEach(config => this.configCache.set(config.dataValues.code, config.dataValues.value))
       this.initialized = true
       logger.info.info('配置缓存初始化成功')
     }

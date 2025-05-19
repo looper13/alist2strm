@@ -20,5 +20,6 @@ declare namespace GenerateResult {
     strmPath: string
     name: string
     sign?: string
+    type: string
   }
 }

@@ -4,6 +4,7 @@ import axios, { AxiosInstance } from 'axios'
 import type {AList} from '@/types/index.js'
 
 class AlistService {
+  private static instance: AlistService
   private client: AxiosInstance | undefined
   private initialized = false
   // 分页大小
@@ -17,8 +18,7 @@ class AlistService {
   // 请求间隔
   private reqDelay = 100
 
-  constructor() {
-    this._initializeHttp()
+  private constructor() {
     // 监听配置更新事件
     configCache.on('configUpdated', ({ code }) => {
       if ([
@@ -33,6 +33,16 @@ class AlistService {
         this._initializeHttp()
       }
     })
+  }
+
+  static getInstance(): AlistService {
+    if (!AlistService.instance)
+      AlistService.instance = new AlistService()
+    return AlistService.instance
+  }
+
+  async initialize(): Promise<void> {
+    await this._initializeHttp()
   }
 
   private async _initializeHttp() {
@@ -88,7 +98,7 @@ class AlistService {
     catch (error) {
       logger.error.error('AList 服务初始化失败:', error)
       this.initialized = false
-      throw error
+      // throw error
     }
   }
 
@@ -221,4 +231,4 @@ class AlistService {
   }
 }
 
-export const alistService = new AlistService() 
+export const alistService = AlistService.getInstance() 

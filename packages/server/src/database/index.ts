@@ -30,8 +30,8 @@ export async function setupDatabase(): Promise<void> {
     await sequelize.authenticate()
     logger.info.info('数据库连接已成功建立')
 
-    // 同步数据库结构
-    await sequelize.sync({ alter: true })
+    // 同步数据库结构，但不自动修改表结构
+    await sequelize.sync({ force: false, alter: false })
     logger.info.info('数据库结构同步完成')
   }
   catch (error) {

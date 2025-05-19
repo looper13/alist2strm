@@ -1,5 +1,7 @@
 import { Router } from 'express'
 import { TaskService } from '@/services/task.service.js'
+import { taskQueue } from '@/services/task-queue.service.js'
+import { taskLogService } from '@/services/task-log.service.js'
 import { logger } from '@/utils/logger.js'
 
 const router = Router()
@@ -216,60 +218,122 @@ router.post('/:id/execute', async (req, res) => {
 router.post('/:id/terminate', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
-    const success = await taskService.terminate(id)
+    const success = await taskService.stop(id)
+    
     if (!success) {
       res.status(400).json({
         code: 400,
-        message: '终止任务失败',
+        message: '终止任务失败'
       })
       return
     }
+
     res.json({
       code: 0,
-      message: '任务已终止',
+      message: '任务已终止'
     })
   }
   catch (error) {
-    logger.error.error('路由处理异常 - 终止任务:', error)
+    logger.error.error('终止任务失败:', error)
     res.status(500).json({
       code: 500,
       message: '终止失败',
-      error: error instanceof Error ? error.message : '未知错误',
+      error: error instanceof Error ? error.message : '未知错误'
     })
   }
 })
 
-// 获取任务进度
-router.get('/:id/progress', (req, res) => {
+
+// 获取任务状态
+router.get('/:id/status', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
-    const progress = taskService.getProgress(id)
-    const status = taskService.getStatus(id)
+    const status = taskService.getTaskStatus(id)
+    
+    if (!status) {
+      // 如果任务不在运行中，从数据库获取最后的状态
+      const task = await taskService.findById(id)
+      if (!task) {
+        res.status(404).json({
+          code: 404,
+          message: '任务不存在'
+        })
+        return
+      }
 
-    if (progress === null || status === null) {
-      res.status(404).json({
-        code: 404,
-        message: '任务未在运行',
+      res.json({
+        code: 0,
+        data: {
+          status: task.running ? 'running' : 'stopped',
+          progress: 0,
+          lastRunAt: task.lastRunAt
+        },
+        message: '查询成功'
       })
       return
     }
 
     res.json({
       code: 0,
-      data: {
-        progress,
-        status,
-      },
-      message: '查询成功',
+      data: status,
+      message: '查询成功'
     })
   }
   catch (error) {
-    logger.error.error('路由处理异常 - 获取任务进度:', error)
+    logger.error.error('获取任务状态失败:', error)
     res.status(500).json({
       code: 500,
       message: '查询失败',
-      error: error instanceof Error ? error.message : '未知错误',
+      error: error instanceof Error ? error.message : '未知错误'
     })
+  }
+})
+
+// 停止任务
+router.post('/:id/stop', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10)
+    const success = await taskService.stop(id)
+    
+    if (!success) {
+      res.status(400).json({
+        code: 400,
+        message: '停止任务失败'
+      })
+      return
+    }
+
+    res.json({
+      code: 0,
+      message: '任务已停止'
+    })
+  }
+  catch (error) {
+    logger.error.error('停止任务失败:', error)
+    res.status(500).json({
+      code: 500,
+      message: '停止失败',
+      error: error instanceof Error ? error.message : '未知错误'
+    })
+  }
+})
+
+/**
+ * 获取任务日志
+ */
+router.get('/:id/logs', async (req, res) => {
+  try {
+    const taskId = parseInt(req.params.id)
+    if (isNaN(taskId)) {
+      return res.status(400).json({ message: '无效的任务ID' })
+    }
+
+    const logs = await taskLogService.findByTaskId(taskId)
+    res.json(logs)
+  }
+  catch (error) {
+    logger.error.error('获取任务日志失败:', error)
+    res.status(500).json({ message: '获取任务日志失败' })
   }
 })
 

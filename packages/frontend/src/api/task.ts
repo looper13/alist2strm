@@ -27,6 +27,13 @@ export class TaskAPI {
   async execute(id: number): Promise<HttpResponse<void>> {
     return http.post(`${this.baseUrl}/${id}/execute`)
   }
+
+  /**
+   * 获取任务日志
+   */
+  findLogs(taskId: number) {
+    return http.get<Api.TaskLog[]>(`/api/tasks/${taskId}/logs`)
+  }
 }
 
 export const taskAPI = new TaskAPI()

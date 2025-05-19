@@ -6,6 +6,7 @@ import { setupLogger, httpLogger, logger } from '@/utils/logger.js'
 import { setupDatabase } from '@/database/index.js'
 import { setupRoutes } from '@/routes/index.js'
 import { configCache } from '@/services/config-cache.service.js'
+import { alistService } from '@/services/alist.service.js'
 
 const app: Express = express()
 const port = process.env.PORT || 3000
@@ -22,7 +23,11 @@ async function bootstrap() {
   app.use(express.json())
   app.use(express.urlencoded({ extended: true }))
 
-  configCache.initialize()
+  // 初始化配置缓存
+  await configCache.initialize()
+
+  // 初始化 Alist 服务
+  await alistService.initialize()
 
   // 路由
   setupRoutes(app)
