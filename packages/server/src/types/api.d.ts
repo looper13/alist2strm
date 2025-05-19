@@ -1,4 +1,4 @@
-declare namespace API {
+export declare namespace API {
   interface BaseResponse {
     code: number
     message: string
@@ -30,7 +30,9 @@ declare namespace API {
   namespace Config {
     interface CreateRequest extends Services.CreateConfigDto {}
     interface UpdateRequest extends Services.UpdateConfigDto {}
-    interface QueryRequest extends PageQuery {}
+    interface QueryRequest extends PageQuery {
+      name?: string
+    }
     
     interface DetailResponse extends SuccessResponse<Models.ConfigAttributes> {}
     interface ListResponse extends PageResponse<Models.ConfigAttributes> {}
@@ -41,6 +43,7 @@ declare namespace API {
     interface CreateRequest extends Services.CreateTaskDto {}
     interface UpdateRequest extends Services.UpdateTaskDto {}
     interface QueryRequest extends PageQuery {
+      name?: string
       enabled?: boolean
       running?: boolean
     }
@@ -48,5 +51,49 @@ declare namespace API {
     interface DetailResponse extends SuccessResponse<Models.TaskAttributes> {}
     interface ListResponse extends PageResponse<Models.TaskAttributes> {}
     interface DeleteResponse extends BaseResponse {}
+  }
+
+  namespace TaskLog {
+    interface CreateRequest extends Services.CreateTaskLogDto {}
+    interface UpdateRequest extends Services.UpdateTaskLogDto {}
+    interface QueryRequest extends PageQuery {
+      taskId?: number
+      status?: string
+      startTime?: string
+      endTime?: string
+    }
+
+    interface DetailResponse extends SuccessResponse<Models.TaskLogAttributes> {}
+    interface ListResponse extends PageResponse<Models.TaskLogAttributes> {}
+    interface DeleteResponse extends BaseResponse {}
+  }
+
+  namespace FileHistory {
+    interface CreateRequest extends Services.CreateFileHistoryDto {}
+    interface UpdateRequest extends Services.UpdateFileHistoryDto {}
+    interface QueryRequest extends PageQuery {
+      fileName?: string
+      sourcePath?: string
+      startTime?: string
+      endTime?: string
+    }
+
+    interface DetailResponse extends SuccessResponse<Models.FileHistoryAttributes> {}
+    interface ListResponse extends PageResponse<Models.FileHistoryAttributes> {}
+    interface DeleteResponse extends BaseResponse {}
+    interface CheckResponse extends SuccessResponse<{ exists: boolean }> {}
+  }
+
+  namespace Alist {
+    interface ListFilesRequest {
+      path?: string
+    }
+
+    interface FileInfoRequest {
+      path: string
+    }
+
+    interface ListFilesResponse extends SuccessResponse<Models.AlistFileInfo[]> {}
+    interface FileInfoResponse extends SuccessResponse<Models.AlistFileInfo> {}
   }
 } 

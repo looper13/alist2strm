@@ -1,32 +1,26 @@
 import { Router } from 'express'
-import { TaskLogService } from '@/services/task-log.service.js'
+import type { Request, Response, NextFunction, Router as RouterType } from 'express'
 import { logger } from '@/utils/logger.js'
+import { taskLogService } from '@/services/task-log.service.js'
+import { HttpError } from '@/middleware/error.js'
+import { success, error, pageResult } from '@/utils/response.js'
 
-const router = Router()
-const taskLogService = new TaskLogService()
+const router: RouterType = Router()
 
 // 创建任务日志
-router.post('/', async (req, res) => {
+router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const taskLog = await taskLogService.create(req.body)
-    res.json({
-      code: 0,
-      data: taskLog,
-      message: '创建成功',
-    })
+    const log = await taskLogService.create(req.body)
+    success(res, log)
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 创建任务日志:', error)
-    res.status(500).json({
-      code: 500,
-      message: '创建失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+  catch (err) {
+    logger.error.error('创建任务日志失败:', err)
+    next(new HttpError('创建任务日志失败', 500))
   }
 })
 
 // 分页查询任务日志
-router.get('/', async (req, res) => {
+router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, pageSize, taskId, status, startTime, endTime } = req.query
     const result = await taskLogService.findByPage({
@@ -37,76 +31,50 @@ router.get('/', async (req, res) => {
       startTime: startTime ? new Date(startTime as string) : undefined,
       endTime: endTime ? new Date(endTime as string) : undefined,
     })
-    res.json({
-      code: 0,
-      data: result,
-      message: '查询成功',
-    })
+    pageResult(res, result)
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 分页查询任务日志:', error)
-    res.status(500).json({
-      code: 500,
-      message: '查询失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+  catch (err) {
+    logger.error.error('查询任务日志失败:', err)
+    next(new HttpError('查询任务日志失败', 500))
   }
 })
 
-// 根据任务ID查询最新日志
-router.get('/latest/:taskId', async (req, res) => {
+// 获取最新任务日志
+router.get('/latest/:taskId', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const taskId = parseInt(req.params.taskId, 10)
-    const taskLog = await taskLogService.findLatestByTaskId(taskId)
-    if (!taskLog) {
-      res.status(404).json({
-        code: 404,
-        message: '任务日志不存在',
-      })
-      return
+    const log = await taskLogService.findLatestByTaskId(Number(req.params.taskId))
+    if (!log) {
+      throw new HttpError('任务日志不存在', 404)
     }
-    res.json({
-      code: 0,
-      data: taskLog,
-      message: '查询成功',
-    })
+    success(res, log)
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 查询最新任务日志:', error)
-    res.status(500).json({
-      code: 500,
-      message: '查询失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+  catch (err) {
+    if (err instanceof HttpError)
+      next(err)
+    else {
+      logger.error.error('获取最新任务日志失败:', err)
+      next(new HttpError('获取最新任务日志失败', 500))
+    }
   }
 })
 
-// 根据ID查询任务日志
-router.get('/:id', async (req, res) => {
+// 获取任务日志详情
+router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const id = parseInt(req.params.id, 10)
-    const taskLog = await taskLogService.findById(id)
-    if (!taskLog) {
-      res.status(404).json({
-        code: 404,
-        message: '任务日志不存在',
-      })
-      return
+    const log = await taskLogService.findById(Number(req.params.id))
+    if (!log) {
+      throw new HttpError('任务日志不存在', 404)
     }
-    res.json({
-      code: 0,
-      data: taskLog,
-      message: '查询成功',
-    })
+    success(res, log)
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 查询任务日志:', error)
-    res.status(500).json({
-      code: 500,
-      message: '查询失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+  catch (err) {
+    if (err instanceof HttpError)
+      next(err)
+    else {
+      logger.error.error('获取任务日志失败:', err)
+      next(new HttpError('获取任务日志失败', 500))
+    }
   }
 })
 
-export default router 
+export { router as taskLogRouter } 

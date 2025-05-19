@@ -129,4 +129,6 @@ export class FileHistoryService {
       throw error
     }
   }
-} 
+}
+
+export const fileHistoryService = new FileHistoryService() 

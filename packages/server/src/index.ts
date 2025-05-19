@@ -7,6 +7,8 @@ import { setupDatabase } from '@/database/index.js'
 import { setupRoutes } from '@/routes/index.js'
 import { configCache } from '@/services/config-cache.service.js'
 import { alistService } from '@/services/alist.service.js'
+import { taskScheduler } from '@/services/task-scheduler.service.js'
+
 
 const app: Express = express()
 const port = process.env.PORT || 3000
@@ -28,6 +30,9 @@ async function bootstrap() {
 
   // 初始化 Alist 服务
   await alistService.initialize()
+
+  // 初始化定时任务调度器
+  taskScheduler
 
   // 路由
   setupRoutes(app)

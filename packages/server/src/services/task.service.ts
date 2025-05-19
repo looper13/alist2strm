@@ -4,6 +4,7 @@ import { Op } from 'sequelize'
 import { logger } from '@/utils/logger.js'
 import { EventEmitter } from 'node:events'
 import { taskQueue } from './task-queue.service.js'
+import { taskScheduler } from './task-scheduler.service.js'
 
 // 任务执行器事件发射器
 const taskEmitter = new EventEmitter()
@@ -20,6 +21,12 @@ export class TaskService {
         lastRunAt: null,
       } as any)
       logger.info.info('创建任务成功:', { id: task.id, name: task.name })
+      
+      // 如果任务启用且有 cron 表达式，则调度任务
+      if (task.enabled && task.cron) {
+        await taskScheduler.scheduleTask(task)
+      }
+      
       return task
     }
     catch (error) {
@@ -41,6 +48,10 @@ export class TaskService {
 
       await task.update(data)
       logger.info.info('更新任务成功:', { id, name: task.name })
+      
+      // 更新任务调度
+      await taskScheduler.updateTaskSchedule(task)
+      
       return task
     }
     catch (error) {
@@ -60,6 +71,9 @@ export class TaskService {
         return false
       }
 
+      // 取消任务调度
+      taskScheduler.unscheduleTask(id)
+      
       await task.destroy()
       logger.info.info('删除任务成功:', { id, name: task.name })
       return true
@@ -250,4 +264,6 @@ export class TaskService {
   offProgress(id: number, callback: (progress: number) => void): void {
     taskEmitter.off(`task:${id}:progress`, callback)
   }
-} 
+}
+
+export const taskService = new TaskService() 

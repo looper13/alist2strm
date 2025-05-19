@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction, Router as RouterType } from 'expr
 import { logger } from '@/utils/logger.js'
 import { alistService } from '@/services/alist.service.js'
 import { HttpError } from '@/middleware/error.js'
+import { success, error } from '@/utils/response.js'
 
 const router: RouterType = Router()
 
@@ -11,18 +12,13 @@ router.get('/listFiles', async (req: Request, res: Response, next: NextFunction)
   try {
     const { path = '/' } = req.query
     const files = await alistService.listFiles(path as string)
-    res.json({
-      code: 0,
-      message: 'success',
-      data: files,
-    })
+    success(res, files)
   }
-  catch (error) {
-    logger.error.error('Failed to list files:', error)
+  catch (err) {
+    logger.error.error('Failed to list files:', err)
     next(new HttpError('Failed to list files', 500))
   }
 })
-
 
 // 获取文件信息
 router.get('/fileInfo', async (req: Request, res: Response, next: NextFunction) => {
@@ -32,17 +28,13 @@ router.get('/fileInfo', async (req: Request, res: Response, next: NextFunction) 
       throw new HttpError('路径不能为空', 400)
     }
     const fileInfo = await alistService.getFileInfo(path as string)
-    res.json({
-      code: 0,
-      message: 'success',
-      data: fileInfo,
-    })
+    success(res, fileInfo)
   }
-  catch (error) {
-    if (error instanceof HttpError)
-      next(error)
+  catch (err) {
+    if (err instanceof HttpError)
+      next(err)
     else {
-      logger.error.error('Failed to get file info:', error)
+      logger.error.error('Failed to get file info:', err)
       next(new HttpError('Failed to get file info', 500))
     }
   }

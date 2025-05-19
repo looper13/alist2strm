@@ -174,4 +174,6 @@ export class ConfigService {
       throw error
     }
   }
-} 
+}
+
+export const configService = new ConfigService() 
