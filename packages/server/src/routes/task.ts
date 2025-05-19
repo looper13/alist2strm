@@ -1,276 +1,140 @@
 import { Router } from 'express'
-import { TaskService } from '@/services/task.service'
-import { logger } from '@/utils/logger'
+import type { Request, Response, NextFunction, Router as RouterType } from 'express'
+import { logger } from '@/utils/logger.js'
+import { taskService } from '@/services/task.service.js'
+import { HttpError } from '@/middleware/error.js'
+import { success, error, pageResult } from '@/utils/response.js'
+import { taskLogService } from '@/services/task-log.service.js'
 
-const router = Router()
-const taskService = new TaskService()
+const router: RouterType = Router()
 
 // 创建任务
-router.post('/', async (req, res) => {
+router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const task = await taskService.create(req.body)
-    res.json({
-      code: 0,
-      data: task,
-      message: '创建成功',
-    })
+    success(res, task)
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 创建任务:', error)
-    res.status(500).json({
-      code: 500,
-      message: '创建失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+  catch (err) {
+    logger.error.error('创建任务失败:', err)
+    next(new HttpError('创建任务失败', 500))
   }
 })
 
 // 更新任务
-router.put('/:id', async (req, res) => {
+router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const id = parseInt(req.params.id, 10)
-    const task = await taskService.update(id, req.body)
-    if (!task) {
-      res.status(404).json({
-        code: 404,
-        message: '任务不存在',
-      })
-      return
-    }
-    res.json({
-      code: 0,
-      data: task,
-      message: '更新成功',
-    })
+    const task = await taskService.update(Number(req.params.id), req.body)
+    success(res, task)
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 更新任务:', error)
-    res.status(500).json({
-      code: 500,
-      message: '更新失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+  catch (err) {
+    logger.error.error('更新任务失败:', err)
+    next(new HttpError('更新任务失败', 500))
   }
 })
 
 // 删除任务
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const id = parseInt(req.params.id, 10)
-    const success = await taskService.delete(id)
-    if (!success) {
-      res.status(404).json({
-        code: 404,
-        message: '任务不存在',
-      })
-      return
-    }
-    res.json({
-      code: 0,
-      message: '删除成功',
-    })
+    await taskService.delete(Number(req.params.id))
+    success(res, null, '删除成功')
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 删除任务:', error)
-    res.status(500).json({
-      code: 500,
-      message: '删除失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+  catch (err) {
+    logger.error.error('删除任务失败:', err)
+    next(new HttpError('删除任务失败', 500))
   }
 })
 
 // 分页查询任务
-router.get('/', async (req, res) => {
+router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, pageSize, keyword, enabled, running } = req.query
     const result = await taskService.findByPage({
-      page: page ? parseInt(page as string, 10) : undefined,
-      pageSize: pageSize ? parseInt(pageSize as string, 10) : undefined,
+      page: Number(page),
+      pageSize: Number(pageSize),
       keyword: keyword as string,
       enabled: enabled === 'true' ? true : enabled === 'false' ? false : undefined,
       running: running === 'true' ? true : running === 'false' ? false : undefined,
     })
-    res.json({
-      code: 0,
-      data: result,
-      message: '查询成功',
-    })
+    pageResult(res, result)
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 分页查询任务:', error)
-    res.status(500).json({
-      code: 500,
-      message: '查询失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+  catch (err) {
+    logger.error.error('分页查询任务失败:', err)
+    next(new HttpError('分页查询任务失败', 500))
   }
 })
 
-// 查询所有任务
-router.get('/all', async (req, res) => {
+// 获取所有任务
+router.get('/all', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const name = req.query.name as string
-    const tasks = await taskService.findAll(name)
-    res.json({
-      code: 0,
-      data: tasks,
-      message: '查询成功',
-    })
+    const tasks = await taskService.findAll()
+    success(res, tasks)
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 查询所有任务:', error)
-    res.status(500).json({
-      code: 500,
-      message: '查询失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+  catch (err) {
+    logger.error.error('获取所有任务失败:', err)
+    next(new HttpError('获取所有任务失败', 500))
   }
 })
 
-// 根据ID查询任务
-router.get('/:id', async (req, res) => {
+// 获取任务详情
+router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const id = parseInt(req.params.id, 10)
-    const task = await taskService.findById(id)
+    const task = await taskService.findById(Number(req.params.id))
     if (!task) {
-      res.status(404).json({
-        code: 404,
-        message: '任务不存在',
-      })
-      return
+      throw new HttpError('Task not found', 404)
     }
-    res.json({
-      code: 0,
-      data: task,
-      message: '查询成功',
-    })
+    success(res, task)
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 查询任务:', error)
-    res.status(500).json({
-      code: 500,
-      message: '查询失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
-  }
-})
-
-// 更新任务运行状态
-router.put('/:id/status', async (req, res) => {
-  try {
-    const id = parseInt(req.params.id, 10)
-    const { running } = req.body
-    const task = await taskService.updateRunningStatus(id, running)
-    if (!task) {
-      res.status(404).json({
-        code: 404,
-        message: '任务不存在',
-      })
-      return
+  catch (err) {
+    if (err instanceof HttpError)
+      next(err)
+    else {
+      logger.error.error('获取任务详情失败:', err)
+      next(new HttpError('获取任务详情失败', 500))
     }
-    res.json({
-      code: 0,
-      data: task,
-      message: '更新成功',
-    })
-  }
-  catch (error) {
-    logger.error.error('路由处理异常 - 更新任务运行状态:', error)
-    res.status(500).json({
-      code: 500,
-      message: '更新失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
   }
 })
 
 // 执行任务
-router.post('/:id/execute', async (req, res) => {
+router.post('/:id/run', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const id = parseInt(req.params.id, 10)
-    const success = await taskService.execute(id)
-    if (!success) {
-      res.status(400).json({
-        code: 400,
-        message: '执行任务失败',
-      })
-      return
+    const task = await taskService.findById(Number(req.params.id))
+    if (!task) {
+      throw new HttpError('任务不存在', 404)
     }
-    res.json({
-      code: 0,
-      message: '任务开始执行',
-    })
+    taskService.execute(task.id)
+    success(res, null, '任务已开始执行')
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 执行任务:', error)
-    res.status(500).json({
-      code: 500,
-      message: '执行失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+  catch (err) {
+    if (err instanceof HttpError)
+      next(err)
+    else {
+      logger.error.error('执行任务失败:', err)
+      next(new HttpError('执行任务失败', 500))
+    }
   }
 })
 
-// 终止任务
-router.post('/:id/terminate', async (req, res) => {
+/**
+ * 获取任务日志
+ */
+router.get('/:id/logs', async (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10)
-    const success = await taskService.terminate(id)
-    if (!success) {
-      res.status(400).json({
-        code: 400,
-        message: '终止任务失败',
-      })
-      return
+    const taskId = parseInt(req.params.id)
+    if (isNaN(taskId)) {
+      return res.status(400).json({ message: '无效的任务ID' })
     }
-    res.json({
-      code: 0,
-      message: '任务已终止',
+    const { page, pageSize } = req.query
+    const result = await taskLogService.findByPage({
+      taskId,
+      page: page ? parseInt(page as string, 10) : undefined,
+      pageSize: pageSize ? parseInt(pageSize as string, 10) : undefined,
     })
+    pageResult(res, result)
   }
   catch (error) {
-    logger.error.error('路由处理异常 - 终止任务:', error)
-    res.status(500).json({
-      code: 500,
-      message: '终止失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+    logger.error.error('获取任务日志失败:', error)
+    res.status(500).json({ message: '获取任务日志失败' })
   }
 })
 
-// 获取任务进度
-router.get('/:id/progress', (req, res) => {
-  try {
-    const id = parseInt(req.params.id, 10)
-    const progress = taskService.getProgress(id)
-    const status = taskService.getStatus(id)
-
-    if (progress === null || status === null) {
-      res.status(404).json({
-        code: 404,
-        message: '任务未在运行',
-      })
-      return
-    }
-
-    res.json({
-      code: 0,
-      data: {
-        progress,
-        status,
-      },
-      message: '查询成功',
-    })
-  }
-  catch (error) {
-    logger.error.error('路由处理异常 - 获取任务进度:', error)
-    res.status(500).json({
-      code: 500,
-      message: '查询失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
-  }
-})
-
-export default router 
+export { router as taskRouter } 

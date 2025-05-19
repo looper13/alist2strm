@@ -1,7 +1,7 @@
-import { TaskLog } from '@/models/task-log'
+import { TaskLog } from '@/models/task-log.js'
 import type { WhereOptions } from 'sequelize'
 import { Op } from 'sequelize'
-import { logger } from '@/utils/logger'
+import { logger } from '@/utils/logger.js'
 
 export interface CreateTaskLogDto {
   taskId: number
@@ -12,6 +12,17 @@ export interface CreateTaskLogDto {
   totalFile: number
   generatedFile: number
   skipFile: number
+  fileSuffix?: string
+}
+
+export interface UpdateTaskLogDto {
+  status?: string
+  message?: string
+  endTime?: Date
+  totalFile?: number
+  generatedFile?: number
+  skipFile?: number
+  fileSuffix?: string
 }
 
 export interface QueryTaskLogDto {
@@ -35,6 +46,27 @@ export class TaskLogService {
     }
     catch (error) {
       logger.error.error('创建任务日志失败:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 更新任务日志
+   */
+  async update(id: number, data: UpdateTaskLogDto): Promise<TaskLog | null> {
+    try {
+      const taskLog = await TaskLog.findByPk(id)
+      if (!taskLog) {
+        logger.warn.warn('更新任务日志失败: 日志不存在', { id })
+        return null
+      }
+
+      await taskLog.update(data)
+      logger.info.info('更新任务日志成功:', { id, taskId: taskLog.taskId })
+      return taskLog
+    }
+    catch (error) {
+      logger.error.error('更新任务日志失败:', error)
       throw error
     }
   }
@@ -117,4 +149,24 @@ export class TaskLogService {
       throw error
     }
   }
+
+  /**
+   * 根据任务ID查询日志
+   */
+  async findByTaskId(taskId: number): Promise<TaskLog[]> {
+    try {
+      const logs = await TaskLog.findAll({
+        where: { taskId },
+        order: [['startTime', 'DESC']],
+      })
+      return logs
+    }
+    catch (error) {
+      logger.error.error('查询任务日志失败:', error)
+      throw error
+    }
+  }
 }
+
+// 导出单例实例
+export const taskLogService = new TaskLogService()

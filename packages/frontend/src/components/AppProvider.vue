@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { darkTheme } from 'naive-ui'
+import { darkTheme, dateZhCN, zhCN } from 'naive-ui'
 
 const isDark = useDark()
 const theme = computed(() => (isDark.value ? darkTheme : null))
@@ -7,7 +7,7 @@ const theme = computed(() => (isDark.value ? darkTheme : null))
 
 <template>
   <!-- 全局化配置 Config Provider -->
-  <n-config-provider :theme="theme">
+  <n-config-provider :locale="zhCN" :date-locale="dateZhCN" :theme="theme">
     <!-- 全局化 Loading Bar Provider -->
     <n-loading-bar-provider>
       <!-- 全局化 Dialog Provider -->

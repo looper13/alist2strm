@@ -1,5 +1,5 @@
 import { Column, Table, DataType } from 'sequelize-typescript'
-import { BaseModel } from './base'
+import { BaseModel } from './base.js'
 
 @Table({
   tableName: 'file_histories',

@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express'
-import { logger } from '../utils/logger'
-import type { AppError } from '../types'
+import { logger } from '@/utils/logger.js'
+import type { AppError } from '@/types/index.js'
+import { error } from '@/utils/response.js'
 
 export class HttpError extends Error implements AppError {
   constructor(
@@ -27,7 +28,7 @@ export function errorHandler(
   const details = isHttpError ? err.details : undefined
 
   // 记录错误日志
-  logger.error.error('Request error:', {
+  logger.error.error('请求错误:', {
     path: req.path,
     method: req.method,
     query: req.query,
@@ -41,23 +42,15 @@ export function errorHandler(
       stack: err.stack,
     },
   })
-
-  res.status(statusCode).json({
-    code: errorCode,
-    message: errorMessage,
-    details,
-  })
+  error(res, errorMessage, statusCode)
 }
 
 export function notFoundHandler(req: Request, res: Response): void {
-  logger.warn.warn('Resource not found:', {
+  logger.warn.warn('资源不存在:', {
     path: req.path,
     method: req.method,
     query: req.query,
   })
 
-  res.status(404).json({
-    code: 404,
-    message: 'Resource not found',
-  })
+  error(res, '资源不存在', 404)
 } 

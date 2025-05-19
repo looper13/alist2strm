@@ -6,9 +6,30 @@ import { taskAPI } from '~/api/task'
 // 状态定义
 const loading = ref(false)
 const showModal = ref(false)
+const showLogDrawer = ref(false)
 const isEdit = ref(false)
 const currentId = ref<number | null>(null)
 const tasks = ref<Api.Task[]>([])
+const taskLogs = ref<Api.TaskLog[]>([])
+const logLoading = ref(false)
+
+// 日志分页
+const logPagination = reactive({
+  page: 1,
+  pageSize: 10,
+  itemCount: 0,
+  showSizePicker: true,
+  pageSizes: [10, 20, 30, 50],
+  onChange: (page: number) => {
+    logPagination.page = page
+    loadTaskLogs()
+  },
+  onUpdatePageSize: (pageSize: number) => {
+    logPagination.pageSize = pageSize
+    logPagination.page = 1
+    loadTaskLogs()
+  },
+})
 
 // 搜索
 const searchForm = reactive({
@@ -192,6 +213,59 @@ async function handleDelete(row: Api.Task) {
   }
 }
 
+// 执行任务
+async function handleExecute(row: Api.Task) {
+  try {
+    await taskAPI.execute(row.id)
+    message.success('执行成功')
+    loadTasks()
+  }
+  catch (error: any) {
+    message.error(error.message || '执行失败')
+  }
+}
+
+// 查看任务日志
+async function handleViewLogs(row: Api.Task) {
+  try {
+    currentId.value = row.id
+    logLoading.value = true
+    logPagination.page = 1
+    await loadTaskLogs()
+    showLogDrawer.value = true
+  }
+  catch (error: any) {
+    message.error(error.message || '加载日志失败')
+  }
+  finally {
+    logLoading.value = false
+  }
+}
+
+// 加载任务日志
+async function loadTaskLogs() {
+  if (!currentId.value)
+    return
+  try {
+    logLoading.value = true
+    const { data } = await taskAPI.findLogs({
+      taskId: currentId.value,
+      page: logPagination.page,
+      pageSize: logPagination.pageSize,
+    })
+    if (data && data.list) {
+      taskLogs.value = data.list || []
+      logPagination.itemCount = data.total || 0
+    }
+  }
+  catch (error: any) {
+    message.error(error.message || '加载日志失败')
+  }
+  finally {
+    logLoading.value = false
+  }
+}
+
 // 表格列定义
 const columns: DataTableColumns<Api.Task> = [
   { title: '任务名称', key: 'name' },
@@ -206,22 +280,52 @@ const columns: DataTableColumns<Api.Task> = [
     })
   } },
   { title: '覆盖', key: 'overwrite', width: 80, render: (row: Api.Task) => {
-    return h(NTag, {
-      type: row.overwrite ? 'warning' : 'info',
-      size: 'small',
-    }, {
-      default: () => row.overwrite ? '是' : '否',
-    })
-  } },
-  { title: '任务状态', key: 'enabled', width: 80, render: (row: Api.Task) => {
-    return h('div', { class: 'flex items-center gap-2' }, [
+    return h('div', [
       h(
-        NTag,
+        NSwitch,
         {
-          type: row.enabled ? 'info' : 'warning',
+          value: row.overwrite,
           size: 'small',
+          loading: loading.value,
+          onUpdateValue: async (value: boolean) => {
+            try {
+              await taskAPI.update(row.id, {
+                ...row,
+                overwrite: value,
+              })
+              message.success(value ? '已开启覆盖' : '已关闭覆盖')
+              loadTasks()
+            }
+            catch (error: any) {
+              message.error(error.message || '操作失败')
+            }
+          },
         },
-        { default: () => row.enabled ? '已启用' : '已停用' },
+      ),
+    ])
+  } },
+  { title: '启用', key: 'enabled', width: 80, render: (row: Api.Task) => {
+    return h('div', [
+      h(
+        NSwitch,
+        {
+          value: row.enabled,
+          size: 'small',
+          loading: loading.value,
+          onUpdateValue: async (value: boolean) => {
+            try {
+              await taskAPI.update(row.id, {
+                ...row,
+                enabled: value,
+              })
+              message.success(value ? '任务已启用' : '任务已停用')
+              loadTasks()
+            }
+            catch (error: any) {
+              message.error(error.message || '操作失败')
+            }
+          },
+        },
       ),
     ])
   } },
@@ -245,7 +349,7 @@ const columns: DataTableColumns<Api.Task> = [
   {
     title: '操作',
     key: 'actions',
-    width: 250,
+    width: 300,
     render: (row) => {
       return h(NSpace, {}, {
         default: () => [
@@ -258,6 +362,21 @@ const columns: DataTableColumns<Api.Task> = [
             type: 'info',
             onClick: () => handleCopy(row),
           }, { default: () => '复制' }),
+          h(
+            NButton,
+            {
+              type: 'warning',
+              size: 'small',
+              onClick: () => handleExecute(row),
+              disabled: row.running,
+            },
+            { default: () => row.running ? '执行中' : '执行' },
+          ),
+          h(NButton, {
+            size: 'small',
+            type: 'info',
+            onClick: () => handleViewLogs(row),
+          }, { default: () => '日志' }),
           h(NPopconfirm, {
             onPositiveClick: () => handleDelete(row),
           }, {
@@ -270,6 +389,71 @@ const columns: DataTableColumns<Api.Task> = [
         ],
       })
     },
+  },
+]
+
+// 日志表格列定义
+const logColumns: DataTableColumns<Api.TaskLog> = [
+  {
+    title: '状态',
+    key: 'status',
+    width: 100,
+    render: (row) => {
+      const statusMap = {
+        running: { type: 'info', text: '运行中' },
+        completed: { type: 'success', text: '已完成' },
+        failed: { type: 'error', text: '失败' },
+        stopped: { type: 'warning', text: '已停止' },
+      }
+      const status = statusMap[row.status as keyof typeof statusMap] || { type: 'default', text: row.status }
+      return h(NTag, { type: status.type as any, size: 'small' }, { default: () => status.text })
+    },
+  },
+  {
+    title: '开始时间',
+    key: 'startTime',
+    width: 180,
+    render: row => h(NTime, { time: new Date(row.startTime), type: 'datetime' }),
+  },
+  {
+    title: '结束时间',
+    key: 'endTime',
+    width: 180,
+    render: row => row.endTime
+      ? h(NTime, { time: new Date(row.endTime), type: 'datetime' })
+      : h(NText, { depth: 3 }, { default: () => '-' }),
+  },
+  {
+    title: '总文件数',
+    key: 'totalFile',
+    width: 100,
+    align: 'right',
+    render: (row) => {
+      return h(NTag, { type: 'info', size: 'small' }, { default: () => row.totalFile })
+    },
+  },
+  {
+    title: '已生成',
+    key: 'generatedFile',
+    width: 100,
+    align: 'right',
+    render: (row) => {
+      return h(NTag, { type: 'success', size: 'small' }, { default: () => row.generatedFile })
+    },
+  },
+  {
+    title: '已跳过',
+    key: 'skipFile',
+    width: 100,
+    align: 'right',
+    render: (row) => {
+      return h(NTag, { type: 'warning', size: 'small' }, { default: () => row.skipFile })
+    },
+  },
+  {
+    title: '消息',
+    key: 'message',
+    render: row => h(NText, { type: row.status === 'failed' ? 'error' : undefined }, { default: () => row.message || '-' }),
   },
 ]
 
@@ -287,7 +471,7 @@ onMounted(() => {
         <NSpace>
           <NInput
             v-model:value="searchForm.name"
-            placeholder="请输入关键字搜索"
+            placeholder="请输入任务名称搜索"
             @keydown.enter="loadTasks"
           />
           <NButton type="primary" @click="loadTasks">
@@ -379,5 +563,42 @@ onMounted(() => {
         </NSpace>
       </template>
     </NModal>
+
+    <!-- 日志查看抽屉 -->
+    <NDrawer
+      v-model:show="showLogDrawer"
+      placement="bottom"
+      :height="600"
+      :trap-focus="false"
+      :block-scroll="false"
+    >
+      <NDrawerContent title="任务日志" closable>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <span>任务日志</span>
+            <NButton
+              type="primary"
+              size="small"
+              :loading="logLoading"
+              @click="loadTaskLogs"
+            >
+              <template #icon>
+                <div class="i-material-symbols:refresh" />
+              </template>
+              刷新
+            </NButton>
+          </div>
+        </template>
+        <NSpin :show="logLoading">
+          <NDataTable
+            :columns="logColumns"
+            remote
+            :max-height="420"
+            :data="taskLogs"
+            :pagination="logPagination"
+          />
+        </NSpin>
+      </NDrawerContent>
+    </NDrawer>
   </NSpin>
 </template>

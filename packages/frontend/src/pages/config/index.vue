@@ -8,10 +8,10 @@ defineOptions({
 const CONFIG_ITEMS = [
   { name: 'Alist地址', code: 'ALIST_HOST', type: 'text', placeholder: 'http://127.0.0.1:5244' },
   { name: 'Alist Token', code: 'ALIST_TOKEN', type: 'password', placeholder: 'alist-token-xxxx' },
-  { name: 'AList请求并发', code: 'REQUEST_CONCURRENCY', type: 'number', placeholder: '设置后会并发多个请求同时进行', min: 0, step: 1 },
-  { name: '任务请求间隔', code: 'GENERATOR_INTERVAL', type: 'number', placeholder: '请输入任务请求间隔（毫秒）', min: 0, step: 100 },
-  { name: '请求重试次数', code: 'GENERATOR_RETRY_COUNT', type: 'number', placeholder: '请输入请求重试次数', min: 0, step: 1 },
-  { name: '请求重试间隔', code: 'GENERATOR_RETRY_INTERVAL', type: 'number', placeholder: '请输入请求重试间隔（毫秒）', min: 0, step: 100 },
+  { name: 'AList请求并发', code: 'ALIST_REQ_CONCURRENCY', type: 'number', placeholder: '设置后会并发多个请求同时进行', min: 0, step: 1 },
+  { name: '任务请求间隔', code: 'ALIST_REQ_INTERVAL', type: 'number', placeholder: '请输入任务请求间隔（毫秒）', min: 0, step: 100 },
+  { name: '请求重试次数', code: 'ALIST_REQ_RETRY_COUNT', type: 'number', placeholder: '请输入请求重试次数', min: 0, step: 1 },
+  { name: '请求重试间隔', code: 'ALIST_REQ_RETRY_INTERVAL', type: 'number', placeholder: '请输入请求重试间隔（毫秒）', min: 0, step: 100 },
 ]
 // 状态定义
 const loading = ref(false)

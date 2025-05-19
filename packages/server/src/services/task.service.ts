@@ -1,20 +1,13 @@
-import { Task } from '@/models/task'
+import { Task } from '@/models/task.js'
 import type { WhereOptions } from 'sequelize'
 import { Op } from 'sequelize'
-import { logger } from '@/utils/logger'
-import { Worker } from 'worker_threads'
-import { EventEmitter } from 'events'
-import path from 'path'
+import { logger } from '@/utils/logger.js'
+import { EventEmitter } from 'node:events'
+import { taskQueue } from './task-queue.service.js'
+import { taskScheduler } from './task-scheduler.service.js'
 
 // 任务执行器事件发射器
 const taskEmitter = new EventEmitter()
-
-// 任务执行状态映射
-const taskExecutors = new Map<number, {
-  worker: Worker
-  progress: number
-  status: 'running' | 'stopped' | 'completed' | 'failed'
-}>()
 
 export class TaskService {
   /**
@@ -28,6 +21,12 @@ export class TaskService {
         lastRunAt: null,
       } as any)
       logger.info.info('创建任务成功:', { id: task.id, name: task.name })
+      
+      // 如果任务启用且有 cron 表达式，则调度任务
+      if (task.enabled && task.cron) {
+        await taskScheduler.scheduleTask(task)
+      }
+      
       return task
     }
     catch (error) {
@@ -48,7 +47,15 @@ export class TaskService {
       }
 
       await task.update(data)
-      logger.info.info('更新任务成功:', { id, name: task.name })
+      logger.info.info('更新任务成功:', { id, name: task.dataValues.name })
+      
+      // 如果任务启用且有 cron 表达式，则调度任务
+      if (task.dataValues.enabled && task.dataValues.cron) {
+        await taskScheduler.scheduleTask(task)
+      }
+      else {
+        taskScheduler.unscheduleTask(id)
+      }
       return task
     }
     catch (error) {
@@ -68,6 +75,9 @@ export class TaskService {
         return false
       }
 
+      // 取消任务调度
+      taskScheduler.unscheduleTask(id)
+      
       await task.destroy()
       logger.info.info('删除任务成功:', { id, name: task.name })
       return true
@@ -201,68 +211,12 @@ export class TaskService {
         return false
       }
 
-      // 检查任务是否已在运行
-      if (taskExecutors.has(id)) {
-        logger.warn.warn('执行任务失败: 任务已在运行', { id })
+      if (task.running) {
+        logger.warn.warn('执行任务失败: 任务正在运行', { id })
         return false
       }
 
-      // 更新任务状态为运行中
-      await task.update({
-        running: true,
-        lastRunAt: new Date(),
-      })
-
-      // 创建工作线程
-      const worker = new Worker(path.resolve(__dirname, '../workers/task.worker.js'), {
-        workerData: {
-          taskId: id,
-          sourcePath: task.sourcePath,
-          targetPath: task.targetPath,
-          // 其他任务配置...
-        },
-      })
-
-      // 存储任务执行器信息
-      taskExecutors.set(id, {
-        worker,
-        progress: 0,
-        status: 'running',
-      })
-
-      // 处理工作线程消息
-      worker.on('message', (message: { type: string; data: any }) => {
-        const executor = taskExecutors.get(id)
-        if (!executor) return
-
-        switch (message.type) {
-          case 'progress':
-            executor.progress = message.data.progress
-            taskEmitter.emit(`task:${id}:progress`, message.data.progress)
-            break
-          case 'completed':
-            executor.status = 'completed'
-            this.cleanupTask(id, true)
-            break
-          case 'error':
-            executor.status = 'failed'
-            this.cleanupTask(id, false)
-            break
-        }
-      })
-
-      // 处理工作线程错误
-      worker.on('error', (error) => {
-        logger.error.error('任务执行错误:', { id, error })
-        const executor = taskExecutors.get(id)
-        if (executor) {
-          executor.status = 'failed'
-          this.cleanupTask(id, false)
-        }
-      })
-
-      logger.info.info('开始执行任务:', { id, name: task.name })
-      return true
+      return await taskQueue.addTask(id)
     }
     catch (error) {
       logger.error.error('执行任务失败:', error)
@@ -271,43 +225,34 @@ export class TaskService {
   }
 
   /**
-   * 终止任务
+   * 停止任务
    */
-  async terminate(id: number): Promise<boolean> {
+  async stop(id: number): Promise<boolean> {
     try {
-      const executor = taskExecutors.get(id)
-      if (!executor) {
-        logger.warn.warn('终止任务失败: 任务未在运行', { id })
+      const task = await Task.findByPk(id)
+      if (!task) {
+        logger.warn.warn('停止任务失败: 任务不存在', { id })
         return false
       }
 
-      executor.status = 'stopped'
-      await executor.worker.terminate()
-      await this.cleanupTask(id, false)
-      
-      logger.info.info('终止任务成功:', { id })
-      return true
+      if (!task.running) {
+        logger.warn.warn('停止任务失败: 任务未在运行', { id })
+        return false
+      }
+
+      return await taskQueue.stopTask(id)
     }
     catch (error) {
-      logger.error.error('终止任务失败:', error)
+      logger.error.error('停止任务失败:', error)
       throw error
     }
   }
 
   /**
-   * 获取任务进度
-   */
-  getProgress(id: number): number | null {
-    const executor = taskExecutors.get(id)
-    return executor ? executor.progress : null
-  }
-
-  /**
    * 获取任务状态
    */
-  getStatus(id: number): string | null {
-    const executor = taskExecutors.get(id)
-    return executor ? executor.status : null
+  getTaskStatus(id: number) {
+    return taskQueue.getTaskStatus(id)
   }
 
   /**
@@ -323,25 +268,6 @@ export class TaskService {
   offProgress(id: number, callback: (progress: number) => void): void {
     taskEmitter.off(`task:${id}:progress`, callback)
   }
+}
 
-  /**
-   * 清理任务资源
-   */
-  private async cleanupTask(id: number, success: boolean): Promise<void> {
-    try {
-      const task = await Task.findByPk(id)
-      if (task) {
-        await task.update({
-          running: false,
-          lastRunAt: new Date(),
-        })
-      }
-
-      taskExecutors.delete(id)
-      taskEmitter.removeAllListeners(`task:${id}:progress`)
-    }
-    catch (error) {
-      logger.error.error('清理任务资源失败:', error)
-    }
-  }
-} 
+export const taskService = new TaskService() 

@@ -1,7 +1,11 @@
 import log4js from 'log4js'
-import path from 'path'
-import fs from 'fs'
-import config from '../config'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
+import { existsSync, mkdirSync } from 'node:fs'
+import config from '@/config.js'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 // 定义日志目录
 const logDirs = {
@@ -46,17 +50,17 @@ export const httpLogger = log4js.connectLogger(logger.access, {
 // 初始化日志系统
 export function setupLogger(): void {
   // 确保基础日志目录存在
-  const baseLogDir = path.resolve(config.logger.baseDir)
-  if (!fs.existsSync(baseLogDir)) {
-    fs.mkdirSync(baseLogDir, { recursive: true })
+  const baseLogDir = resolve(config.logger.baseDir)
+  if (!existsSync(baseLogDir)) {
+    mkdirSync(baseLogDir, { recursive: true })
   }
 
   // 初始化日志目录
   Object.keys(logDirs).forEach((key) => {
-    logDirs[key as keyof typeof logDirs] = path.join(baseLogDir, config.logger.appName, key)
+    logDirs[key as keyof typeof logDirs] = resolve(baseLogDir, config.logger.appName, key)
     const dir = logDirs[key as keyof typeof logDirs]
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true })
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true })
     }
   })
 
@@ -72,7 +76,7 @@ export function setupLogger(): void {
       },
       info: {
         ...baseLogConfig,
-        filename: path.join(logDirs.info, 'app'),
+        filename: resolve(logDirs.info, 'app'),
         layout: {
           type: 'pattern',
           pattern: '[%d{yyyy-MM-dd hh:mm:ss.SSS}] [%p] [%c] %f:%l - %m',
@@ -80,7 +84,7 @@ export function setupLogger(): void {
       },
       error: {
         ...baseLogConfig,
-        filename: path.join(logDirs.error, 'error'),
+        filename: resolve(logDirs.error, 'error'),
         layout: {
           type: 'pattern',
           pattern: '[%d{yyyy-MM-dd hh:mm:ss.SSS}] [%p] [%c] %f:%l - %m%n%s%n',
@@ -88,15 +92,15 @@ export function setupLogger(): void {
       },
       debug: {
         ...baseLogConfig,
-        filename: path.join(logDirs.debug, 'debug'),
+        filename: resolve(logDirs.debug, 'debug'),
       },
       warn: {
         ...baseLogConfig,
-        filename: path.join(logDirs.warn, 'warn'),
+        filename: resolve(logDirs.warn, 'warn'),
       },
       access: {
         ...baseLogConfig,
-        filename: path.join(logDirs.access, 'access'),
+        filename: resolve(logDirs.access, 'access'),
         layout: {
           type: 'pattern',
           pattern: '[%d{yyyy-MM-dd hh:mm:ss.SSS}] [%p] - %m',

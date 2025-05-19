@@ -1,156 +1,84 @@
 import { Router } from 'express'
-import { ConfigService } from '@/services/config.service'
-import { logger } from '@/utils/logger'
+import type { Request, Response, NextFunction, Router as RouterType } from 'express'
+import { logger } from '@/utils/logger.js'
+import { configService } from '@/services/config.service.js'
+import { HttpError } from '@/middleware/error.js'
+import { success } from '@/utils/response.js'
 
-const router = Router()
-const configService = new ConfigService()
+const router: RouterType = Router()
 
 // 创建配置
-router.post('/', async (req, res) => {
+router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const config = await configService.create(req.body)
-    res.json({
-      code: 0,
-      data: config,
-      message: '创建成功',
-    })
+    success(res, config)
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 创建配置:', error)
-    res.status(500).json({
-      code: 500,
-      message: '创建失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+  catch (err) {
+    logger.error.error('创建配置失败:', err)
+    next(new HttpError('创建配置失败', 500))
   }
 })
 
 // 更新配置
-router.put('/:id', async (req, res) => {
+router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const id = parseInt(req.params.id, 10)
-    const config = await configService.update(id, req.body)
+    const config = await configService.update(Number(req.params.id), req.body)
     if (!config) {
-      res.status(404).json({
-        code: 404,
-        message: '配置不存在',
-      })
-      return
+      throw new HttpError('配置不存在', 404)
     }
-    res.json({
-      code: 0,
-      data: config,
-      message: '更新成功',
-    })
+    success(res, config)
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 更新配置:', error)
-    res.status(500).json({
-      code: 500,
-      message: '更新失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+  catch (err) {
+    if (err instanceof HttpError)
+      next(err)
+    else {
+      logger.error.error('更新配置失败:', err)
+      next(new HttpError('更新配置失败', 500))
+    }
   }
 })
 
 // 删除配置
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const id = parseInt(req.params.id, 10)
-    const success = await configService.delete(id)
-    if (!success) {
-      res.status(404).json({
-        code: 404,
-        message: '配置不存在',
-      })
-      return
-    }
-    res.json({
-      code: 0,
-      message: '删除成功',
-    })
+    await configService.delete(Number(req.params.id))
+    success(res, null, '删除成功')
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 删除配置:', error)
-    res.status(500).json({
-      code: 500,
-      message: '删除失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+  catch (err) {
+    logger.error.error('删除配置失败:', err)
+    next(new HttpError('删除配置失败', 500))
   }
 })
 
-// 分页查询配置
-router.get('/', async (req, res) => {
-  try {
-    const { page, pageSize, keyword } = req.query
-    const result = await configService.findByPage({
-      page: page ? parseInt(page as string, 10) : undefined,
-      pageSize: pageSize ? parseInt(pageSize as string, 10) : undefined,
-      keyword: keyword as string,
-    })
-    res.json({
-      code: 0,
-      data: result,
-      message: '查询成功',
-    })
-  }
-  catch (error) {
-    logger.error.error('路由处理异常 - 分页查询配置:', error)
-    res.status(500).json({
-      code: 500,
-      message: '查询失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
-  }
-})
-
-// 查询所有配置
-router.get('/all', async (req, res) => {
+// 获取所有配置
+router.get('/all', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const configs = await configService.findAll()
-    res.json({
-      code: 0,
-      data: configs,
-      message: '查询成功',
-    })
+    success(res, configs)
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 查询所有配置:', error)
-    res.status(500).json({
-      code: 500,
-      message: '查询失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+  catch (err) {
+    logger.error.error('获取所有配置失败:', err)
+    next(new HttpError('获取所有配置失败', 500))
   }
 })
 
-// 根据ID查询配置
-router.get('/:id', async (req, res) => {
+// 获取配置详情
+router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const id = parseInt(req.params.id, 10)
-    const config = await configService.findById(id)
+    const config = await configService.findById(Number(req.params.id))
     if (!config) {
-      res.status(404).json({
-        code: 404,
-        message: '配置不存在',
-      })
-      return
+      throw new HttpError('配置不存在', 404)
     }
-    res.json({
-      code: 0,
-      data: config,
-      message: '查询成功',
-    })
+    success(res, config)
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 查询配置:', error)
-    res.status(500).json({
-      code: 500,
-      message: '查询失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+  catch (err) {
+    if (err instanceof HttpError)
+      next(err)
+    else {
+      logger.error.error('获取配置失败:', err)
+      next(new HttpError('获取配置失败', 500))
+    }
   }
 })
 
-export default router 
+export { router as configRouter } 

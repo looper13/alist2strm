@@ -56,14 +56,31 @@ declare namespace Api {
   interface TaskCreateDto extends Omit<Task, 'id' | 'createdAt' | 'updatedAt'> {}
   interface TaskUpdateDto extends Omit<Task, 'id' | 'createdAt' | 'updatedAt'> {}
 
+  // 分页结果类型
+  interface PageResult<T> {
+    list: T[]
+    total: number
+    page: number
+    pageSize: number
+  }
+
   // 任务日志相关类型
   interface TaskLog {
     id: number
     taskId: number
     status: string
     message: string
+    startTime: string
+    endTime: string | null
+    totalFile: number
+    generatedFile: number
+    skipFile: number
     createdAt: string
     updatedAt: string
+  }
+
+  interface TaskLogQuery extends PaginationQuery {
+    taskId?: number
   }
 
   // 文件历史相关类型
@@ -77,6 +94,14 @@ declare namespace Api {
     fileSuffix: string
     createdAt: string
     updatedAt: string
+  }
+
+  interface FileHistoryQuery extends PaginationQuery {
+    keyword?: string
+    fileType?: string
+    fileSuffix?: string
+    startTime?: string
+    endTime?: string
   }
 
   // 任务进度相关类型

@@ -61,6 +61,7 @@ export default defineConfig({
             'NSpace',
             'NTime',
             'NPopconfirm',
+            'NSwitch',
           ],
         },
       ],

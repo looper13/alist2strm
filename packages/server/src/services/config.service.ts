@@ -1,7 +1,8 @@
-import { Config } from '@/models/config'
+import { Config } from '@/models/config.js'
 import type { WhereOptions } from 'sequelize'
 import { Op } from 'sequelize'
-import { logger } from '@/utils/logger'
+import { logger } from '@/utils/logger.js'
+import { configCache } from './config-cache.service.js'
 
 export interface CreateConfigDto {
   name: string
@@ -28,6 +29,8 @@ export class ConfigService {
   async create(data: Services.CreateConfigDto): Promise<Config> {
     try {
       const config = await Config.create(data as any)
+      // 更新缓存
+      configCache.set(config.code, config.value)
       logger.info.info('创建配置成功:', { id: config.id, code: config.code })
       return config
     }
@@ -49,6 +52,9 @@ export class ConfigService {
       }
 
       await config.update(data)
+      // 更新缓存
+      if (data.value !== undefined)
+        configCache.set(config.code, data.value)
       logger.info.info('更新配置成功:', { id, code: config.code })
       return config
     }
@@ -70,6 +76,8 @@ export class ConfigService {
       }
 
       await config.destroy()
+      // 从缓存中删除
+      configCache.delete(config.code)
       logger.info.info('删除配置成功:', { id, code: config.code })
       return true
     }
@@ -166,4 +174,6 @@ export class ConfigService {
       throw error
     }
   }
-} 
+}
+
+export const configService = new ConfigService() 

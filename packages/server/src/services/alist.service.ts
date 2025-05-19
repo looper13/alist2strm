@@ -1,14 +1,47 @@
-import config from '@/config'
-import { createHttpClient, HttpClient } from '@/utils/http'
-import type { AlistFile, AlistMediaFile, AlistDir } from '@/types'
-import { Config } from '@/models/config'
+import { configCache } from './config-cache.service.js'
+import { logger } from '@/utils/logger.js'
+import axios, { AxiosInstance } from 'axios'
 
 class AlistService {
-  private http: HttpClient | undefined
+  private static instance: AlistService
+  private client: AxiosInstance | undefined
   private initialized = false
+  // 分页大小
+  private perPage = 100
+  // 最大重试次数
+  private maxRetries = 3
+  // 重试间隔
+  private retryDelay = 1000
+  // 并发数
+  private concurrency = 1
+  // 请求间隔
+  private reqDelay = 100
 
-  constructor() {
-    this._initializeHttp()
+  private constructor() {
+    // 监听配置更新事件
+    configCache.on('configUpdated', ({ code }) => {
+      if ([
+        'ALIST_HOST',
+        'ALIST_TOKEN',
+        'ALIST_PER_PAGE',
+        'ALIST_REQ_RETRY_COUNT',
+        'ALIST_REQ_RETRY_INTERVAL',
+        'ALIST_REQ_CONCURRENCY',
+        'ALIST_REQ_INTERVAL',
+      ].includes(code)) {
+        this._initializeHttp()
+      }
+    })
+  }
+
+  static getInstance(): AlistService {
+    if (!AlistService.instance)
+      AlistService.instance = new AlistService()
+    return AlistService.instance
+  }
+
+  async initialize(): Promise<void> {
+    await this._initializeHttp()
   }
 
   private async _initializeHttp() {
@@ -16,93 +49,185 @@ class AlistService {
       return
 
     try {
-      const [hostConfig, tokenConfig] = await Promise.all([
-        Config.findOne({ where: { code: 'ALIST_HOST' } }),
-        Config.findOne({ where: { code: 'ALIST_TOKEN' } }),
-      ])
+      // 确保配置缓存已初始化
+      if (!configCache.isInitialized())
+        await configCache.initialize()
 
-      if (!hostConfig?.value || !tokenConfig?.value)
-        throw new Error('AList 配置未找到，请先配置')
+      const host = configCache.getRequired('ALIST_HOST')
+      const token = configCache.getRequired('ALIST_TOKEN')
+      const perPage = configCache.get('ALIST_PER_PAGE')
+      const maxRetries = configCache.get('ALIST_REQ_RETRY_COUNT')
+      const retryDelay = configCache.get('ALIST_REQ_RETRY_INTERVAL')
+      const concurrency = configCache.get('ALIST_REQ_CONCURRENCY')
+      const reqDelay = configCache.get('ALIST_REQ_INTERVAL')
 
-      this.http = createHttpClient(hostConfig.value, {
+      if (perPage)
+        this.perPage = parseInt(perPage)
+      if (maxRetries)
+        this.maxRetries = parseInt(maxRetries)
+      if (retryDelay)
+        this.retryDelay = parseInt(retryDelay)
+      if (concurrency)
+        this.concurrency = parseInt(concurrency)
+      if (reqDelay)
+        this.reqDelay = parseInt(reqDelay)
+
+      if (!host || !token) {
+        logger.error.error('AList 配置未找到,请先配置')
+        throw new Error('AList 配置未找到,请先配置')
+      }
+
+      this.client = axios.create({
+        baseURL: host,
         headers: {
-          Authorization: tokenConfig.value,
+          Authorization: token,
         },
       })
 
       this.initialized = true
+      logger.info.info('AList 服务初始化成功', {
+        host,
+        perPage: this.perPage,
+        maxRetries: this.maxRetries,
+        retryDelay: this.retryDelay,
+        concurrency: this.concurrency,
+        reqDelay: this.reqDelay,
+      })
     }
     catch (error) {
-      console.error('AList 初始化失败:', error)
-      throw error
+      logger.error.error('AList 服务初始化失败:', error)
+      this.initialized = false
+      // throw error
+    }
+  }
+
+  // 确保 HTTP 客户端已初始化
+  private async _ensureInitialized() {
+    if (!this.initialized)
+      await this._initializeHttp()
+    if (!this.client)
+      throw new Error('HTTP client not initialized')
+  }
+
+  /**
+   * 带重试机制的 API 调用
+   */
+  private async _retryableRequest<T>(operation: () => Promise<T>, retryCount = 0): Promise<T> {
+    try {
+      return await operation()
+    }
+    catch (error) {
+      if (retryCount >= this.maxRetries) {
+        logger.error.error('达到最大重试次数', {
+          retryCount,
+          maxRetries: this.maxRetries,
+          error: error instanceof Error ? error.message : String(error),
+        })
+        throw error
+      }
+
+      logger.warn.warn('正在重试操作', {
+        attempt: retryCount + 1,
+        maxRetries: this.maxRetries,
+        delay: this.retryDelay * (retryCount + 1),
+      })
+
+      await new Promise(resolve => setTimeout(resolve, this.retryDelay * (retryCount + 1)))
+      return this._retryableRequest(operation, retryCount + 1)
     }
   }
 
   // 获取文件列表
-  async listFiles(path: string): Promise<AlistFile[]> {
-    const response = await this.http!.post<{ content: AlistFile[] }>('/api/fs/list', {
-      path,
-      password: '',
-      page: 1,
-      per_page: 0,
-      refresh: false,
-    })
-    return response.data?.content || []
-  }
+  async listFiles(path: string): Promise<AList.AlistFile[]> {
+    await this._ensureInitialized()
+    try {
+      let page = 1
+      let allFiles: AList.AlistFile[] = []
+      let hasMore = true
 
-  // 获取目录列表
-  async listDirs(path: string): Promise<AlistDir[]> {
-    const response = await this.http!.post<{ data: AlistDir[] }>('/api/fs/dirs', {
-      path,
-      password: '',
-      force_root: false,
-    })
-    return response.data?.data || []
+      while (hasMore) {
+        try {
+          const response = await this._retryableRequest(async () => {
+            const resp = await this.client!.post<AList.AlistListResponse<AList.AlistFile[]>>('/api/fs/list', {
+              path,
+              password: '',
+              page,
+              per_page: this.perPage,
+              refresh: false,
+            })
+
+            if (resp.data.code !== 200) {
+              throw new Error(resp.data.message || 'AList API 返回非200状态码')
+            }
+            return resp
+          })
+
+          const files = response.data.data.content || []
+          allFiles.push(...files)
+
+          logger.info.info(`获取文件列表,第${page}页`, {
+            path,
+            currentCount: files.length,
+            totalCount: allFiles.length,
+          })
+
+          hasMore = files.length === this.perPage
+          page++
+
+          // 每次请求后添加基础延迟
+          await new Promise(resolve => setTimeout(resolve, this.reqDelay))
+        }
+        catch (error) {
+          logger.error.error('获取文件列表失败，准备重试', {
+            path,
+            page,
+            error: error instanceof Error ? error.message : String(error),
+          })
+          throw error
+        }
+      }
+
+      return allFiles
+    }
+    catch (error) {
+      logger.error.error('获取文件列表失败', {
+        path,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      throw error
+    }
   }
 
   // 获取文件信息
-  async getFileInfo(path: string): Promise<AlistFile> {
-    const response = await this.http!.post<AlistFile>('/api/fs/get', {
-      path,
-      password: '',
-    })
-    if (!response.data) {
-      throw new Error('Failed to get file info')
-    }
-    return response.data
-  }
+  async getFileInfo(path: string): Promise<AList.AlistFile> {
+    await this._ensureInitialized()
+    try {
+      const response = await this._retryableRequest(async () => {
+        const resp = await this.client!.post<AList.AlistGetResponse<AList.AlistFile>>('/api/fs/get', {
+          path,
+          password: '',
+        })
 
-  // 获取媒体文件信息
-  async getMediaInfo(path: string): Promise<AlistMediaFile> {
-    const response = await this.http!.post<AlistMediaFile>('/api/fs/get', {
-      path,
-      password: '',
-    })
-    if (!response.data) {
-      throw new Error('Failed to get media info')
-    }
-    return response.data
-  }
+        if (resp.data.code !== 200) {
+          throw new Error(resp.data.message || 'AList API 返回非200状态码')
+        }
+        return resp
+      })
 
-  // 获取下载链接
-  async getDownloadUrl(path: string): Promise<string> {
-    interface LinkResponse {
-      code: number
-      message: string
-      data: {
-        raw_url: string
+      if (!response.data.data) {
+        throw new Error('获取文件信息失败')
       }
+
+      return response.data.data
     }
-    
-    const response = await this.http!.post<LinkResponse>('/api/fs/link', {
-      path,
-      password: '',
-    })
-    if (!response.data?.data?.raw_url) {
-      throw new Error('Failed to get download URL')
+    catch (error) {
+      logger.error.error('获取文件信息失败', {
+        path,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      throw error
     }
-    return response.data.data.raw_url
   }
 }
 
-export const alistService = new AlistService() 
+export const alistService = AlistService.getInstance() 

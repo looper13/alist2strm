@@ -1,34 +1,29 @@
 import { Router } from 'express'
-import { FileHistoryService } from '@/services/file-history.service'
-import { logger } from '@/utils/logger'
+import type { Request, Response, NextFunction, Router as RouterType } from 'express'
+import { logger } from '@/utils/logger.js'
+import { fileHistoryService } from '@/services/file-history.service.js'
+import { HttpError } from '@/middleware/error.js'
+import { success, error, pageResult } from '@/utils/response.js'
 
-const router = Router()
-const fileHistoryService = new FileHistoryService()
+const router: RouterType = Router()
 
-// 创建文件历史
-router.post('/', async (req, res) => {
+// 创建文件历史记录
+router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const fileHistory = await fileHistoryService.create(req.body)
-    res.json({
-      code: 0,
-      data: fileHistory,
-      message: '创建成功',
-    })
+    const history = await fileHistoryService.create(req.body)
+    success(res, history)
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 创建文件历史:', error)
-    res.status(500).json({
-      code: 500,
-      message: '创建失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+  catch (err) {
+    logger.error.error('创建文件历史记录失败:', err)
+    next(new HttpError('创建文件历史记录失败', 500))
   }
 })
 
-// 分页查询文件历史
-router.get('/', async (req, res) => {
+// 分页查询文件历史记录
+router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { page, pageSize, keyword, fileType, fileSuffix, startTime, endTime } = req.query
+    // const { page = 1, pageSize = 10, fileName, sourcePath, startTime, endTime } = req.query
+    const { page = 1, pageSize = 10, keyword, fileType, fileSuffix, startTime, endTime } = req.query
     const result = await fileHistoryService.findByPage({
       page: page ? parseInt(page as string, 10) : undefined,
       pageSize: pageSize ? parseInt(pageSize as string, 10) : undefined,
@@ -38,76 +33,51 @@ router.get('/', async (req, res) => {
       startTime: startTime ? new Date(startTime as string) : undefined,
       endTime: endTime ? new Date(endTime as string) : undefined,
     })
-    res.json({
-      code: 0,
-      data: result,
-      message: '查询成功',
-    })
+    pageResult(res, result)
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 分页查询文件历史:', error)
-    res.status(500).json({
-      code: 500,
-      message: '查询失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+  catch (err) {
+    logger.error.error('查询文件历史记录失败:', err)
+    next(new HttpError('查询文件历史记录失败', 500))
   }
 })
 
-// 根据ID查询文件历史
-router.get('/:id', async (req, res) => {
+// 获取文件历史记录详情
+router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const id = parseInt(req.params.id, 10)
-    const fileHistory = await fileHistoryService.findById(id)
-    if (!fileHistory) {
-      res.status(404).json({
-        code: 404,
-        message: '文件历史不存在',
-      })
-      return
+    const history = await fileHistoryService.findById(Number(req.params.id))
+    if (!history) {
+      throw new HttpError('文件历史记录不存在', 404)
     }
-    res.json({
-      code: 0,
-      data: fileHistory,
-      message: '查询成功',
-    })
+    success(res, history)
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 查询文件历史:', error)
-    res.status(500).json({
-      code: 500,
-      message: '查询失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+  catch (err) {
+    if (err instanceof HttpError)
+      next(err)
+    else {
+      logger.error.error('获取文件历史记录失败:', err)
+      next(new HttpError('获取文件历史记录失败', 500))
+    }
   }
 })
 
 // 检查文件是否存在
-router.get('/check', async (req, res) => {
+router.get('/check', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { sourcePath, fileName } = req.query
     if (!sourcePath || !fileName) {
-      res.status(400).json({
-        code: 400,
-        message: '参数错误',
-      })
-      return
+      throw new HttpError('源路径和文件名是必填的', 400)
     }
     const exists = await fileHistoryService.checkFileExists(sourcePath as string, fileName as string)
-    res.json({
-      code: 0,
-      data: { exists },
-      message: '查询成功',
-    })
+    success(res, { exists })
   }
-  catch (error) {
-    logger.error.error('路由处理异常 - 检查文件是否存在:', error)
-    res.status(500).json({
-      code: 500,
-      message: '查询失败',
-      error: error instanceof Error ? error.message : '未知错误',
-    })
+  catch (err) {
+    if (err instanceof HttpError)
+      next(err)
+    else {
+      logger.error.error('检查文件是否存在失败:', err)
+      next(new HttpError('检查文件是否存在失败', 500))
+    }
   }
 })
 
-export default router 
+export { router as fileHistoryRouter } 

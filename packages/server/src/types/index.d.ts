@@ -1,6 +1,8 @@
 /// <reference path="./models.d.ts" />
 /// <reference path="./services.d.ts" />
 /// <reference path="./api.d.ts" />
+/// <reference path="./alist.d.ts" />
+/// <reference path="./generate.d.ts" />
 
 // 环境变量声明
 declare namespace NodeJS {
@@ -85,48 +87,6 @@ declare namespace App {
     createdAt: Date
     updatedAt: Date
   }
-
-  // AList 相关类型
-  interface AlistFile {
-    name: string
-    size: number
-    type: 'file' | 'folder'
-    modified: string
-    path: string
-    sign?: string
-    thumb?: string
-  }
-
-  interface AlistDir {
-    name: string
-    modified: string
-  }
-
-  interface AlistFolder extends AlistFile {
-    type: 'folder'
-  }
-
-  interface AlistMediaFile extends AlistFile {
-    type: 'file'
-    extension: string
-    duration?: number
-    resolution?: string
-    bitrate?: number
-  }
-
-  // 媒体流相关类型
-  interface StreamInfo {
-    id: string
-    path: string
-    type: string
-    size: number
-    mimeType: string
-    duration?: number
-    bitrate?: number
-    resolution?: string
-    status: 'pending' | 'processing' | 'ready' | 'error'
-    error?: string
-  }
 }
 
 // 导出类型
@@ -136,10 +96,15 @@ export type PaginationQuery = App.PaginationQuery
 export type PaginationResponse<T> = App.PaginationResponse<T>
 export type AppError = App.AppError
 export type BaseModel = App.BaseModel
-export type AlistFile = App.AlistFile
-export type AlistFolder = App.AlistFolder
-export type AlistMediaFile = App.AlistMediaFile
-export type StreamInfo = App.StreamInfo
+export type AlistFile = AList.AlistFile
 
+export type AlistListResponse<T> = AList.AlistListResponse<T>
+export type AlistGetResponse<T> = AList.AlistGetResponse<T>
+export type AlistFile = AList.AlistFile
+
+export type GenerateResult = GenerateResult.GenerateResult
+export type GenerateTask = GenerateResult.GenerateTask
+
+export type AList = AList.AList
 export as namespace App
 export = App 

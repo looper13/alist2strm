@@ -15,6 +15,7 @@ declare global {
   const NPopconfirm: typeof import('naive-ui')['NPopconfirm']
   const NSelect: typeof import('naive-ui')['NSelect']
   const NSpace: typeof import('naive-ui')['NSpace']
+  const NSwitch: typeof import('naive-ui')['NSwitch']
   const NTag: typeof import('naive-ui')['NTag']
   const NText: typeof import('naive-ui')['NText']
   const NTime: typeof import('naive-ui')['NTime']
@@ -336,6 +337,7 @@ declare module 'vue' {
     readonly NPopconfirm: UnwrapRef<typeof import('naive-ui')['NPopconfirm']>
     readonly NSelect: UnwrapRef<typeof import('naive-ui')['NSelect']>
     readonly NSpace: UnwrapRef<typeof import('naive-ui')['NSpace']>
+    readonly NSwitch: UnwrapRef<typeof import('naive-ui')['NSwitch']>
     readonly NTag: UnwrapRef<typeof import('naive-ui')['NTag']>
     readonly NText: UnwrapRef<typeof import('naive-ui')['NText']>
     readonly NTime: UnwrapRef<typeof import('naive-ui')['NTime']>

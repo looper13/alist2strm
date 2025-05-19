@@ -1,7 +1,7 @@
-import { FileHistory } from '@/models/file-history'
+import { FileHistory } from '@/models/file-history.js'
 import type { WhereOptions } from 'sequelize'
 import { Op } from 'sequelize'
-import { logger } from '@/utils/logger'
+import { logger } from '@/utils/logger.js'
 
 export interface CreateFileHistoryDto {
   fileName: string
@@ -129,4 +129,6 @@ export class FileHistoryService {
       throw error
     }
   }
-} 
+}
+
+export const fileHistoryService = new FileHistoryService() 
