@@ -64,6 +64,7 @@ class GeneratorService {
         name: file.name,
         sign: file.sign,
         type: `${file.type}`,
+        fileSize: file.size || 0,
       }
     }
     return null
@@ -81,7 +82,7 @@ class GeneratorService {
         fileName: task.name,
         sourcePath: task.sourceFilePath,
         targetFilePath: task.targetFilePath,
-        fileSize: 0,
+        fileSize: task.fileSize,
         fileType: task.type,
         fileSuffix,
       })
