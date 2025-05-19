@@ -1,10 +1,10 @@
 import type { Express, Request, Response } from 'express'
-import { alistRouter } from './alist'
-import { errorHandler, notFoundHandler } from '@/middleware/error'
-import configRouter from './config'
-import taskRouter from './task'
-import taskLogRouter from './task-log'
-import fileHistoryRouter from './file-history'
+import { alistRouter } from './alist.js'
+import { errorHandler, notFoundHandler } from '@/middleware/error.js'
+import configRouter from './config.js'
+import taskRouter from './task.js'
+import taskLogRouter from './task-log.js'
+import fileHistoryRouter from './file-history.js'
 
 export function setupRoutes(app: Express): void {
   // API 路由

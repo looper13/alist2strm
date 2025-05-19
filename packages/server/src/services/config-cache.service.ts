@@ -1,5 +1,5 @@
-import { Config } from '@/models/config'
-import { logger } from '@/utils/logger'
+import { Config } from '@/models/config.js'
+import { logger } from '@/utils/logger.js'
 import EventEmitter from 'events'
 
 export class ConfigCacheService extends EventEmitter {

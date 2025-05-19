@@ -1,24 +1,29 @@
-const { parentPort, workerData } = require('worker_threads')
-const { generatorService } = require('@/services/generator.service')
+import { parentPort, workerData } from 'node:worker_threads'
+import { generatorService } from '@/services/generator.service.js'
 
-async function executeTask(
-  taskId: number,
-  sourcePath: string,
-  targetPath: string,
-  fileSuffix: string[],
-  overwrite: boolean,
+interface TaskWorkerData {
+  taskId: number
+  sourcePath: string
+  targetPath: string
+  fileSuffix: string
+  overwrite: boolean
   batchSize: number
-): Promise<void> {
+}
+
+async function executeTask(taskData: TaskWorkerData) {
   try {
+    const { taskId, sourcePath, targetPath, fileSuffix, overwrite, batchSize } = taskData
+    // 将逗号分隔的字符串转换为数组
+    const suffixes = fileSuffix.split(',').map(s => s.trim())
 
     // 模拟任务进度
     for (let progress = 0; progress <= 100; progress += 10) {
       // 发送进度更新
       parentPort?.postMessage({
         type: 'progress',
-        data: { progress },
+        data: progress,
       })
-      await generatorService.generateStrm(sourcePath, targetPath, fileSuffix, overwrite, batchSize)
+      await generatorService.generateStrm(sourcePath, targetPath, suffixes, overwrite, batchSize)
     }
 
     // 发送完成消息
@@ -32,7 +37,7 @@ async function executeTask(
     parentPort?.postMessage({
       type: 'error',
       data: {
-        taskId: taskId,
+        taskId: taskData.taskId,
         error: error instanceof Error ? error.message : '未知错误',
       },
     })
@@ -40,4 +45,6 @@ async function executeTask(
 }
 
 // 开始执行任务
-// executeTask(workerData as TaskWorkerData) 
+if (parentPort) {
+  executeTask(workerData as TaskWorkerData)
+} 

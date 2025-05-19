@@ -37,5 +37,4 @@ declare namespace AList {
   }
 }
 
-export = AList
 export as namespace AList

@@ -2,11 +2,12 @@
   "name": "@alist2strm/server",
   "version": "1.0.0",
   "description": "AList2Strm server application",
+  "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "cross-env NODE_ENV=development tsx watch src/index.ts",
+    "dev": "cross-env NODE_ENV=development tsx watch --tsconfig tsconfig.json src/index.ts",
     "build": "tsc",
-    "start": "cross-env NODE_ENV=production node dist/index.js",
+    "start": "pnpm run build && cross-env NODE_ENV=production node --experimental-specifier-resolution=node dist/index.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
@@ -24,10 +25,11 @@
   "devDependencies": {
     "@antfu/eslint-config": "^2.8.0",
     "@types/express": "^4.17.21",
-    "@types/node": "^20.11.24",
+    "@types/node": "^20.17.47",
     "@types/validator": "^13.11.9",
     "eslint": "^8.57.0",
-    "tsx": "^4.7.1",
+    "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.19.4",
     "typescript": "^5.3.3"
   }
 }

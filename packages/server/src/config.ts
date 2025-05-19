@@ -1,29 +1,32 @@
 import { config as dotenvConfig } from 'dotenv'
-import path from 'path'
-import type { Config } from './types'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve, join } from 'node:path'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 // 根据环境加载不同的配置文件
 const isDev = process.env.NODE_ENV === 'development'
 const envFile = isDev ? '.env.dev' : '.env'
-dotenvConfig({ path: path.resolve(process.cwd(), envFile) })
+dotenvConfig({ path: resolve(process.cwd(), envFile) })
 
 // 获取项目根目录
-const projectRoot = path.resolve(__dirname, '../../../')
+const projectRoot = resolve(__dirname, '../../../')
 
 // 验证日志级别
-const validateLogLevel = (level: string | undefined): Config['logger']['level'] => {
-  const validLevels: Config['logger']['level'][] = ['info', 'debug', 'error', 'warn']
-  const defaultLevel: Config['logger']['level'] = isDev ? 'debug' : 'info'
-  return level && validLevels.includes(level as Config['logger']['level']) ? (level as Config['logger']['level']) : defaultLevel
+const validateLogLevel = (level: string | undefined): App.Config['logger']['level'] => {
+  const validLevels: App.Config['logger']['level'][] = ['info', 'debug', 'error', 'warn']
+  const defaultLevel: App.Config['logger']['level'] = isDev ? 'debug' : 'info'
+  return level && validLevels.includes(level as App.Config['logger']['level']) ? (level as App.Config['logger']['level']) : defaultLevel
 }
 
-const config: Config = {
+const config: App.Config = {
   server: {
     port: parseInt(process.env.PORT || '3000', 10),
   },
   logger: {
     // 日志根目录，使用项目根目录
-    baseDir: process.env.LOG_BASE_DIR || path.join(projectRoot, isDev ? 'data/logs-dev' : 'data/logs'),
+    baseDir: process.env.LOG_BASE_DIR || join(projectRoot, isDev ? 'data/logs-dev' : 'data/logs'),
     // 应用名称，用于日志子目录
     appName: process.env.LOG_APP_NAME || 'alist-strm',
     // 日志级别
@@ -35,7 +38,7 @@ const config: Config = {
   },
   database: {
     // 数据库文件存储路径
-    path: process.env.DB_PATH || path.join(projectRoot, 'data/db'),
+    path: process.env.DB_PATH || join(projectRoot, 'data/db'),
     // 数据库文件名
     name: process.env.DB_NAME || 'database.sqlite',
   },

@@ -1,6 +1,6 @@
 import { Router } from 'express'
-import { TaskService } from '@/services/task.service'
-import { logger } from '@/utils/logger'
+import { TaskService } from '@/services/task.service.js'
+import { logger } from '@/utils/logger.js'
 
 const router = Router()
 const taskService = new TaskService()

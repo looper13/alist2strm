@@ -104,5 +104,7 @@ export type AlistFile = AList.AlistFile
 
 export type GenerateResult = GenerateResult.GenerateResult
 export type GenerateTask = GenerateResult.GenerateTask
+
+export type AList = AList.AList
 export as namespace App
 export = App 

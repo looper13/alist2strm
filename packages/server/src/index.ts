@@ -2,13 +2,11 @@ import 'reflect-metadata'
 import 'dotenv/config'
 import express from 'express'
 import type { Express } from 'express'
-import { getLogger } from 'log4js'
-import { setupLogger, httpLogger } from './utils/logger'
-import { setupDatabase } from './database'
-import { setupRoutes } from './routes'
-import { configCache } from './services/config-cache.service'
+import { setupLogger, httpLogger, logger } from '@/utils/logger.js'
+import { setupDatabase } from '@/database/index.js'
+import { setupRoutes } from '@/routes/index.js'
+import { configCache } from '@/services/config-cache.service.js'
 
-const logger = getLogger('app')
 const app: Express = express()
 const port = process.env.PORT || 3000
 
@@ -31,11 +29,11 @@ async function bootstrap() {
 
   // 启动服务器
   app.listen(port, () => {
-    logger.info(`服务器已启动，监听端口 ${port}`)
+    logger.info.info(`服务器已启动，监听端口 ${port}`)
   })
 }
 
 bootstrap().catch((error) => {
-  logger.error('服务器启动失败:', error)
+  logger.error.error('服务器启动失败:', error)
   process.exit(1)
 }) 

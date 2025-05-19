@@ -1,6 +1,6 @@
 import { Router } from 'express'
-import { FileHistoryService } from '@/services/file-history.service'
-import { logger } from '@/utils/logger'
+import { FileHistoryService } from '@/services/file-history.service.js'
+import { logger } from '@/utils/logger.js'
 
 const router = Router()
 const fileHistoryService = new FileHistoryService()

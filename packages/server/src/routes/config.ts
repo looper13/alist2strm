@@ -1,6 +1,6 @@
 import { Router } from 'express'
-import { ConfigService } from '@/services/config.service'
-import { logger } from '@/utils/logger'
+import { ConfigService } from '@/services/config.service.js'
+import { logger } from '@/utils/logger.js'
 
 const router = Router()
 const configService = new ConfigService()

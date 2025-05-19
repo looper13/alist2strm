@@ -1,10 +1,14 @@
-import { Task } from '@/models/task'
+import { Task } from '@/models/task.js'
 import type { WhereOptions } from 'sequelize'
 import { Op } from 'sequelize'
-import { logger } from '@/utils/logger'
-import { Worker } from 'worker_threads'
-import { EventEmitter } from 'events'
-import path from 'path'
+import { logger } from '@/utils/logger.js'
+import { Worker } from 'node:worker_threads'
+import { EventEmitter } from 'node:events'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 // 任务执行器事件发射器
 const taskEmitter = new EventEmitter()
@@ -201,46 +205,43 @@ export class TaskService {
         return false
       }
 
-      // 检查任务是否已在运行
-      if (taskExecutors.has(id)) {
-        logger.warn.warn('执行任务失败: 任务已在运行', { id })
+      if (task.running) {
+        logger.warn.warn('执行任务失败: 任务正在运行', { id })
         return false
       }
 
       // 更新任务状态为运行中
-      await task.update({
-        running: true,
-        lastRunAt: new Date(),
-      })
+      await this.updateRunningStatus(id, true)
 
-      // 创建工作线程
-      const worker = new Worker(path.resolve(__dirname, '../workers/task.worker.ts'), {
+      // 使用 TypeScript worker
+      const workerPath = resolve(__dirname, '../workers/task.worker.ts')
+      const worker = new Worker(new URL('../workers/task.worker.ts', import.meta.url), {
         workerData: {
           taskId: id,
           sourcePath: task.sourcePath,
           targetPath: task.targetPath,
           fileSuffix: task.fileSuffix,
           overwrite: task.overwrite,
-          batchSize: 200
-        }
+          batchSize: 200,
+        },
       })
 
-      // 存储任务执行器信息
+      // 设置任务执行器状态
       taskExecutors.set(id, {
         worker,
         progress: 0,
         status: 'running',
       })
 
-      // 处理工作线程消息
-      worker.on('message', (message: { type: string; data: any }) => {
+      // 监听消息
+      worker.on('message', (message: any) => {
         const executor = taskExecutors.get(id)
         if (!executor) return
 
         switch (message.type) {
           case 'progress':
-            executor.progress = message.data.progress
-            taskEmitter.emit(`task:${id}:progress`, message.data.progress)
+            executor.progress = message.data
+            taskEmitter.emit(`task:${id}:progress`, message.data)
             break
           case 'completed':
             executor.status = 'completed'
@@ -253,21 +254,22 @@ export class TaskService {
         }
       })
 
-      // 处理工作线程错误
-      worker.on('error', (error) => {
+      // 监听错误
+      worker.on('error', async (error) => {
         logger.error.error('任务执行错误:', { id, error })
-        const executor = taskExecutors.get(id)
-        if (executor) {
-          executor.status = 'failed'
-          this.cleanupTask(id, false)
-        }
+        await this.cleanupTask(id, false)
       })
 
-      logger.info.info('开始执行任务:', { id, name: task.name })
+      // 监听退出
+      worker.on('exit', async (code) => {
+        await this.cleanupTask(id, code === 0)
+      })
+
       return true
     }
     catch (error) {
       logger.error.error('执行任务失败:', error)
+      await this.cleanupTask(id, false)
       throw error
     }
   }

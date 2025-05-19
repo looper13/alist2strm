@@ -1,8 +1,8 @@
 import { Router } from 'express'
 import type { Request, Response, NextFunction, Router as RouterType } from 'express'
-import { logger } from '../utils/logger'
-import { alistService } from '../services/alist.service'
-import { HttpError } from '../middleware/error'
+import { logger } from '@/utils/logger.js'
+import { alistService } from '@/services/alist.service.js'
+import { HttpError } from '@/middleware/error.js'
 
 const router: RouterType = Router()
 

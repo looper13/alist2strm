@@ -1,7 +1,7 @@
-import { configCache } from './config-cache.service'
-import { logger } from '@/utils/logger'
+import { configCache } from './config-cache.service.js'
+import { logger } from '@/utils/logger.js'
 import axios, { AxiosInstance } from 'axios'
-import type AList from '@/types/alist'
+import type {AList} from '@/types/index.js'
 
 class AlistService {
   private client: AxiosInstance | undefined

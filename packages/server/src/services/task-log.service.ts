@@ -1,7 +1,7 @@
-import { TaskLog } from '@/models/task-log'
+import { TaskLog } from '@/models/task-log.js'
 import type { WhereOptions } from 'sequelize'
 import { Op } from 'sequelize'
-import { logger } from '@/utils/logger'
+import { logger } from '@/utils/logger.js'
 
 export interface CreateTaskLogDto {
   taskId: number

@@ -1,5 +1,8 @@
 declare namespace GenerateResult {
 
+  /**
+   * 生成结果
+   */
   export interface GenerateResult {
     success: boolean
     message: string

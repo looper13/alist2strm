@@ -1,6 +1,6 @@
 import { Column, Table, DataType, HasMany } from 'sequelize-typescript'
-import { BaseModel } from './base'
-import { TaskLog } from './task-log'
+import { BaseModel } from './base.js'
+import { TaskLog } from './task-log.js'
 
 @Table({
   tableName: 'tasks',

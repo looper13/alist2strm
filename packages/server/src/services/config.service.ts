@@ -1,8 +1,8 @@
-import { Config } from '@/models/config'
+import { Config } from '@/models/config.js'
 import type { WhereOptions } from 'sequelize'
 import { Op } from 'sequelize'
-import { logger } from '@/utils/logger'
-import { configCache } from './config-cache.service'
+import { logger } from '@/utils/logger.js'
+import { configCache } from './config-cache.service.js'
 
 export interface CreateConfigDto {
   name: string

@@ -1,9 +1,9 @@
-import { alistService } from './alist.service'
-import { logger } from '@/utils/logger'
+import { alistService } from './alist.service.js'
+import { logger } from '@/utils/logger.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { configCache } from './config-cache.service'
-import type { GenerateResult, GenerateTask } from '@/types'
+import { configCache } from './config-cache.service.js'
+import type { GenerateResult, GenerateTask } from '@/types/index.js'
 
 
 class GeneratorService {

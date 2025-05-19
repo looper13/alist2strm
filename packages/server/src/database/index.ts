@@ -1,22 +1,26 @@
 import { Sequelize } from 'sequelize-typescript'
-import path from 'path'
-import config from '@/config'
-import { logger } from '@/utils/logger'
-import { Config } from '@/models/config'
-import { Task } from '@/models/task'
-import { TaskLog } from '@/models/task-log'
-import { FileHistory } from '@/models/file-history'
-import fs from 'fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+import { existsSync, mkdirSync } from 'node:fs'
+import config from '@/config.js'
+import { logger } from '@/utils/logger.js'
+import { Config } from '@/models/config.js'
+import { Task } from '@/models/task.js'
+import { TaskLog } from '@/models/task-log.js'
+import { FileHistory } from '@/models/file-history.js'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 // 确保数据库目录存在
-const dbDir = path.dirname(path.join(config.database.path, config.database.name))
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true })
+const dbDir = dirname(join(config.database.path, config.database.name))
+if (!existsSync(dbDir)) {
+  mkdirSync(dbDir, { recursive: true })
 }
 
 const sequelize = new Sequelize({
   dialect: 'sqlite',
-  storage: path.join(config.database.path, config.database.name),
+  storage: join(config.database.path, config.database.name),
   models: [Config, Task, TaskLog, FileHistory],
   logging: (msg) => logger.debug.debug(msg),
 })
@@ -37,7 +41,7 @@ export async function setupDatabase(): Promise<void> {
 }
 
 export { sequelize }
-export * from '@/models/config'
-export * from '@/models/task'
-export * from '@/models/task-log'
-export * from '@/models/file-history' 
+export * from '@/models/config.js'
+export * from '@/models/task.js'
+export * from '@/models/task-log.js'
+export * from '@/models/file-history.js' 
