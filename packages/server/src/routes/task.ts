@@ -4,6 +4,7 @@ import { logger } from '@/utils/logger.js'
 import { taskService } from '@/services/task.service.js'
 import { HttpError } from '@/middleware/error.js'
 import { success, error, pageResult } from '@/utils/response.js'
+import { taskLogService } from '@/services/task-log.service.js'
 
 const router: RouterType = Router()
 
@@ -110,6 +111,24 @@ router.post('/:id/run', async (req: Request, res: Response, next: NextFunction) 
       logger.error.error('执行任务失败:', err)
       next(new HttpError('执行任务失败', 500))
     }
+  }
+})
+
+/**
+ * 获取任务日志
+ */
+router.get('/:id/logs', async (req, res) => {
+  try {
+    const taskId = parseInt(req.params.id)
+    if (isNaN(taskId)) {
+      return res.status(400).json({ message: '无效的任务ID' })
+    }
+    const logs = await taskLogService.findByTaskId(taskId)
+    success(res, logs)
+  }
+  catch (error) {
+    logger.error.error('获取任务日志失败:', error)
+    res.status(500).json({ message: '获取任务日志失败' })
   }
 })
 

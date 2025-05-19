@@ -46,7 +46,7 @@ class TaskSchedulerService {
     this.unscheduleTask(task.id)
 
     // 验证 cron 表达式
-    if (!cron.validate(task.cron!)) {
+    if (!cron.validate(task.dataValues.cron!)) {
       logger.warn.warn('无效的 cron 表达式', { taskId: task.id, taskName: task.dataValues.name, cron: task.dataValues.cron })
       return
     }
@@ -65,7 +65,7 @@ class TaskSchedulerService {
 
     // 保存任务引用
     this.jobs.set(task.id, job)
-    logger.info.info('任务已调度', { taskId: task.id, cron: task.cron })
+    logger.info.info('任务已调度', { taskId: task.id, cron: task.dataValues.cron })
   }
 
   /**

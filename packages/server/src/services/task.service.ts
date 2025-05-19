@@ -47,11 +47,12 @@ export class TaskService {
       }
 
       await task.update(data)
-      logger.info.info('更新任务成功:', { id, name: task.name })
+      logger.info.info('更新任务成功:', { id, name: task.dataValues.name })
       
-      // 更新任务调度
-      await taskScheduler.updateTaskSchedule(task)
-      
+      // 如果任务启用且有 cron 表达式，则调度任务
+      if (task.dataValues.enabled && task.dataValues.cron) {
+        await taskScheduler.scheduleTask(task)
+      }
       return task
     }
     catch (error) {
