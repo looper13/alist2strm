@@ -123,8 +123,13 @@ router.get('/:id/logs', async (req, res) => {
     if (isNaN(taskId)) {
       return res.status(400).json({ message: '无效的任务ID' })
     }
-    const logs = await taskLogService.findByTaskId(taskId)
-    success(res, logs)
+    const { page, pageSize } = req.query
+    const result = await taskLogService.findByPage({
+      taskId,
+      page: page ? parseInt(page as string, 10) : undefined,
+      pageSize: pageSize ? parseInt(pageSize as string, 10) : undefined,
+    })
+    pageResult(res, result)
   }
   catch (error) {
     logger.error.error('获取任务日志失败:', error)

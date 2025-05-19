@@ -6,12 +6,30 @@ import { taskAPI } from '~/api/task'
 // 状态定义
 const loading = ref(false)
 const showModal = ref(false)
-const showLogModal = ref(false)
+const showLogDrawer = ref(false)
 const isEdit = ref(false)
 const currentId = ref<number | null>(null)
 const tasks = ref<Api.Task[]>([])
 const taskLogs = ref<Api.TaskLog[]>([])
 const logLoading = ref(false)
+
+// 日志分页
+const logPagination = reactive({
+  page: 1,
+  pageSize: 10,
+  itemCount: 0,
+  showSizePicker: true,
+  pageSizes: [10, 20, 30, 50],
+  onChange: (page: number) => {
+    logPagination.page = page
+    loadTaskLogs()
+  },
+  onUpdatePageSize: (pageSize: number) => {
+    logPagination.pageSize = pageSize
+    logPagination.page = 1
+    loadTaskLogs()
+  },
+})
 
 // 搜索
 const searchForm = reactive({
@@ -212,9 +230,32 @@ async function handleViewLogs(row: Api.Task) {
   try {
     currentId.value = row.id
     logLoading.value = true
-    const { data } = await taskAPI.findLogs(row.id)
-    taskLogs.value = data || []
-    showLogModal.value = true
+    logPagination.page = 1
+    await loadTaskLogs()
+    showLogDrawer.value = true
+  }
+  catch (error: any) {
+    message.error(error.message || '加载日志失败')
+  }
+  finally {
+    logLoading.value = false
+  }
+}
+
+// 加载任务日志
+async function loadTaskLogs() {
+  if (!currentId.value)
+    return
+  try {
+    logLoading.value = true
+    const { data } = await taskAPI.findLogs(currentId.value, {
+      page: logPagination.page,
+      pageSize: logPagination.pageSize,
+    })
+    if (data) {
+      taskLogs.value = data.list || []
+      logPagination.itemCount = data.total || 0
+    }
   }
   catch (error: any) {
     message.error(error.message || '加载日志失败')
@@ -382,6 +423,33 @@ const logColumns: DataTableColumns<Api.TaskLog> = [
       : h(NText, { depth: 3 }, { default: () => '-' }),
   },
   {
+    title: '总文件数',
+    key: 'totalFile',
+    width: 100,
+    align: 'right',
+    render: (row) => {
+      return h(NTag, { type: 'info', size: 'small' }, { default: () => row.totalFile })
+    },
+  },
+  {
+    title: '已生成',
+    key: 'generatedFile',
+    width: 100,
+    align: 'right',
+    render: (row) => {
+      return h(NTag, { type: 'success', size: 'small' }, { default: () => row.generatedFile })
+    },
+  },
+  {
+    title: '已跳过',
+    key: 'skipFile',
+    width: 100,
+    align: 'right',
+    render: (row) => {
+      return h(NTag, { type: 'warning', size: 'small' }, { default: () => row.skipFile })
+    },
+  },
+  {
     title: '消息',
     key: 'message',
     render: row => h(NText, { type: row.status === 'failed' ? 'error' : undefined }, { default: () => row.message || '-' }),
@@ -389,18 +457,12 @@ const logColumns: DataTableColumns<Api.TaskLog> = [
 ]
 
 // 定时刷新日志
-let logTimer: NodeJS.Timeout | number | null = null
-watch(showLogModal, (show) => {
+let logTimer: ReturnType<typeof setInterval> | null = null
+watch(showLogDrawer, (show) => {
   if (show && currentId.value) {
     // 每5秒刷新一次日志
     logTimer = setInterval(async () => {
-      try {
-        const { data } = await taskAPI.findLogs(currentId.value!)
-        taskLogs.value = data || []
-      }
-      catch (error) {
-        console.error('刷新日志失败:', error)
-      }
+      await loadTaskLogs()
     }, 5000)
   }
   else {
@@ -526,20 +588,25 @@ onMounted(() => {
       </template>
     </NModal>
 
-    <!-- 日志查看对话框 -->
-    <NModal
-      v-model:show="showLogModal"
-      title="任务日志"
-      preset="card"
-      :style="{ width: '800px' }"
+    <!-- 日志查看抽屉 -->
+    <NDrawer
+      v-model:show="showLogDrawer"
+      placement="bottom"
+      :height="600"
+      :trap-focus="false"
+      :block-scroll="false"
     >
-      <NSpin :show="logLoading">
-        <NDataTable
-          :columns="logColumns"
-          :data="taskLogs"
-          :pagination="{ pageSize: 10 }"
-        />
-      </NSpin>
-    </NModal>
+      <NDrawerContent title="任务日志" closable>
+        <NSpin :show="logLoading">
+          <NDataTable
+            :columns="logColumns"
+            remote
+            :max-height="420"
+            :data="taskLogs"
+            :pagination="logPagination"
+          />
+        </NSpin>
+      </NDrawerContent>
+    </NDrawer>
   </NSpin>
 </template>

@@ -56,6 +56,14 @@ declare namespace Api {
   interface TaskCreateDto extends Omit<Task, 'id' | 'createdAt' | 'updatedAt'> {}
   interface TaskUpdateDto extends Omit<Task, 'id' | 'createdAt' | 'updatedAt'> {}
 
+  // 分页结果类型
+  interface PageResult<T> {
+    list: T[]
+    total: number
+    page: number
+    pageSize: number
+  }
+
   // 任务日志相关类型
   interface TaskLog {
     id: number

@@ -8,9 +8,17 @@ import type { GenerateResult, GenerateTask } from '@/types/index.js'
 
 class GeneratorService {
   private fileHistoryService: FileHistoryService
+  private result: GenerateResult
 
   constructor() {
     this.fileHistoryService = new FileHistoryService()
+    this.result = {
+      success: true,
+      message: '生成成功',
+      totalFiles: 0,
+      generatedFiles: 0,
+      skippedFiles: 0,
+    }
   }
 
   // 统一路径分隔符为正斜杠
@@ -121,6 +129,9 @@ class GeneratorService {
           // 记录文件历史
           await this._recordFileHistory(task)
 
+          // 更新统计信息
+          this.result.generatedFiles++
+
           logger.info.info('生成 strm 文件', {
             sourceFilePath: task.sourceFilePath,
             targetFilePath: task.targetFilePath,
@@ -155,10 +166,18 @@ class GeneratorService {
         file => !file.is_dir && fileSuffix.includes(path.extname(file.name).toLowerCase().slice(1)),
       )
 
+      // 更新总文件数
+      this.result.totalFiles += mediaFiles.length
+
       const tasks: GenerateTask[] = []
       for (const file of mediaFiles) {
         const task = await this._processFile(file, sourcePath, currentPath, targetBase, overwrite)
-        if (task) tasks.push(task)
+        if (task) {
+          tasks.push(task)
+        } else {
+          // 更新跳过的文件数
+          this.result.skippedFiles++
+        }
       }
 
       // 生成 strm 文件
@@ -192,17 +211,18 @@ class GeneratorService {
       throw new Error('参数错误：source、target 和 fileSuffix 不能为空')
     }
 
-    // 统一路径格式
-    source = this._normalizePath(source)
-    target = this._normalizePath(target)
-
-    const result: GenerateResult = {
+    // 重置结果
+    this.result = {
       success: true,
       message: '生成成功',
       totalFiles: 0,
       generatedFiles: 0,
       skippedFiles: 0,
     }
+
+    // 统一路径格式
+    source = this._normalizePath(source)
+    target = this._normalizePath(target)
 
     try {
       // 确保目标目录存在
@@ -212,17 +232,23 @@ class GeneratorService {
       // 开始处理目录
       await this._processDirectory(source, source, target, fileSuffix, overwrite)
 
-      logger.info.info('strm 文件生成完成', { source, target })
+      logger.info.info('strm 文件生成完成', { 
+        source, 
+        target,
+        totalFiles: this.result.totalFiles,
+        generatedFiles: this.result.generatedFiles,
+        skippedFiles: this.result.skippedFiles,
+      })
     } catch (error) {
       logger.error.error('生成 strm 文件失败', {
         error: (error as Error).message,
         stack: (error as Error).stack,
       })
-      result.success = false
-      result.message = (error as Error).message
+      this.result.success = false
+      this.result.message = (error as Error).message
     }
 
-    return result
+    return this.result
   }
 }
 
