@@ -53,6 +53,9 @@ export class TaskService {
       if (task.dataValues.enabled && task.dataValues.cron) {
         await taskScheduler.scheduleTask(task)
       }
+      else {
+        taskScheduler.unscheduleTask(id)
+      }
       return task
     }
     catch (error) {

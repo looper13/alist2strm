@@ -1,29 +1,40 @@
-import type { HttpResponse, PaginationQuery, PaginationResponse } from '~/types'
+import type { HttpResponse } from '~/types'
 import { http } from './http'
 
 export class TaskAPI {
   private baseUrl = '/tasks'
 
+  /**
+   * 创建任务
+   */
   async create(data: Api.TaskCreateDto): Promise<HttpResponse<Api.Task>> {
-    return http.post(this.baseUrl, data)
+    return http.post<Api.Task>(this.baseUrl, data)
   }
 
+  /**
+   * 更新任务
+   */
   async update(id: number, data: Api.TaskUpdateDto): Promise<HttpResponse<Api.Task>> {
     return http.put(`${this.baseUrl}/${id}`, data)
   }
 
+  /**
+   * 删除任务
+   */
   async delete(id: number): Promise<HttpResponse<void>> {
     return http.delete(`${this.baseUrl}/${id}`)
   }
 
-  async findByPage(query: PaginationQuery & { keyword?: string }): Promise<HttpResponse<PaginationResponse<Api.Task>>> {
-    return http.get(this.baseUrl, { params: query })
-  }
-
+  /**
+   * 获取所有任务
+   */
   async findAll(query: { name?: string }): Promise<HttpResponse<Api.Task[]>> {
-    return http.get(`${this.baseUrl}/all`, { params: query })
+    return http.get<Api.Task[]>(`${this.baseUrl}/all`, { params: query })
   }
 
+  /**
+   * 执行任务
+   */
   async execute(id: number): Promise<HttpResponse<void>> {
     return http.post(`${this.baseUrl}/${id}/execute`)
   }
@@ -31,8 +42,8 @@ export class TaskAPI {
   /**
    * 获取任务日志
    */
-  findLogs(taskId: number) {
-    return http.get<HttpResponse<Api.TaskLog[]>>(`${this.baseUrl}/${taskId}/logs`)
+  findLogs(taskId: number): Promise<HttpResponse<Api.TaskLog[]>> {
+    return http.get<Api.TaskLog[]>(`${this.baseUrl}/${taskId}/logs`)
   }
 }
 

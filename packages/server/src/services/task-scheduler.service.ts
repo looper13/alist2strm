@@ -51,11 +51,23 @@ class TaskSchedulerService {
       return
     }
 
-    
     // 创建定时任务
     const job = cron.schedule(task.dataValues.cron!, async () => {
       try {
-        logger.info.info('执行定时任务', { taskId: task.id,taskName: task.dataValues.name, name: task.dataValues.name })
+        // 检查任务是否正在执行
+        const taskStatus = taskQueue.getTaskStatus(task.id)
+        if (taskStatus?.status === 'running') {
+          logger.warn.warn('任务正在执行中，跳过本次调度', { 
+            taskId: task.id, 
+            taskName: task.dataValues.name 
+          })
+          return
+        }
+
+        logger.info.info('执行定时任务', { 
+          taskId: task.id,
+          taskName: task.dataValues.name 
+        })
         await taskQueue.addTask(task.id)
       }
       catch (error) {
