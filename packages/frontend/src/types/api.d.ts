@@ -62,6 +62,11 @@ declare namespace Api {
     taskId: number
     status: string
     message: string
+    startTime: string
+    endTime: string | null
+    totalFile: number
+    generatedFile: number
+    skipFile: number
     createdAt: string
     updatedAt: string
   }

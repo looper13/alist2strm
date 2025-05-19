@@ -21,5 +21,6 @@ declare namespace GenerateResult {
     name: string
     sign?: string
     type: string
+    fileSize: number
   }
 }

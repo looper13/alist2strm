@@ -359,7 +359,7 @@ const logColumns: DataTableColumns<Api.TaskLog> = [
 ]
 
 // 定时刷新日志
-let logTimer: NodeJS.Timer | null = null
+let logTimer: NodeJS.Timeout | number | null = null
 watch(showLogModal, (show) => {
   if (show && currentId.value) {
     // 每5秒刷新一次日志
@@ -403,7 +403,7 @@ onMounted(() => {
         <NSpace>
           <NInput
             v-model:value="searchForm.name"
-            placeholder="请输入关键字搜索"
+            placeholder="请输入任务名称搜索"
             @keydown.enter="loadTasks"
           />
           <NButton type="primary" @click="loadTasks">
