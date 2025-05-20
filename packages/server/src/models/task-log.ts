@@ -1,4 +1,4 @@
-import { Column, Table, DataType, ForeignKey, BelongsTo } from 'sequelize-typescript'
+import { Column, Table, DataType, ForeignKey } from 'sequelize-typescript'
 import { BaseModel } from './base.js'
 import { Task } from './task.js'
 
@@ -13,35 +13,35 @@ export class TaskLog extends BaseModel {
     allowNull: false,
     comment: '任务ID',
   })
-  taskId!: number
+  declare taskId: number
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
     comment: '状态',
   })
-  status!: string
+  declare status: string
 
   @Column({
     type: DataType.TEXT,
     allowNull: true,
     comment: '消息',
   })
-  message!: string | null
+  declare message: string | null
 
   @Column({
     type: DataType.DATE,
     allowNull: false,
     comment: '开始时间',
   })
-  startTime!: Date
+  declare startTime: Date
 
   @Column({
     type: DataType.DATE,
     allowNull: true,
     comment: '结束时间',
   })
-  endTime!: Date | null
+  declare endTime: Date | null
 
   @Column({
     type: DataType.INTEGER,
@@ -49,7 +49,7 @@ export class TaskLog extends BaseModel {
     defaultValue: 0,
     comment: '总文件数',
   })
-  totalFile!: number
+  declare totalFile: number
 
   @Column({
     type: DataType.INTEGER,
@@ -57,7 +57,7 @@ export class TaskLog extends BaseModel {
     defaultValue: 0,
     comment: '已生成文件数',
   })
-  generatedFile!: number
+  declare generatedFile: number
 
   @Column({
     type: DataType.INTEGER,
@@ -65,8 +65,5 @@ export class TaskLog extends BaseModel {
     defaultValue: 0,
     comment: '跳过文件数',
   })
-  skipFile!: number
-
-  @BelongsTo(() => Task)
-  task!: Task
+  declare skipFile: number
 } 

@@ -8,6 +8,7 @@ import { Config } from '@/models/config.js'
 import { Task } from '@/models/task.js'
 import { TaskLog } from '@/models/task-log.js'
 import { FileHistory } from '@/models/file-history.js'
+import { setupAssociations } from '@/models/associations.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -29,6 +30,9 @@ export async function setupDatabase(): Promise<void> {
   try {
     await sequelize.authenticate()
     logger.info.info('数据库连接已成功建立')
+
+    // 设置模型关联
+    setupAssociations()
 
     // 同步数据库结构，但不自动修改表结构
     await sequelize.sync({ force: false, alter: false })

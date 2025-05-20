@@ -95,7 +95,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
 })
 
 // 执行任务
-router.post('/:id/run', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/:id/execute', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const task = await taskService.findById(Number(req.params.id))
     if (!task) {
