@@ -268,11 +268,11 @@ async function loadTaskLogs() {
 
 // 表格列定义
 const columns: DataTableColumns<Api.Task> = [
-  { title: '任务名称', key: 'name' },
-  { title: 'cron', key: 'cron', width: 150 },
-  { title: '源路径', key: 'sourcePath', width: 200, ellipsis: { tooltip: true } },
-  { title: '目标路径', key: 'targetPath', width: 200, ellipsis: { tooltip: true } },
-  { title: '文件后缀', key: 'fileSuffix', width: 200, render: (row: Api.Task) => {
+  { title: '任务名称', key: 'name', width: 120 },
+  { title: 'cron', key: 'cron', width: 120 },
+  { title: '源路径', key: 'sourcePath', width: 180, ellipsis: { tooltip: true } },
+  { title: '目标路径', key: 'targetPath', width: 180, ellipsis: { tooltip: true } },
+  { title: '文件后缀', key: 'fileSuffix', width: 180, render: (row: Api.Task) => {
     return h(NSpace, { size: 'small' }, {
       default: () => row.fileSuffix.split(',').map((suffix: string) =>
         h(NTag, { size: 'small' }, { default: () => suffix }),
@@ -341,7 +341,7 @@ const columns: DataTableColumns<Api.Task> = [
       ),
     ])
   } },
-  { title: '最后运行时间', key: 'lastRunAt', width: 150, render: (row: Api.Task) => {
+  { title: '最后运行时间', key: 'lastRunAt', width: 180, render: (row: Api.Task) => {
     return row.lastRunAt
       ? h(NTime, { time: new Date(row.lastRunAt), type: 'datetime' })
       : h(NText, { depth: 3 }, { default: () => '从未运行' })
@@ -353,38 +353,53 @@ const columns: DataTableColumns<Api.Task> = [
     render: (row) => {
       return h(NSpace, {}, {
         default: () => [
-          h(NButton, {
-            size: 'small',
-            onClick: () => handleEdit(row),
-          }, { default: () => '编辑' }),
-          h(NButton, {
-            size: 'small',
-            type: 'info',
-            onClick: () => handleCopy(row),
-          }, { default: () => '复制' }),
-          h(
-            NButton,
-            {
-              type: 'warning',
+          h(NTooltip, { trigger: 'hover' }, {
+            default: () => '编辑',
+            trigger: () => h(NButton, {
               size: 'small',
-              onClick: () => handleExecute(row),
-              disabled: row.running,
-            },
-            { default: () => row.running ? '执行中' : '执行' },
-          ),
-          h(NButton, {
-            size: 'small',
-            type: 'info',
-            onClick: () => handleViewLogs(row),
-          }, { default: () => '日志' }),
+              onClick: () => handleEdit(row),
+            }, { default: () => h(NIcon, null, { default: () => h('div', { class: 'i-ri:edit-line' }) }) }),
+          }),
+          h(NTooltip, { trigger: 'hover' }, {
+            default: () => '复制',
+            trigger: () => h(NButton, {
+              size: 'small',
+              type: 'info',
+              onClick: () => handleCopy(row),
+            }, { default: () => h(NIcon, null, { default: () => h('div', { class: 'i-ri:file-copy-line' }) }) }),
+          }),
+          h(NTooltip, { trigger: 'hover' }, {
+            default: () => row.running ? '执行中' : '执行',
+            trigger: () => h(
+              NButton,
+              {
+                type: 'warning',
+                size: 'small',
+                onClick: () => handleExecute(row),
+                disabled: row.running,
+              },
+              { default: () => h(NIcon, null, { default: () => h('div', { class: row.running ? 'i-ri:loader-4-line animate-spin' : 'i-ri:play-line' }) }) },
+            ),
+          }),
+          h(NTooltip, { trigger: 'hover' }, {
+            default: () => '查看日志',
+            trigger: () => h(NButton, {
+              size: 'small',
+              type: 'info',
+              onClick: () => handleViewLogs(row),
+            }, { default: () => h(NIcon, null, { default: () => h('div', { class: 'i-ri:file-list-line' }) }) }),
+          }),
           h(NPopconfirm, {
             onPositiveClick: () => handleDelete(row),
           }, {
             default: () => '确认删除该任务吗？',
-            trigger: () => h(NButton, {
-              size: 'small',
-              type: 'error',
-            }, { default: () => '删除' }),
+            trigger: () => h(NTooltip, { trigger: 'hover' }, {
+              default: () => '删除',
+              trigger: () => h(NButton, {
+                size: 'small',
+                type: 'error',
+              }, { default: () => h(NIcon, null, { default: () => h('div', { class: 'i-ri:delete-bin-line' }) }) }),
+            }),
           }),
         ],
       })

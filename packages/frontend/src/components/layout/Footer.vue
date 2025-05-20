@@ -7,7 +7,7 @@
     <a
       i-carbon-logo-github icon-btn
       rel="noreferrer"
-      href="https://github.com/antfu-collective/vitesse-lite"
+      href="https://github.com/MccRay-s/alist2strm"
       target="_blank"
       title="GitHub"
     />

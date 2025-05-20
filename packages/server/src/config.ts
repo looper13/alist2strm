@@ -7,7 +7,7 @@ const __dirname = dirname(__filename)
 
 // 根据环境加载不同的配置文件
 const isDev = process.env.NODE_ENV === 'development'
-const envFile = isDev ? '.env.dev' : '.env'
+const envFile = isDev ? '.env.development' : '.env'
 dotenvConfig({ path: resolve(process.cwd(), envFile) })
 
 // 获取项目根目录
