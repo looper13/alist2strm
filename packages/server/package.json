@@ -6,8 +6,9 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx watch --tsconfig tsconfig.json src/index.ts",
-    "build": "tsc",
-    "start": "pnpm run build && cross-env NODE_ENV=production node --experimental-specifier-resolution=node dist/index.js",
+    "build": "tsc && tsc-alias",
+    "start": "cross-env NODE_ENV=production node dist/index.js",
+    "start:dev": "pnpm run build && cross-env NODE_ENV=production tsx --tsconfig tsconfig.json dist/index.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
@@ -30,6 +31,7 @@
     "@types/node-cron": "^3.0.11",
     "@types/validator": "^13.11.9",
     "eslint": "^8.57.0",
+    "tsc-alias": "^1.8.16",
     "tsconfig-paths": "^4.2.0",
     "tsx": "^4.19.4",
     "typescript": "^5.3.3"

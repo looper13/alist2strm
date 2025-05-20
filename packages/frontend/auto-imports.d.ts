@@ -19,6 +19,7 @@ declare global {
   const NTag: typeof import('naive-ui')['NTag']
   const NText: typeof import('naive-ui')['NText']
   const NTime: typeof import('naive-ui')['NTime']
+  const NTooltip: typeof import('naive-ui')['NTooltip']
   const asyncComputed: typeof import('@vueuse/core')['asyncComputed']
   const autoResetRef: typeof import('@vueuse/core')['autoResetRef']
   const computed: typeof import('vue')['computed']
@@ -341,6 +342,7 @@ declare module 'vue' {
     readonly NTag: UnwrapRef<typeof import('naive-ui')['NTag']>
     readonly NText: UnwrapRef<typeof import('naive-ui')['NText']>
     readonly NTime: UnwrapRef<typeof import('naive-ui')['NTime']>
+    readonly NTooltip: UnwrapRef<typeof import('naive-ui')['NTooltip']>
     readonly asyncComputed: UnwrapRef<typeof import('@vueuse/core')['asyncComputed']>
     readonly autoResetRef: UnwrapRef<typeof import('@vueuse/core')['autoResetRef']>
     readonly computed: UnwrapRef<typeof import('vue')['computed']>

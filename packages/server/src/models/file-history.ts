@@ -11,40 +11,40 @@ export class FileHistory extends BaseModel {
     allowNull: false,
     comment: '文件名',
   })
-  fileName!: string
+  declare fileName: string
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
     comment: '源路径',
   })
-  sourcePath!: string
+  declare sourcePath: string
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
     comment: '目标文件路径',
   })
-  targetFilePath!: string
+  declare targetFilePath: string
 
   @Column({
     type: DataType.BIGINT,
     allowNull: false,
     comment: '文件大小',
   })
-  fileSize!: number
+  declare fileSize: number
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
     comment: '文件类型',
   })
-  fileType!: string
+  declare fileType: string
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
     comment: '文件后缀',
   })
-  fileSuffix!: string
+  declare fileSuffix: string
 } 

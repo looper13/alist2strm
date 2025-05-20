@@ -12,7 +12,7 @@ export class Config extends BaseModel {
     unique: true,
     comment: '配置名称',
   })
-  name!: string
+  declare name: string
 
   @Column({
     type: DataType.STRING,
@@ -20,12 +20,12 @@ export class Config extends BaseModel {
     unique: true,
     comment: '配置代码',
   })
-  code!: string
+  declare code: string
 
   @Column({
     type: DataType.TEXT,
     allowNull: false,
     comment: '配置值',
   })
-  value!: string
+  declare value: string
 } 
