@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { MenuOption } from 'naive-ui'
+import IconDashboard from '../icons/IconDashboard.vue'
 import IconFiles from '../icons/IconFiles.vue'
 import IconSchedule from '../icons/IconSchedule.vue'
 import IconSettings from '../icons/IconSettings.vue'
@@ -9,6 +10,11 @@ const route = useRoute()
 
 const isCollapsed = ref(false)
 const menuOptions = ref<MenuOption[]>([
+  {
+    label: '介绍',
+    key: '/',
+    icon: renderIcon(IconDashboard),
+  },
   {
     label: '基础配置',
     key: '/config',

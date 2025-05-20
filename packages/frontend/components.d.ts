@@ -13,6 +13,7 @@ declare module 'vue' {
     Footer: typeof import('./src/components/layout/Footer.vue')['default']
     IconCollapseLeft: typeof import('./src/components/icons/IconCollapseLeft.vue')['default']
     IconCollapseRight: typeof import('./src/components/icons/IconCollapseRight.vue')['default']
+    IconDashboard: typeof import('./src/components/icons/IconDashboard.vue')['default']
     IconFiles: typeof import('./src/components/icons/IconFiles.vue')['default']
     IconSchedule: typeof import('./src/components/icons/IconSchedule.vue')['default']
     IconSettings: typeof import('./src/components/icons/IconSettings.vue')['default']
