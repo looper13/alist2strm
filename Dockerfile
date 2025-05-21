@@ -1,79 +1,44 @@
-# 使用 node 作为基础镜像
-FROM node:23.11.1-alpine AS base
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# 基础镜像
+FROM node:22.15.1-alpine AS base
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
+    corepack enable && corepack prepare pnpm@10.10.0 --activate && \
+    pnpm config set registry https://registry.npmmirror.com && \
+    apk add --no-cache \
+    python3 \
+    build-base \
+    sqlite-dev \
+    musl-dev
 WORKDIR /app
 
-# ---------- 后端构建阶段（包括 devDependencies） ----------
+# ---------- 后端构建 ----------
+FROM base AS backend-build-dev
+WORKDIR /app/server
+COPY packages/server/ ./
+RUN pnpm install --frozen-lockfile && \
+    pnpm run build
+
 FROM base AS backend-build
 WORKDIR /app/server
-
-# 配置 Alpine 镜像源并安装编译工具链
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
-    apk update && \
-    apk add --no-cache \
-    python3 \
-    build-base \
-    sqlite-dev \
-    musl-dev
-
-# 复制后端 package.json 和锁文件
 COPY packages/server/package.json packages/server/pnpm-lock.yaml ./
-# 使用国内镜像，加速安装
-RUN pnpm config set registry https://registry.npmmirror.com
-# 安装所有依赖（包括 devDependencies）
-RUN pnpm install --frozen-lockfile
-# 复制后端源代码并构建
-COPY packages/server/ ./
-RUN pnpm run build
+RUN pnpm install --production --frozen-lockfile
 
-# ---------- 前端构建阶段 ----------
+
+# ---------- 前端构建 ----------
 FROM base AS frontend-build
 WORKDIR /app/frontend
-# 复制前端 package.json 和锁文件
-COPY packages/frontend/package.json packages/frontend/pnpm-*.yaml ./
-RUN pnpm config set registry https://registry.npmmirror.com
-# 安装依赖并构建前端
-RUN pnpm install --frozen-lockfile
 COPY packages/frontend/ ./
-RUN pnpm run build 
+RUN pnpm install --frozen-lockfile && pnpm run build 
 
 # ---------- 最终运行镜像 ----------
-FROM node:23.11.1-alpine AS final
+FROM node:22.15.1-alpine
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# nginx
+RUN apk update && \
+    apk add --no-cache nginx && \
+    rm -rf /var/cache/apk/*
 
-# 安装运行时环境：nginx 和 sqlite
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
-    apk update && \
-    apk add --no-cache \
-    nginx \
-    sqlite \
-    sqlite-dev \
-    python3 \
-    build-base \
-    musl-dev
-
-# 安装 node-gyp
-RUN npm install -g node-gyp
-
-# 复制 Nginx 配置和 entrypoint 脚本
-COPY builder/default.conf /etc/nginx/http.d/default.conf
-COPY builder/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-# 复制后端运行时产物（dist 和 node_modules）
-COPY --from=backend-build /app/server /app/server
-
-# 重新编译 sqlite3
-WORKDIR /app/server
-RUN cd node_modules/sqlite3 && \
-    node-gyp rebuild
-
-# 复制前端静态产物
-COPY --from=frontend-build /app/frontend/dist /app/frontend/dist
-
-# 设置默认环境变量
+# 默认环境
 ENV PORT=3210 \
     LOG_BASE_DIR=/app/data/logs \
     LOG_LEVEL=info \
@@ -83,7 +48,17 @@ ENV PORT=3210 \
     DB_BASE_DIR=/app/data/db \
     DB_NAME=database.sqlite
 
+# 脚本
+COPY builder/default.conf /etc/nginx/http.d/default.conf
+COPY builder/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# 产物
+COPY --from=backend-build-dev /app/server/dist /app/server/dist
+COPY --from=backend-build /app/server/node_modules /app/server/node_modules
+COPY --from=frontend-build /app/frontend/dist /app/frontend/dist
+
 EXPOSE 80 3210
 
-# 设置 entrypoint
+# entrypoint
 ENTRYPOINT ["/entrypoint.sh"]

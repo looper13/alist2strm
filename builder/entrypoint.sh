@@ -1,6 +1,5 @@
-#!/bin/sh
+#!/bin/sh 
 
-# 创建必要的目录
 mkdir -p /app/data/logs/nginx
 mkdir -p /app/data/db
 
