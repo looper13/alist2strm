@@ -2,6 +2,20 @@
 
 AList2Strm 是一个用于将 AList 媒体文件转换为 Strm 格式的工具，支持定时任务和批量处理。
 
+## 界面一览
+
+#### 任务管理
+[![任务管理](./screenshot/screenshot2025052223.39.19.png)](https://github.com/MccRay-s/alist2strm/blob/main/screenshot/screenshot2025052223.39.19.png)
+
+
+#### 配置管理
+[![任务管理](./screenshot/screenshot-2025052223.38.49.png)](https://github.com/MccRay-s/alist2strm/blob/main/screenshot/screenshot-2025052223.38.49.png)
+
+#### 文件记录
+
+[![文件记录](./screenshot/screenshot2025052223.39.32.png)](https://github.com/MccRay-s/alist2strm/blob/main/screenshot/screenshot2025052223.39.32.png)
+
+
 ## 功能特性
 
 - 🎯 支持从 AList 获取媒体文件列表
@@ -125,6 +139,14 @@ npm run build
 cd packages/server
 npm run build
 ```
+
+### 更新日志
+V1.0.1： `2025-05-22 23:45`
+- 任务界面调整，Table View 改成 Cards View
+- 任务编辑取消cron 必填项目
+
+### Bugs 
+1. AList 原路径，未编码导致API 调用异常，例如：`我的接收/【BD-ISO】`
 
 ## 许可证
 
