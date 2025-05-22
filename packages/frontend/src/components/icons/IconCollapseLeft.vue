@@ -1,6 +1,6 @@
 <script lang="ts">
 export default {
-  name: 'PajamasCollapseLeft',
+  name: 'IconCollapseLeft',
 }
 </script>
 

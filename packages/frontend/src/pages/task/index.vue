@@ -220,6 +220,19 @@ async function handleExecute(row: Api.Task.Record) {
   }
 }
 
+async function handleUpdateEnabled(item: Api.Task.Record) {
+  try {
+    await taskAPI.update(item.id, {
+      ...item,
+    })
+    message.success(item.enabled ? '任务已启用' : '任务已停用')
+    loadTasks()
+  }
+  catch (error: any) {
+    message.error(error.message || '操作失败')
+  }
+}
+
 // 查看任务日志
 async function handleViewLogs(row: Api.Task.Record) {
   try {
@@ -262,148 +275,6 @@ async function loadTaskLogs() {
     logLoading.value = false
   }
 }
-
-// 表格列定义
-const columns: DataTableColumns<Api.Task.Record> = [
-  { title: '任务名称', key: 'name', width: 120 },
-  { title: 'cron', key: 'cron', width: 120 },
-  { title: '源路径', key: 'sourcePath', width: 180, ellipsis: { tooltip: true } },
-  { title: '目标路径', key: 'targetPath', width: 180, ellipsis: { tooltip: true } },
-  { title: '文件后缀', key: 'fileSuffix', width: 180, render: (row: Api.Task.Record) => {
-    return h(NSpace, { size: 'small' }, {
-      default: () => row.fileSuffix.split(',').map((suffix: string) =>
-        h(NTag, { size: 'small' }, { default: () => suffix }),
-      ),
-    })
-  } },
-  { title: '覆盖', key: 'overwrite', width: 80, render: (row: Api.Task.Record) => {
-    return h('div', [
-      h(
-        NSwitch,
-        {
-          value: row.overwrite,
-          size: 'small',
-          loading: loading.value,
-          onUpdateValue: async (value: boolean) => {
-            try {
-              await taskAPI.update(row.id, {
-                ...row,
-                overwrite: value,
-              })
-              message.success(value ? '已开启覆盖' : '已关闭覆盖')
-              loadTasks()
-            }
-            catch (error: any) {
-              message.error(error.message || '操作失败')
-            }
-          },
-        },
-      ),
-    ])
-  } },
-  { title: '启用', key: 'enabled', width: 80, render: (row: Api.Task.Record) => {
-    return h('div', [
-      h(
-        NSwitch,
-        {
-          value: row.enabled,
-          size: 'small',
-          loading: loading.value,
-          onUpdateValue: async (value: boolean) => {
-            try {
-              await taskAPI.update(row.id, {
-                ...row,
-                enabled: value,
-              })
-              message.success(value ? '任务已启用' : '任务已停用')
-              loadTasks()
-            }
-            catch (error: any) {
-              message.error(error.message || '操作失败')
-            }
-          },
-        },
-      ),
-    ])
-  } },
-  { title: '运行状态', key: 'running', render: (row: Api.Task.Record) => {
-    return h('div', { class: 'flex items-center gap-2' }, [
-      h(
-        NTag,
-        {
-          type: row.running ? 'success' : 'warning',
-          size: 'small',
-        },
-        { default: () => row.running ? '运行中' : '已停止' },
-      ),
-    ])
-  } },
-  { title: '最后运行时间', key: 'lastRunAt', width: 180, render: (row: Api.Task.Record) => {
-    return row.lastRunAt
-      ? h(NTime, { time: new Date(row.lastRunAt), type: 'datetime' })
-      : h(NText, { depth: 3 }, { default: () => '从未运行' })
-  } },
-  {
-    title: '操作',
-    key: 'actions',
-    width: 300,
-    render: (row) => {
-      return h(NSpace, {}, {
-        default: () => [
-          h(NTooltip, { trigger: 'hover' }, {
-            default: () => '编辑',
-            trigger: () => h(NButton, {
-              size: 'small',
-              onClick: () => handleEdit(row),
-            }, { default: () => h(NIcon, null, { default: () => h('div', { class: 'i-ri:edit-line' }) }) }),
-          }),
-          h(NTooltip, { trigger: 'hover' }, {
-            default: () => '复制',
-            trigger: () => h(NButton, {
-              size: 'small',
-              type: 'info',
-              onClick: () => handleCopy(row),
-            }, { default: () => h(NIcon, null, { default: () => h('div', { class: 'i-ri:file-copy-line' }) }) }),
-          }),
-          h(NTooltip, { trigger: 'hover' }, {
-            default: () => row.running ? '执行中' : '执行',
-            trigger: () => h(
-              NButton,
-              {
-                type: 'warning',
-                size: 'small',
-                onClick: () => handleExecute(row),
-                disabled: row.running,
-              },
-              { default: () => h(NIcon, null, { default: () => h('div', { class: row.running ? 'i-ri:loader-4-line animate-spin' : 'i-ri:play-line' }) }) },
-            ),
-          }),
-          h(NTooltip, { trigger: 'hover' }, {
-            default: () => '查看日志',
-            trigger: () => h(NButton, {
-              size: 'small',
-              type: 'info',
-              onClick: () => handleViewLogs(row),
-            }, { default: () => h(NIcon, null, { default: () => h('div', { class: 'i-ri:file-list-line' }) }) }),
-          }),
-          h(NPopconfirm, {
-            onPositiveClick: () => handleDelete(row),
-          }, {
-            default: () => '确认删除该任务吗？',
-            trigger: () => h(NTooltip, { trigger: 'hover' }, {
-              default: () => '删除',
-              trigger: () => h(NButton, {
-                size: 'small',
-                type: 'error',
-              }, { default: () => h(NIcon, null, { default: () => h('div', { class: 'i-ri:delete-bin-line' }) }) }),
-            }),
-          }),
-        ],
-      })
-    },
-  },
-]
-
 // 日志表格列定义
 const logColumns: DataTableColumns<Api.Task.Log> = [
   {
@@ -481,24 +352,48 @@ onMounted(() => {
       <!-- 搜索工具栏 -->
       <NSpace vertical :size="12">
         <NSpace>
-          <NInput
-            v-model:value="searchForm.name"
-            placeholder="请输入任务名称搜索"
-            @keydown.enter="loadTasks"
-          />
-          <NButton type="primary" @click="loadTasks">
-            搜索
-          </NButton>
-          <NButton @click="handleCreate">
-            新建任务
-          </NButton>
+          <div class="mb-4 flex items-center justify-between">
+            <NSpace>
+              <NInput
+                v-model:value="searchForm.name"
+                placeholder="请输入任务名称搜索"
+                @keydown.enter="loadTasks"
+              >
+                <template #prefix>
+                  <div class="i-ri:search-line" />
+                </template>
+              </NInput>
+              <NButton @click="loadTasks">
+                搜索
+              </NButton>
+
+              <NButton type="success" @click="handleCreate">
+                <template #icon>
+                  <div class="i-ri:add-line" />
+                </template>
+                新建任务
+              </NButton>
+            </NSpace>
+          </div>
         </NSpace>
 
         <!-- 任务列表 -->
-        <NDataTable
-          :columns="columns"
-          :data="tasks"
-        />
+        <div class="gap-4 grid grid-cols-1 lg:grid-cols-3 sm:grid-cols-2 xl:grid-cols-4">
+          <template
+            v-for="task in tasks"
+            :key="task.id"
+          >
+            <TaskItem
+              :item="task"
+              @edit="handleEdit"
+              @copy="handleCopy"
+              @delete="handleDelete"
+              @execute="handleExecute"
+              @logs="handleViewLogs"
+              @update:enabled="handleUpdateEnabled"
+            />
+          </template>
+        </div>
       </NSpace>
     </NCard>
 
