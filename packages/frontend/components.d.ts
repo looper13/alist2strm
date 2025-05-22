@@ -17,6 +17,7 @@ declare module 'vue' {
     IconFiles: typeof import('./src/components/icons/IconFiles.vue')['default']
     IconSchedule: typeof import('./src/components/icons/IconSchedule.vue')['default']
     IconSettings: typeof import('./src/components/icons/IconSettings.vue')['default']
+    Index: typeof import('./src/components/setup/Index.vue')['default']
     Item: typeof import('./src/components/Task/Item.vue')['default']
     NButton: typeof import('naive-ui')['NButton']
     NCard: typeof import('naive-ui')['NCard']
@@ -48,6 +49,7 @@ declare module 'vue' {
     NTooltip: typeof import('naive-ui')['NTooltip']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    SetupForm: typeof import('./src/components/setup/SetupForm.vue')['default']
     SiderMenu: typeof import('./src/components/layout/SiderMenu.vue')['default']
     TaskItem: typeof import('./src/components/task/TaskItem.vue')['default']
   }
