@@ -82,7 +82,7 @@ const rules: FormRules = {
     { validator: fileSuffixValidator, trigger: 'blur' },
   ],
   cron: [
-    { required: true, message: '请输入Cron表达式', trigger: 'blur' },
+    // { required: true, message: '请输入Cron表达式', trigger: 'blur' },
     {
       validator: (_, value) => {
         if (!value)
@@ -378,7 +378,7 @@ onMounted(() => {
         </NSpace>
 
         <!-- 任务列表 -->
-        <div class="gap-4 grid grid-cols-1 lg:grid-cols-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div class="gap-4 grid grid-cols-1 lg:grid-cols-2 sm:grid-cols-1 xl:grid-cols-4">
           <template
             v-for="task in tasks"
             :key="task.id"

@@ -35,7 +35,7 @@ defineEmits<{
           <span>{{ item.cron || '未设置定时' }}</span>
         </div>
         <div class="flex gap-1 items-center">
-          <div class="i-ri:folder-line" />
+          <div class="i-ri:folder-line" mr-1 />
           <span class="truncate" :title="item.sourcePath">{{ item.sourcePath }}</span>
         </div>
         <div class="flex gap-1 items-center">

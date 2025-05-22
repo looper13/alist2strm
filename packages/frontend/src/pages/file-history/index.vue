@@ -115,7 +115,7 @@ const columns: DataTableColumns<Api.FileHistory.Record> = [
   { title: '文件大小', key: 'fileSize', width: 100, render: (row) => {
     return h('span', {}, formatFileSize(row.fileSize))
   } },
-  { title: '文件类型', key: 'fileType', width: 100 },
+  // { title: '文件类型', key: 'fileType', width: 100 },
   { title: '文件后缀', key: 'fileSuffix', width: 100 },
   { title: '创建时间', key: 'createdAt', width: 180, render: (row) => {
     return h('span', {}, new Date(row.createdAt).toLocaleString('zh-CN', {
