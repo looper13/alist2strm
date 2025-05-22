@@ -9,8 +9,8 @@ const showModal = ref(false)
 const showLogDrawer = ref(false)
 const isEdit = ref(false)
 const currentId = ref<number | null>(null)
-const tasks = ref<Api.Task[]>([])
-const taskLogs = ref<Api.TaskLog[]>([])
+const tasks = ref<Api.Task.Record[]>([])
+const taskLogs = ref<Api.Task.Log[]>([])
 const logLoading = ref(false)
 
 // 日志分页
@@ -38,14 +38,13 @@ const searchForm = reactive({
 
 // 表单实例和数据
 const formRef = ref<any>(null)
-const formModel = ref<Api.TaskCreateDto>({
+const formModel = ref<Api.Task.Create>({
   name: '',
   sourcePath: '',
   targetPath: '',
   fileSuffix: '',
   overwrite: false,
   enabled: true,
-  running: false,
   cron: '',
 })
 
@@ -128,14 +127,13 @@ function handleCreate() {
     fileSuffix: '',
     overwrite: false,
     enabled: true,
-    running: false,
     cron: '',
   }
   showModal.value = true
 }
 
 // 打开编辑对话框
-async function handleEdit(row: Api.Task) {
+async function handleEdit(row: Api.Task.Record) {
   try {
     isEdit.value = true
     currentId.value = row.id
@@ -146,7 +144,6 @@ async function handleEdit(row: Api.Task) {
       fileSuffix: row.fileSuffix,
       overwrite: row.overwrite,
       enabled: row.enabled,
-      running: row.running,
       cron: row.cron || '',
     }
     showModal.value = true
@@ -157,7 +154,7 @@ async function handleEdit(row: Api.Task) {
 }
 
 // 打开复制新增对话框
-function handleCopy(row: Api.Task) {
+function handleCopy(row: Api.Task.Record) {
   isEdit.value = false
   currentId.value = null
   formModel.value = {
@@ -167,7 +164,6 @@ function handleCopy(row: Api.Task) {
     fileSuffix: row.fileSuffix,
     overwrite: row.overwrite,
     enabled: row.enabled,
-    running: false,
     cron: row.cron || '',
   }
   showModal.value = true
@@ -185,9 +181,8 @@ async function handleSave() {
         fileSuffix: formModel.value.fileSuffix,
         overwrite: formModel.value.overwrite,
         enabled: formModel.value.enabled,
-        running: formModel.value.running,
         cron: formModel.value.cron,
-      })
+      } as Api.Task.Update)
     }
     else {
       await taskAPI.create(formModel.value)
@@ -202,7 +197,7 @@ async function handleSave() {
 }
 
 // 删除任务
-async function handleDelete(row: Api.Task) {
+async function handleDelete(row: Api.Task.Record) {
   try {
     await taskAPI.delete(row.id)
     message.success('删除成功')
@@ -214,7 +209,7 @@ async function handleDelete(row: Api.Task) {
 }
 
 // 执行任务
-async function handleExecute(row: Api.Task) {
+async function handleExecute(row: Api.Task.Record) {
   try {
     await taskAPI.execute(row.id)
     message.success('执行成功')
@@ -226,7 +221,7 @@ async function handleExecute(row: Api.Task) {
 }
 
 // 查看任务日志
-async function handleViewLogs(row: Api.Task) {
+async function handleViewLogs(row: Api.Task.Record) {
   try {
     currentId.value = row.id
     logLoading.value = true
@@ -252,6 +247,8 @@ async function loadTaskLogs() {
       taskId: currentId.value,
       page: logPagination.page,
       pageSize: logPagination.pageSize,
+      sortBy: 'updatedAt',
+      sortOrder: 'desc',
     })
     if (data && data.list) {
       taskLogs.value = data.list || []
@@ -267,19 +264,19 @@ async function loadTaskLogs() {
 }
 
 // 表格列定义
-const columns: DataTableColumns<Api.Task> = [
+const columns: DataTableColumns<Api.Task.Record> = [
   { title: '任务名称', key: 'name', width: 120 },
   { title: 'cron', key: 'cron', width: 120 },
   { title: '源路径', key: 'sourcePath', width: 180, ellipsis: { tooltip: true } },
   { title: '目标路径', key: 'targetPath', width: 180, ellipsis: { tooltip: true } },
-  { title: '文件后缀', key: 'fileSuffix', width: 180, render: (row: Api.Task) => {
+  { title: '文件后缀', key: 'fileSuffix', width: 180, render: (row: Api.Task.Record) => {
     return h(NSpace, { size: 'small' }, {
       default: () => row.fileSuffix.split(',').map((suffix: string) =>
         h(NTag, { size: 'small' }, { default: () => suffix }),
       ),
     })
   } },
-  { title: '覆盖', key: 'overwrite', width: 80, render: (row: Api.Task) => {
+  { title: '覆盖', key: 'overwrite', width: 80, render: (row: Api.Task.Record) => {
     return h('div', [
       h(
         NSwitch,
@@ -304,7 +301,7 @@ const columns: DataTableColumns<Api.Task> = [
       ),
     ])
   } },
-  { title: '启用', key: 'enabled', width: 80, render: (row: Api.Task) => {
+  { title: '启用', key: 'enabled', width: 80, render: (row: Api.Task.Record) => {
     return h('div', [
       h(
         NSwitch,
@@ -329,7 +326,7 @@ const columns: DataTableColumns<Api.Task> = [
       ),
     ])
   } },
-  { title: '运行状态', key: 'running', render: (row: Api.Task) => {
+  { title: '运行状态', key: 'running', render: (row: Api.Task.Record) => {
     return h('div', { class: 'flex items-center gap-2' }, [
       h(
         NTag,
@@ -341,7 +338,7 @@ const columns: DataTableColumns<Api.Task> = [
       ),
     ])
   } },
-  { title: '最后运行时间', key: 'lastRunAt', width: 180, render: (row: Api.Task) => {
+  { title: '最后运行时间', key: 'lastRunAt', width: 180, render: (row: Api.Task.Record) => {
     return row.lastRunAt
       ? h(NTime, { time: new Date(row.lastRunAt), type: 'datetime' })
       : h(NText, { depth: 3 }, { default: () => '从未运行' })
@@ -408,7 +405,7 @@ const columns: DataTableColumns<Api.Task> = [
 ]
 
 // 日志表格列定义
-const logColumns: DataTableColumns<Api.TaskLog> = [
+const logColumns: DataTableColumns<Api.Task.Log> = [
   {
     title: '状态',
     key: 'status',

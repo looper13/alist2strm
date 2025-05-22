@@ -1,4 +1,3 @@
-import type { HttpResponse, PaginationQuery, PaginationResponse } from '~/types'
 import { http } from './http'
 
 export class ConfigAPI {
@@ -7,43 +6,29 @@ export class ConfigAPI {
   /**
    * 创建配置
    */
-  async create(data: Api.ConfigCreateDto): Promise<HttpResponse<Api.Config>> {
-    return http.post(this.baseUrl, data)
+  async create(data: Api.Config.Create) {
+    return http.post<Api.Config.Record, Api.Config.Create>(this.baseUrl, data)
   }
 
   /**
    * 更新配置
    */
-  async update(id: number, data: Api.ConfigUpdateDto): Promise<HttpResponse<Api.Config>> {
+  async update(id: number, data: Api.Config.Update) {
     return http.put(`${this.baseUrl}/${id}`, data)
   }
 
   /**
    * 删除配置
    */
-  async delete(id: number): Promise<HttpResponse<void>> {
+  async delete(id: number) {
     return http.delete(`${this.baseUrl}/${id}`)
-  }
-
-  /**
-   * 分页查询配置
-   */
-  async findByPage(query: PaginationQuery & { keyword?: string }): Promise<HttpResponse<PaginationResponse<Api.Config>>> {
-    return http.get(this.baseUrl, { params: query })
   }
 
   /**
    * 查询所有配置
    */
-  async findAll(): Promise<HttpResponse<Api.Config[]>> {
-    return http.get(`${this.baseUrl}/all`)
-  }
-
-  /**
-   * 根据ID查询配置
-   */
-  async findById(id: number): Promise<HttpResponse<Api.Config>> {
-    return http.get(`${this.baseUrl}/${id}`)
+  async findAll() {
+    return http.get<Api.Config.Record[]>(`${this.baseUrl}/all`)
   }
 }
 

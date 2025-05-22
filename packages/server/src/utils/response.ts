@@ -7,8 +7,8 @@ import type { API } from '@/types/api.js'
 export function success<T>(res: Response, data: T, message = '操作成功'): void {
   const response: API.SuccessResponse<T> = {
     code: 0,
-    data,
     message,
+    data,
   }
   res.json(response)
 }
@@ -16,11 +16,10 @@ export function success<T>(res: Response, data: T, message = '操作成功'): vo
 /**
  * 错误响应
  */
-export function error(res: Response, message: string, code = 500, error?: string): void {
+export function error(res: Response, message: string, code = 500): void {
   const response: API.ErrorResponse = {
     code,
     message,
-    error,
   }
   res.status(code).json(response)
 }

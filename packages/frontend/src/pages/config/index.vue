@@ -62,14 +62,14 @@ async function handleSaveAll() {
       if (existingConfig) {
         await configAPI.update(existingConfig.id, {
           value: strValue,
-        } as Api.ConfigUpdateDto)
+        } as Api.Config.Update)
       }
       else {
         await configAPI.create({
           name: item.name,
           code: item.code,
           value: strValue,
-        } as Api.ConfigCreateDto)
+        } as Api.Config.Create)
       }
     }
 

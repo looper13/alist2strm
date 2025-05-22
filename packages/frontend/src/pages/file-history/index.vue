@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { DataTableColumns } from 'naive-ui'
-import { h, ref } from 'vue'
 import { fileHistoryAPI } from '~/api/file-history'
 
 // 计算表格可用高度
@@ -29,7 +28,7 @@ onUnmounted(() => {
 })
 
 // 表格数据
-const fileHistories = ref<Api.FileHistory[]>([])
+const fileHistories = ref<Api.FileHistory.Record[]>([])
 const loading = ref(false)
 const pagination = ref({
   page: 1,
@@ -109,7 +108,7 @@ function handleReset() {
 }
 
 // 表格列定义
-const columns: DataTableColumns<Api.FileHistory> = [
+const columns: DataTableColumns<Api.FileHistory.Record> = [
   { title: '文件名', key: 'fileName', width: 200, ellipsis: { tooltip: true } },
   { title: '源路径', key: 'sourcePath', width: 200, ellipsis: { tooltip: true } },
   { title: '目标路径', key: 'targetFilePath', width: 200, ellipsis: { tooltip: true } },

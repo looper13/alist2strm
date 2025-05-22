@@ -19,6 +19,7 @@
     "lib": ["ES2020", "DOM"],
     "types": ["node"]
   },
-  "include": ["src/**/*"],
+  "include": ["./**/*.ts", "./**/*.tsx", "./**/*.vue"],
+  // "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 } 
