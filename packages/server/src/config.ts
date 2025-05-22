@@ -38,7 +38,7 @@ const config: App.Config = {
   },
   database: {
     // 数据库文件存储路径
-    path: process.env.DB_PATH || join(projectRoot, 'data/db'),
+    path: process.env.DB_BASE_DIR || join(projectRoot, 'data/db'),
     // 数据库文件名
     name: process.env.DB_NAME || 'database.sqlite',
   },
