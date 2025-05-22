@@ -4,7 +4,7 @@
   "description": "AList2Strm server application",
   "type": "module",
   "main": "dist/index.js",
-  "packageManager": "pnpm@10.10.0",
+  "packageManager": "pnpm@10.11.0",
   "pnpm": {
     "onlyBuiltDependencies": ["sqlite3"]
   },

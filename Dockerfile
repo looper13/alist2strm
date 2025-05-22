@@ -1,7 +1,7 @@
 # 基础镜像
 FROM node:22.15.1-alpine AS base
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
-    corepack enable && corepack prepare pnpm@10.10.0 --activate && \
+    corepack enable && corepack prepare pnpm@10.11.0 --activate && \
     pnpm config set registry https://registry.npmmirror.com && \
     apk add --no-cache \
     python3 \
@@ -14,20 +14,20 @@ WORKDIR /app
 FROM base AS backend-build-dev
 WORKDIR /app/server
 COPY packages/server/ ./
-RUN pnpm install --frozen-lockfile && \
+RUN pnpm install --frozen-lockfile --force && \
     pnpm run build
 
 FROM base AS backend-build
 WORKDIR /app/server
 COPY packages/server/package.json packages/server/pnpm-lock.yaml ./
-RUN pnpm install --production --frozen-lockfile
+RUN pnpm install --production --frozen-lockfile --force
 
 
 # ---------- 前端构建 ----------
 FROM base AS frontend-build
 WORKDIR /app/frontend
 COPY packages/frontend/ ./
-RUN pnpm install --frozen-lockfile && pnpm run build 
+RUN pnpm install --frozen-lockfile --force && pnpm run build 
 
 # ---------- 最终运行镜像 ----------
 FROM node:22.15.1-alpine
