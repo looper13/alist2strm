@@ -1,0 +1,28 @@
+export const ALIST_CONFIG = {
+  // Alist Token
+  ALIST_TOKEN: 'ALIST_TOKEN',
+  // Alist Host
+  ALIST_HOST: 'ALIST_HOST',
+  // Alist 分页大小
+  ALIST_PER_PAGE: 'ALIST_PER_PAGE',
+  // Alist 请求间隔
+  ALIST_REQ_INTERVAL: 'ALIST_REQ_INTERVAL',
+  // Alist 请求重试次数
+  ALIST_REQ_RETRY_COUNT: 'ALIST_REQ_RETRY_COUNT',
+  // Alist 请求重试间隔
+  ALIST_REQ_RETRY_INTERVAL: 'ALIST_REQ_RETRY_INTERVAL',
+  // Alist 替换域名
+  ALIST_REPLACE_HOST: 'ALIST_REPLACE_HOST'
+}
+
+export const GENERATOR_CONFIG = {
+  // 是否去除文件扩展名
+  REPLACE_SUFFIX: 'STRM_REPLACE_SUFFIX',
+  // 是否进行URL编码
+  URL_ENCODE: 'STRM_URL_ENCODE',
+}
+
+
+
+
+

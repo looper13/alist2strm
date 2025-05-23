@@ -5,5 +5,5 @@ defineOptions({
 </script>
 
 <template>
-  <SetupForm />
+  <ConfigForm />
 </template>

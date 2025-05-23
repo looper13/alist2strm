@@ -10,6 +10,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     AppProvider: typeof import('./src/components/AppProvider.vue')['default']
     BaseLayout: typeof import('./src/components/layout/BaseLayout.vue')['default']
+    ConfigForm: typeof import('./src/components/config/ConfigForm.vue')['default']
     Footer: typeof import('./src/components/layout/Footer.vue')['default']
     IconCollapseLeft: typeof import('./src/components/icons/IconCollapseLeft.vue')['default']
     IconCollapseRight: typeof import('./src/components/icons/IconCollapseRight.vue')['default']
