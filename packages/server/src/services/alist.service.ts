@@ -149,7 +149,7 @@ class AlistService {
         try {
           const response = await this._retryableRequest(async () => {
             const resp = await this.client!.post<AList.AlistListResponse<AList.AlistFile[]>>('/api/fs/list', {
-              path,
+              path: path.split('/').map(item => encodeURIComponent(item)).join('/'),
               password: '',
               page,
               per_page: this.perPage,
