@@ -22,7 +22,7 @@ const validateLogLevel = (level: string | undefined): App.Config['logger']['leve
 
 const config: App.Config = {
   server: {
-    port: parseInt(process.env.PORT || '3000', 10),
+    port: parseInt(process.env.PORT || '3210', 10),
   },
   logger: {
     // 日志根目录，使用项目根目录

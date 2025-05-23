@@ -4,30 +4,18 @@ import { Op } from 'sequelize'
 import { logger } from '@/utils/logger.js'
 import { configCache } from './config-cache.service.js'
 
-export interface CreateConfigDto {
-  name: string
-  code: string
-  value: string
-}
-
-export interface UpdateConfigDto {
-  name?: string
-  code?: string
-  value?: string
-}
-
-export interface QueryConfigDto {
-  page?: number
-  pageSize?: number
-  keyword?: string
-}
-
 export class ConfigService {
   /**
    * 创建配置
    */
-  async create(data: Services.CreateConfigDto): Promise<Config> {
+  async create(data: App.Config.Create): Promise<Config> {
     try {
+      const {code} = data
+      const existingConfig = await Config.findOne({ where: { code } })
+      if (existingConfig) {
+        logger.warn.warn(`创建配置失败: 配置code: 【${code}】已存在`, { code: data.code })
+        throw new Error(`配置code重复：【${code}】`)
+      }
       const config = await Config.create(data as any)
       // 更新缓存
       configCache.set(config.code, config.value)
@@ -43,16 +31,14 @@ export class ConfigService {
   /**
    * 更新配置
    */
-  async update(id: number, data: Services.UpdateConfigDto): Promise<Config | null> {
+  async update(id: number, data: App.Config.Update): Promise<Config | null> {
     try {
       const config = await Config.findByPk(id)
       if (!config) {
         logger.warn.warn('更新配置失败: 配置不存在', { id })
         return null
       }
-
       await config.update(data)
-      // 更新缓存
       if (data.value !== undefined)
         configCache.set(config.code, data.value)
       logger.info.info('更新配置成功:', { id, code: config.code })
@@ -76,7 +62,6 @@ export class ConfigService {
       }
 
       await config.destroy()
-      // 从缓存中删除
       configCache.delete(config.code)
       logger.info.info('删除配置成功:', { id, code: config.code })
       return true
@@ -90,7 +75,7 @@ export class ConfigService {
   /**
    * 分页查询配置
    */
-  async findByPage(query: Services.QueryConfigDto): Promise<Services.PageResult<Config>> {
+  async findByPage(query: App.Config.Query): Promise<App.Common.PaginationResult<Config>> {
     try {
       const { page = 1, pageSize = 10, keyword } = query
       const where: WhereOptions<Models.ConfigAttributes> = {}
@@ -111,7 +96,6 @@ export class ConfigService {
         limit: pageSize,
         order: [['createdAt', 'DESC']],
       })
-
       logger.debug.debug('分页查询配置:', { page, pageSize, total: count })
       return {
         list: rows,

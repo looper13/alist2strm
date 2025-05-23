@@ -13,20 +13,19 @@ export class TaskService {
   /**
    * 创建任务
    */
-  async create(data: Services.CreateTaskDto): Promise<Task> {
+  async create(data: App.Task.Create): Promise<Task> {
     try {
       const task = await Task.create({
         ...data,
         running: false,
         lastRunAt: null,
-      } as any)
+      })
       logger.info.info('创建任务成功:', { id: task.id, name: task.name })
       
       // 如果任务启用且有 cron 表达式，则调度任务
       if (task.enabled && task.cron) {
         await taskScheduler.scheduleTask(task)
       }
-      
       return task
     }
     catch (error) {
@@ -38,17 +37,15 @@ export class TaskService {
   /**
    * 更新任务
    */
-  async update(id: number, data: Services.UpdateTaskDto): Promise<Task | null> {
+  async update(id: number, data: App.Task.Update): Promise<Task | null> {
     try {
       const task = await Task.findByPk(id)
       if (!task) {
         logger.warn.warn('更新任务失败: 任务不存在', { id })
-        return null
+        throw new Error(`任务【¥${id}】不存在`)
       }
-
       await task.update(data)
       logger.info.info('更新任务成功:', { id, name: task.dataValues.name })
-      
       // 如果任务启用且有 cron 表达式，则调度任务
       if (task.dataValues.enabled && task.dataValues.cron) {
         await taskScheduler.scheduleTask(task)
@@ -72,7 +69,7 @@ export class TaskService {
       const task = await Task.findByPk(id)
       if (!task) {
         logger.warn.warn('删除任务失败: 任务不存在', { id })
-        return false
+        throw new Error(`任务【¥${id}】不存在`)
       }
 
       // 取消任务调度
@@ -91,9 +88,9 @@ export class TaskService {
   /**
    * 分页查询任务
    */
-  async findByPage(query: Services.QueryTaskDto): Promise<Services.PageResult<Task>> {
+  async findByPage(query: App.Task.Query): Promise<App.Common.PaginationResult<Task>> {
     try {
-      const { page = 1, pageSize = 10, keyword, enabled, running } = query
+      const { page = 1, pageSize = 10, keyword, enabled, running, sortBy, sortOrder} = query
       const where: WhereOptions<Models.TaskAttributes> = {}
 
       // 关键字搜索
@@ -106,12 +103,8 @@ export class TaskService {
           ],
         } as WhereOptions<Models.TaskAttributes>)
       }
-
-      // 启用状态过滤
       if (typeof enabled === 'boolean')
         where.enabled = enabled
-
-      // 运行状态过滤
       if (typeof running === 'boolean')
         where.running = running
 
@@ -119,7 +112,7 @@ export class TaskService {
         where,
         offset: (page - 1) * pageSize,
         limit: pageSize,
-        order: [['createdAt', 'DESC']],
+        order: [[sortBy || 'createdAt', sortOrder ||'DESC']],
       })
 
       logger.debug.debug('分页查询任务:', { page, pageSize, total: count })
@@ -166,8 +159,10 @@ export class TaskService {
   async findById(id: number): Promise<Task | null> {
     try {
       const task = await Task.findByPk(id)
-      if (!task)
+      if (!task){
         logger.warn.warn('查询任务失败: 任务不存在', { id })
+        return null
+      }
       return task
     }
     catch (error) {
@@ -186,7 +181,6 @@ export class TaskService {
         logger.warn.warn('更新任务运行状态失败: 任务不存在', { id })
         return null
       }
-
       await task.update({
         running,
         lastRunAt: running ? new Date() : task.lastRunAt,
@@ -208,14 +202,13 @@ export class TaskService {
       const task = await Task.findByPk(id)
       if (!task) {
         logger.warn.warn('执行任务失败: 任务不存在', { id })
-        return false
+        throw new Error(`任务【¥${id}】不存在`)
       }
 
       if (task.running) {
         logger.warn.warn('执行任务失败: 任务正在运行', { id })
-        return false
+        throw new Error(`任务【¥${id}】正在运行`)
       }
-
       return await taskQueue.addTask(id)
     }
     catch (error) {
@@ -232,14 +225,12 @@ export class TaskService {
       const task = await Task.findByPk(id)
       if (!task) {
         logger.warn.warn('停止任务失败: 任务不存在', { id })
-        return false
+        throw new Error(`任务【¥${id}】不存在`)
       }
 
       if (!task.running) {
-        logger.warn.warn('停止任务失败: 任务未在运行', { id })
-        return false
+        return true
       }
-
       return await taskQueue.stopTask(id)
     }
     catch (error) {

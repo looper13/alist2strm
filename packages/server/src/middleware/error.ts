@@ -1,9 +1,8 @@
 import type { Request, Response, NextFunction } from 'express'
 import { logger } from '@/utils/logger.js'
-import type { AppError } from '@/types/index.js'
 import { error } from '@/utils/response.js'
 
-export class HttpError extends Error implements AppError {
+export class HttpError extends Error implements App.AppError {
   constructor(
     public message: string,
     public code: number,

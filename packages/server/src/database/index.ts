@@ -1,5 +1,4 @@
 import { Sequelize } from 'sequelize-typescript'
-import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { existsSync, mkdirSync } from 'node:fs'
 import config from '@/config.js'
@@ -10,8 +9,6 @@ import { TaskLog } from '@/models/task-log.js'
 import { FileHistory } from '@/models/file-history.js'
 import { setupAssociations } from '@/models/associations.js'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
 
 // 确保数据库目录存在
 const dbDir = dirname(join(config.database.path, config.database.name))

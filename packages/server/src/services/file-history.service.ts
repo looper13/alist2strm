@@ -3,30 +3,12 @@ import type { WhereOptions } from 'sequelize'
 import { Op } from 'sequelize'
 import { logger } from '@/utils/logger.js'
 
-export interface CreateFileHistoryDto {
-  fileName: string
-  sourcePath: string
-  targetFilePath: string
-  fileSize: number
-  fileType: string
-  fileSuffix: string
-}
-
-export interface QueryFileHistoryDto {
-  page?: number
-  pageSize?: number
-  keyword?: string
-  fileType?: string
-  fileSuffix?: string
-  startTime?: Date
-  endTime?: Date
-}
 
 export class FileHistoryService {
   /**
    * 创建文件历史
    */
-  async create(data: CreateFileHistoryDto): Promise<FileHistory> {
+  async create(data:App.FileHistory.Create): Promise<FileHistory> {
     try {
       const fileHistory = await FileHistory.create(data as any)
       logger.info.info('创建文件历史成功:', { id: fileHistory.id, fileName: fileHistory.fileName })
@@ -41,7 +23,7 @@ export class FileHistoryService {
   /**
    * 分页查询文件历史
    */
-  async findByPage(query: QueryFileHistoryDto): Promise<Services.PageResult<FileHistory>> {
+  async findByPage(query: App.FileHistory.Query): Promise<App.Common.PaginationResult<FileHistory>> {
     try {
       const { page = 1, pageSize = 10, keyword, fileType, fileSuffix, startTime, endTime } = query
       const where: WhereOptions<Models.FileHistoryAttributes> = {}

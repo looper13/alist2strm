@@ -1,11 +1,10 @@
 import type { Response } from 'express'
-import type { API } from '@/types/api.js'
 
 /**
  * 成功响应
  */
 export function success<T>(res: Response, data: T, message = '操作成功'): void {
-  const response: API.SuccessResponse<T> = {
+  const response: App.Common.HttpResponse<T> = {
     code: 0,
     message,
     data,
@@ -17,7 +16,7 @@ export function success<T>(res: Response, data: T, message = '操作成功'): vo
  * 错误响应
  */
 export function error(res: Response, message: string, code = 500): void {
-  const response: API.ErrorResponse = {
+  const response: App.Common.HttpResponse = {
     code,
     message,
   }
@@ -27,13 +26,8 @@ export function error(res: Response, message: string, code = 500): void {
 /**
  * 分页响应
  */
-export function pageResult<T>(res: Response, data: {
-  list: T[]
-  total: number
-  page: number
-  pageSize: number
-}, message = '查询成功'): void {
-  const response: API.PageResponse<T> = {
+export function pageResult<T>(res: Response, data: App.Common.PaginationResult<T>, message = '查询成功'): void {
+  const response: App.Common.HttpResponse<App.Common.PaginationResult<T>> = {
     code: 0,
     data,
     message,

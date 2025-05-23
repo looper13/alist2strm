@@ -138,18 +138,18 @@ class AlistService {
   }
 
   // 获取文件列表
-  async listFiles(path: string): Promise<AList.AlistFile[]> {
+  async listFiles(path: string): Promise<App.AList.AlistFile[]> {
     await this._ensureInitialized()
     try {
       let page = 1
-      let allFiles: AList.AlistFile[] = []
+      let allFiles: App.AList.AlistFile[] = []
       let hasMore = true
 
       while (hasMore) {
         try {
           const response = await this._retryableRequest(async () => {
-            const resp = await this.client!.post<AList.AlistListResponse<AList.AlistFile[]>>('/api/fs/list', {
-              path: path.split('/').map(item => encodeURIComponent(item)).join('/'),
+            const resp = await this.client!.post<App.AList.AlistListResponse<App.AList.AlistFile[]>>('/api/fs/list', {
+              path,
               password: '',
               page,
               per_page: this.perPage,
@@ -199,11 +199,11 @@ class AlistService {
   }
 
   // 获取文件信息
-  async getFileInfo(path: string): Promise<AList.AlistFile> {
+  async getFileInfo(path: string): Promise<App.AList.AlistFile> {
     await this._ensureInitialized()
     try {
       const response = await this._retryableRequest(async () => {
-        const resp = await this.client!.post<AList.AlistGetResponse<AList.AlistFile>>('/api/fs/get', {
+        const resp = await this.client!.post<App.AList.AlistGetResponse<App.AList.AlistFile>>('/api/fs/get', {
           path,
           password: '',
         })

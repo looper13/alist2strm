@@ -4,11 +4,10 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { configCache } from './config-cache.service.js'
 import { FileHistoryService } from './file-history.service.js'
-import type { GenerateResult, GenerateTask } from '@/types/index.js'
 
 class GeneratorService {
   private fileHistoryService: FileHistoryService
-  private result: GenerateResult
+  private result: App.Generate.Result
 
   constructor() {
     this.fileHistoryService = new FileHistoryService()
@@ -49,18 +48,20 @@ class GeneratorService {
    * 处理单个文件，生成 strm 文件
    */
   private async _processFile(
-    file: AList.AlistFile,
+    file: App.AList.AlistFile,
     sourcePath: string,
     currentPath: string,
     targetBase: string,
     overwrite: boolean,
-  ): Promise<GenerateTask | null> {
+  ): Promise<App.Generate.Task | null> {
     // 源文件路径
     const sourceFilePath = this._normalizePath(path.join(currentPath, file.name))
     // 相对路径
     const relativePath = this._normalizePath(path.relative(sourcePath, currentPath))
+
     // 目标文件路径（不含扩展名）
     const targetFilePath = this._normalizePath(path.join(targetBase, relativePath, path.parse(file.name).name))
+  
     // strm 文件路径（替换原扩展名）
     const strmPath = `${targetFilePath}.strm`
 
@@ -82,7 +83,7 @@ class GeneratorService {
    * 记录文件历史
    */
   private async _recordFileHistory(
-    task: GenerateTask,
+    task: App.Generate.Task,
   ): Promise<void> {
     try {
       const fileSuffix = path.extname(task.name).toLowerCase().slice(1)
@@ -107,7 +108,7 @@ class GeneratorService {
   /**
    * 批量生成 strm 文件
    */
-  private async _generateStrmFiles(tasks: GenerateTask[]): Promise<void> {
+  private async _generateStrmFiles(tasks: App.Generate.Task[]): Promise<void> {
     if (tasks.length === 0) return
 
     const alistHost = configCache.getRequired('ALIST_HOST')
@@ -169,7 +170,7 @@ class GeneratorService {
       // 更新总文件数
       this.result.totalFiles += mediaFiles.length
 
-      const tasks: GenerateTask[] = []
+      const tasks: App.Generate.Task[] = []
       for (const file of mediaFiles) {
         const task = await this._processFile(file, sourcePath, currentPath, targetBase, overwrite)
         if (task) {
@@ -206,7 +207,7 @@ class GeneratorService {
     target: string,
     fileSuffix: string[],
     overwrite: boolean = false,
-  ): Promise<GenerateResult> {
+  ): Promise<App.Generate.Result> {
     if (!source || !target || !fileSuffix?.length) {
       throw new Error('参数错误：source、target 和 fileSuffix 不能为空')
     }
