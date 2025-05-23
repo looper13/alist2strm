@@ -9,11 +9,14 @@ defineEmits<{
   (e: 'logs', task: Api.Task.Record): void
   (e: 'delete', task: Api.Task.Record): void
   (e: 'update:enabled', task: Api.Task.Record): void
+  (e: 'reset', task: Api.Task.Record): void
 }>()
+const { width } = useWindowSize()
+const isMobile = computed(() => width.value <= 768)
 </script>
 
 <template>
-  <NCard size="small" class="relative" :title="item.name">
+  <NCard size="small" class="min-w-240px" :title="item.name">
     <template #header-extra>
       <NTooltip trigger="hover">
         <template #trigger>
@@ -46,19 +49,17 @@ defineEmits<{
     </div>
 
     <!-- 文件类型标签 -->
-    <div class="mb-4">
-      <NSpace size="small" wrap>
-        <NTag v-for="suffix in item.fileSuffix.split(',')" :key="suffix" size="small">
-          {{ suffix }}
-        </NTag>
-      </NSpace>
+    <div class="mb-4 py-2 flex gap-1 overflow-x-auto">
+      <NTag v-for="suffix in item.fileSuffix.split(',')" :key="suffix" size="small">
+        {{ suffix }}
+      </NTag>
     </div>
 
     <!-- 最后运行时间 -->
     <div class="mb-4 flex items-center justify-between">
       <div class="text-sm text-gray-500 inline-flex items-center">
         <div class="i-ri:history-line" mr-1 />
-        <span>最后运行：</span>
+        <!-- <span>最后运行：</span> -->
         <NTime v-if="item.lastRunAt" :time="new Date(item.lastRunAt)" type="datetime" />
         <span v-else>从未运行</span>
       </div>
@@ -73,71 +74,110 @@ defineEmits<{
     </div>
 
     <!-- 操作按钮 -->
-    <div class="pt-4 border-t border-gray-200 flex gap-2 justify-end dark:border-gray-700">
-      <NTooltip trigger="hover">
-        <template #trigger>
-          <NButton size="small" type="primary" @click="$emit('edit', item)">
-            <template #icon>
-              <div class="i-ri:edit-line" />
-            </template>
-          </NButton>
-        </template>
-        编辑
-      </NTooltip>
+    <div class="pt-4 border-t border-gray-200 flex justify-between dark:border-gray-700">
+      <!-- 左侧重置按钮 -->
+      <div>
+        <NPopconfirm @positive-click="$emit('reset', item)">
+          <template #trigger>
+            <NTooltip trigger="hover">
+              <template #trigger>
+                <NButton
+                  :size="isMobile ? 'tiny' : 'small'"
+                >
+                  <template #icon>
+                    <div class="i-tdesign:rollback" />
+                  </template>
+                </NButton>
+              </template>
+              重置状态
+            </NTooltip>
+          </template>
+          确认重置该任务吗？这将还原任务的执行状态。
+        </NPopconfirm>
+      </div>
 
-      <NTooltip trigger="hover">
-        <template #trigger>
-          <NButton size="small" type="info" @click="$emit('copy', item)">
-            <template #icon>
-              <div class="i-ri:file-copy-line" />
-            </template>
-          </NButton>
-        </template>
-        复制
-      </NTooltip>
+      <!-- 右侧按钮组 -->
+      <div class="flex gap-2">
+        <NTooltip trigger="hover">
+          <template #trigger>
+            <NButton
+              :size="isMobile ? 'tiny' : 'small'"
+              type="primary"
+              @click="$emit('edit', item)"
+            >
+              <template #icon>
+                <div class="i-ri:edit-line" />
+              </template>
+            </NButton>
+          </template>
+          编辑
+        </NTooltip>
 
-      <NTooltip trigger="hover">
-        <template #trigger>
-          <NButton
-            size="small"
-            type="warning"
-            :disabled="item.running"
-            @click="$emit('execute', item)"
-          >
-            <template #icon>
-              <div :class="item.running ? 'i-ri:loader-4-line animate-spin' : 'i-ri:play-line'" />
-            </template>
-          </NButton>
-        </template>
-        {{ item.running ? '执行中' : '执行' }}
-      </NTooltip>
+        <NTooltip trigger="hover">
+          <template #trigger>
+            <NButton
+              :size="isMobile ? 'tiny' : 'small'"
+              type="info"
+              @click="$emit('copy', item)"
+            >
+              <template #icon>
+                <div class="i-ri:file-copy-line" />
+              </template>
+            </NButton>
+          </template>
+          复制
+        </NTooltip>
 
-      <NTooltip trigger="hover">
-        <template #trigger>
-          <NButton size="small" type="info" @click="$emit('logs', item)">
-            <template #icon>
-              <div class="i-ri:file-list-line" />
-            </template>
-          </NButton>
-        </template>
-        查看日志
-      </NTooltip>
+        <NTooltip trigger="hover">
+          <template #trigger>
+            <NButton
+              :size="isMobile ? 'tiny' : 'small'"
+              type="warning"
+              :disabled="item.running"
+              @click="$emit('execute', item)"
+            >
+              <template #icon>
+                <div :class="item.running ? 'i-ri:loader-4-line animate-spin' : 'i-ri:play-line'" />
+              </template>
+            </NButton>
+          </template>
+          {{ item.running ? '执行中' : '执行' }}
+        </NTooltip>
 
-      <NPopconfirm @positive-click="$emit('delete', item)">
-        <template #trigger>
-          <NTooltip trigger="hover">
-            <template #trigger>
-              <NButton size="small" type="error">
-                <template #icon>
-                  <div class="i-ri:delete-bin-line" />
-                </template>
-              </NButton>
-            </template>
-            删除
-          </NTooltip>
-        </template>
-        确认删除该任务吗？
-      </NPopconfirm>
+        <NTooltip trigger="hover">
+          <template #trigger>
+            <NButton
+              :size="isMobile ? 'tiny' : 'small'"
+              type="info"
+              @click="$emit('logs', item)"
+            >
+              <template #icon>
+                <div class="i-ri:file-list-line" />
+              </template>
+            </NButton>
+          </template>
+          查看日志
+        </NTooltip>
+
+        <NPopconfirm @positive-click="$emit('delete', item)">
+          <template #trigger>
+            <NTooltip trigger="hover">
+              <template #trigger>
+                <NButton
+                  :size="isMobile ? 'tiny' : 'small'"
+                  type="error"
+                >
+                  <template #icon>
+                    <div class="i-ri:delete-bin-line" />
+                  </template>
+                </NButton>
+              </template>
+              删除
+            </NTooltip>
+          </template>
+          确认删除该任务吗？
+        </NPopconfirm>
+      </div>
     </div>
   </NCard>
 </template>

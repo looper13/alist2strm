@@ -240,6 +240,36 @@ export class TaskService {
   }
 
   /**
+   * 重置任务状态
+   */
+  async resetStatus(id: number): Promise<boolean> {
+    try {
+      const task = await Task.findByPk(id)
+      if (!task) {
+        logger.warn.warn('重置任务状态失败: 任务不存在', { id })
+        throw new Error(`任务【¥${id}】不存在`)
+      }
+      // 如何检测是否在运行？ 不使用状态的情况
+      const jobInfo = await taskQueue.getTaskStatus(id)
+      if (jobInfo && jobInfo.status && ['pending','running'].includes(jobInfo.status)) {
+        logger.warn.warn('重置任务状态失败: 任务正在运行中！', { id })
+        throw new Error(`任务【¥${id}】正在运行`)
+      }
+      
+      await task.update({
+        running: false,
+        lastRunAt: null,
+      })
+      logger.info.info('重置任务状态成功:', { id, name: task.name })
+      return true
+    }
+    catch (error) {
+      logger.error.error('重置任务状态失败:', error) 
+      throw error
+    }
+  }
+
+  /**
    * 获取任务状态
    */
   getTaskStatus(id: number) {

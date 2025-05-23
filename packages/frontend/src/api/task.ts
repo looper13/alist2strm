@@ -44,6 +44,13 @@ export class TaskAPI {
   findLogs(query: Api.Task.LogQuery) {
     return http.get<Api.Common.PaginationResponse<Api.Task.Log>>(`${this.baseUrl}/${query.taskId}/logs`, { params: query })
   }
+
+  /**
+   * 重置任务状态
+   */
+  async resetStatus(id: number) {
+    return http.post(`${this.baseUrl}/${id}/reset-status`)
+  }
 }
 
 export const taskAPI = new TaskAPI()

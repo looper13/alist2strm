@@ -8,6 +8,7 @@ export {}
 declare global {
   const EffectScope: typeof import('vue')['EffectScope']
   const NButton: typeof import('naive-ui')['NButton']
+  const NFloatButton: typeof import('naive-ui')['NFloatButton']
   const NForm: typeof import('naive-ui')['NForm']
   const NFormItem: typeof import('naive-ui')['NFormItem']
   const NIcon: typeof import('naive-ui')['NIcon']
@@ -332,6 +333,7 @@ declare module 'vue' {
   interface ComponentCustomProperties {
     readonly EffectScope: UnwrapRef<typeof import('vue')['EffectScope']>
     readonly NButton: UnwrapRef<typeof import('naive-ui')['NButton']>
+    readonly NFloatButton: UnwrapRef<typeof import('naive-ui')['NFloatButton']>
     readonly NForm: UnwrapRef<typeof import('naive-ui')['NForm']>
     readonly NFormItem: UnwrapRef<typeof import('naive-ui')['NFormItem']>
     readonly NIcon: UnwrapRef<typeof import('naive-ui')['NIcon']>

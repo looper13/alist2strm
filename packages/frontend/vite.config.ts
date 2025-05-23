@@ -63,6 +63,7 @@ export default defineConfig({
             'NPopconfirm',
             'NSwitch',
             'NTooltip',
+            'NFloatButton',
           ],
         },
       ],

@@ -2,7 +2,7 @@ import { Config } from '@/models/config.js'
 import type { WhereOptions } from 'sequelize'
 import { Op } from 'sequelize'
 import { logger } from '@/utils/logger.js'
-import { configCache } from './config-cache.service.js'
+import { getConfigCache } from './config-cache.service.js'
 
 export class ConfigService {
   /**
@@ -18,6 +18,7 @@ export class ConfigService {
       }
       const config = await Config.create(data as any)
       // 更新缓存
+      const configCache = await getConfigCache()
       configCache.set(config.code, config.value)
       logger.info.info('创建配置成功:', { id: config.id, code: config.code })
       return config
@@ -39,8 +40,10 @@ export class ConfigService {
         return null
       }
       await config.update(data)
-      if (data.value !== undefined)
+      if (data.value !== undefined) {
+        const configCache = await getConfigCache()
         configCache.set(config.code, data.value)
+      }
       logger.info.info('更新配置成功:', { id, code: config.code })
       return config
     }
@@ -62,6 +65,7 @@ export class ConfigService {
       }
 
       await config.destroy()
+      const configCache = await getConfigCache()
       configCache.delete(config.code)
       logger.info.info('删除配置成功:', { id, code: config.code })
       return true

@@ -11,13 +11,15 @@ export class ConfigCacheService extends EventEmitter {
     super()
   }
 
-  static getInstance(): ConfigCacheService {
-    if (!ConfigCacheService.instance)
+  static async createInstance(): Promise<ConfigCacheService> {
+    if (!ConfigCacheService.instance) {
       ConfigCacheService.instance = new ConfigCacheService()
+      await ConfigCacheService.instance.initialize()
+    }
     return ConfigCacheService.instance
   }
 
-  async initialize(): Promise<void> {
+  private async initialize(): Promise<void> {
     if (this.initialized)
       return
 
@@ -62,6 +64,22 @@ export class ConfigCacheService extends EventEmitter {
   isInitialized(): boolean {
     return this.initialized
   }
+
+  static async getInstance(): Promise<ConfigCacheService> {
+    return ConfigCacheService.createInstance()
+  }
+
+  static hasInstance(): boolean {
+    return !!ConfigCacheService.instance
+  }
 }
 
-export const configCache = ConfigCacheService.getInstance() 
+// 导出一个初始化函数，用于应用启动时初始化配置缓存
+export const initConfigCache = async () => {
+  return await ConfigCacheService.createInstance()
+}
+
+// 导出实例获取方法
+export const getConfigCache = async () => {
+  return await ConfigCacheService.getInstance()
+} 

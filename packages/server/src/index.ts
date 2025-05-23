@@ -5,7 +5,7 @@ import type { Express } from 'express'
 import { setupLogger, httpLogger, logger } from '@/utils/logger.js'
 import { setupDatabase } from '@/database/index.js'
 import { setupRoutes } from '@/routes/index.js'
-import { configCache } from '@/services/config-cache.service.js'
+import { initConfigCache } from '@/services/config-cache.service.js'
 import { alistService } from '@/services/alist.service.js'
 import { taskScheduler } from '@/services/task-scheduler.service.js'
 
@@ -26,10 +26,7 @@ async function bootstrap() {
   app.use(express.urlencoded({ extended: true }))
 
   // 初始化配置缓存
-  await configCache.initialize()
-
-  // 初始化 Alist 服务
-  await alistService.initialize()
+  await initConfigCache()
 
   // 初始化定时任务调度器
   taskScheduler

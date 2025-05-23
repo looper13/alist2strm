@@ -233,6 +233,17 @@ async function handleUpdateEnabled(item: Api.Task.Record) {
   }
 }
 
+async function handleReset(row: Api.Task.Record) {
+  try {
+    await taskAPI.resetStatus(row.id)
+    message.success('重置成功')
+    loadTasks()
+  }
+  catch (error: any) {
+    message.error(error.message || '重置失败')
+  }
+}
+
 // 查看任务日志
 async function handleViewLogs(row: Api.Task.Record) {
   try {
@@ -351,31 +362,40 @@ onMounted(() => {
     <NCard title="任务管理">
       <!-- 搜索工具栏 -->
       <NSpace vertical :size="12">
-        <NSpace>
-          <div class="mb-4 flex items-center justify-between">
-            <NSpace>
-              <NInput
-                v-model:value="searchForm.name"
-                placeholder="请输入任务名称搜索"
-                @keydown.enter="loadTasks"
+        <div class="flex flex-col gap-2 sm:flex-row">
+          <NSpace :wrap="false" class="w-full sm:w-auto">
+            <NInput
+              v-model:value="searchForm.name"
+              size="small"
+              placeholder="请输入任务名称搜索"
+              class="w-full sm:w-[200px]"
+              @keydown.enter="loadTasks"
+            >
+              <template #prefix>
+                <div class="i-ri:search-line" />
+              </template>
+            </NInput>
+            <NSpace :wrap="false">
+              <!-- <NButton @click="loadTasks">
+                搜索
+              </NButton> -->
+              <NButton
+                size="small"
+                type="primary"
+                @click="loadTasks"
               >
-                <template #prefix>
+                <template #icon>
                   <div class="i-ri:search-line" />
                 </template>
-              </NInput>
-              <NButton @click="loadTasks">
-                搜索
               </NButton>
-
-              <NButton type="success" @click="handleCreate">
+              <NButton size="small" type="info" @click="handleCreate">
                 <template #icon>
                   <div class="i-ri:add-line" />
                 </template>
-                新建任务
               </NButton>
             </NSpace>
-          </div>
-        </NSpace>
+          </NSpace>
+        </div>
 
         <!-- 任务列表 -->
         <div class="gap-4 grid grid-cols-1 lg:grid-cols-2 sm:grid-cols-1 xl:grid-cols-4">
@@ -391,6 +411,7 @@ onMounted(() => {
               @execute="handleExecute"
               @logs="handleViewLogs"
               @update:enabled="handleUpdateEnabled"
+              @reset="handleReset"
             />
           </template>
         </div>

@@ -1,11 +1,12 @@
-import { alistService } from './alist.service.js'
+import { alistService } from '@/services/alist.service.js'
 import { logger } from '@/utils/logger.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { configCache } from './config-cache.service.js'
+import { getConfigCache } from './config-cache.service.js'
 import { FileHistoryService } from './file-history.service.js'
+import { ALIST_CONFIG, GENERATOR_CONFIG } from '@/constant/index.js'
 
-class GeneratorService {
+export class GeneratorService {
   private fileHistoryService: FileHistoryService
   private result: App.Generate.Result
 
@@ -111,17 +112,15 @@ class GeneratorService {
   private async _generateStrmFiles(tasks: App.Generate.Task[]): Promise<void> {
     if (tasks.length === 0) return
 
-    const alistHost = configCache.getRequired('ALIST_HOST')
+    const configCache = await getConfigCache()
+    const alistHost = configCache.get(ALIST_CONFIG.ALIST_REPLACE_HOST) ||  configCache.getRequired(ALIST_CONFIG.ALIST_HOST)
     const chunks = this._chunkArray(tasks, 500)
+    const urlEncode = configCache.get(GENERATOR_CONFIG.URL_ENCODE)
 
     for (const chunk of chunks) {
       await Promise.all(
         chunk.map(async (task) => {
-          const encodedPath = task.sourceFilePath
-            .split('/')
-            .map(item => encodeURIComponent(item))
-            .join('/')
-
+          const encodedPath = urlEncode && urlEncode === 'Y' ? task.sourceFilePath.split('/').map(item => encodeURIComponent(item)).join('/') : task.sourceFilePath
           const alistUrl = `${alistHost}/d${encodedPath}`
           const finalUrl = task.sign ? `${alistUrl}?sign=${task.sign}` : alistUrl
 

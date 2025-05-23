@@ -12,7 +12,7 @@ AList2Strm 是一个用于将 AList 媒体文件转换为 Strm 格式的工具�
 - 📊 任务执行日志记录
 - 🔍 文件处理历史记录
 - ⚙️ 可配置的文件后缀和路径
-- 🚀 支持批量处理和并发执行
+- 🚀 支持批量处理和
 
 ## 技术栈
 
@@ -31,16 +31,20 @@ AList2Strm 是一个用于将 AList 媒体文件转换为 Strm 格式的工具�
 
 ## 界面一览
 
-#### 任务管理
-[![任务管理](./screenshot/screenshot2025052223.39.19.png)](https://github.com/MccRay-s/alist2strm/blob/main/screenshot/screenshot2025052223.39.19.png)
+#### 移动端适配
+[![移动端适配](./screenshot/screenshot20250524011706@2x.png)](https://github.com/MccRay-s/alist2strm/raw/main/screenshot/screenshot20250524011706@2x.png)
 
+#### 首页
+[![任务管理](./screenshot/screenshot20250524011249@2x.png)](https://github.com/MccRay-s/alist2strm/raw/main/screenshot/screenshot20250524011249@2x.png)
+
+#### 任务管理
+[![任务管理](./screenshot/screenshot20250524011222@2x.png)](https://github.com/MccRay-s/alist2strm/raw/main/screenshot/screenshot20250524011222@2x.png)
 
 #### 配置管理
-[![任务管理](./screenshot/screenshot-2025052223.38.49.png)](https://github.com/MccRay-s/alist2strm/blob/main/screenshot/screenshot-2025052223.38.49.png)
+[![任务管理](./screenshot/screenshot20250524011243@2x.png)](https://github.com/MccRay-s/alist2strm/raw/main/screenshot/screenshot20250524011243@2x.png)
 
 #### 文件记录
-
-[![文件记录](./screenshot/screenshot2025052223.39.32.png)](https://github.com/MccRay-s/alist2strm/blob/main/screenshot/screenshot2025052223.39.32.png)
+[![文件记录](./screenshot/screenshot20250524011029@2x.png)](https://github.com/MccRay-s/alist2strm/raw/main/screenshot/screenshot20250524011029@2x.png)
 
 
 ## 项目结构
@@ -146,7 +150,12 @@ npm run build
 V1.0.1： `2025-05-22 23:45`
 - 任务界面调整，Table View 改成 Cards View
 - 任务编辑取消cron 必填项目
-
+  
+V1.0.2
+- 添加参数 `Alist外网地址`，`strm` 内容优先使用外网地址生成
+- 添加参数 `strm` 生成选项 `替换扩展名`，开启后文件名称显示为 `xxx_4k.strm`，未开启则显示为 `xxx_4k.mp4.strm`
+- 添加参数 `strm` 生成选项 `URL编码`，启用后会对 `strm` 内容进行URL 编码
+- 适配移动端界面
 ### Bugs 
 1. AList 原路径，未编码导致API 调用异常，例如：`我的接收/【BD-ISO】`
 

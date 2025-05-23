@@ -137,4 +137,20 @@ router.get('/:id/logs', async (req, res) => {
   }
 })
 
+// 重置任务状态
+router.post('/:id/reset-status', async (req, res) => {
+  try {
+    const taskId = parseInt(req.params.id)
+    if (isNaN(taskId)) {
+      return res.status(400).json({ message: '无效的任务ID' })
+    }
+    await taskService.resetStatus(taskId)
+    success(res, null, '任务状态已重置')
+  }
+  catch (error) {
+    logger.error.error('重置任务状态失败:', error)
+    res.status(500).json({ message: '重置任务状态失败' })
+  }
+})
+
 export { router as taskRouter } 

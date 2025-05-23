@@ -6,8 +6,6 @@ import IconSchedule from '../icons/IconSchedule.vue'
 import IconSettings from '../icons/IconSettings.vue'
 
 const router = useRouter()
-const route = useRoute()
-const isCollapsed = ref(false)
 const menuOptions = ref<MenuOption[]>([
   {
     label: '介绍',
@@ -38,27 +36,19 @@ function renderIcon(icon: Component) {
 function handleUpdateValue(key: string) {
   router.push(key)
 }
-
-const activeKey = computed(() => route.path)
 </script>
 
 <template>
-  <n-layout-sider
-    bordered
-    collapse-mode="width"
-    :collapsed-width="64"
-    :width="200"
-    show-trigger
-    @collapse="isCollapsed = true"
-    @expand="isCollapsed = false"
+  <NFloatButton
+    right="16px"
+    bottom="16px"
+    menu-trigger="click"
   >
-    <NMenu
-      :value="activeKey"
-      :collapsed="isCollapsed"
-      :collapsed-width="64"
-      :collapsed-icon-size="22"
-      :options="menuOptions"
-      @update:value="handleUpdateValue"
-    />
-  </n-layout-sider>
+    <div class="i-carbon-menu text-xl" />
+    <template #menu>
+      <NFloatButton v-for="option in menuOptions" :key="option.key" @click="handleUpdateValue(option.key as string)">
+        <NIcon :component="option.icon" />
+      </NFloatButton>
+    </template>
+  </NFloatButton>
 </template>

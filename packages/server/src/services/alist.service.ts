@@ -1,37 +1,24 @@
-import { configCache } from './config-cache.service.js'
+import { getConfigCache } from './config-cache.service.js'
 import { logger } from '@/utils/logger.js'
 import axios, { AxiosInstance } from 'axios'
+import type { ConfigCacheService } from './config-cache.service.js'
 
 class AlistService {
   private static instance: AlistService
   private client: AxiosInstance | undefined
   private initialized = false
+  private configCache: ConfigCacheService | undefined
   // 分页大小
   private perPage = 100
   // 最大重试次数
   private maxRetries = 3
   // 重试间隔
   private retryDelay = 1000
-  // 并发数
-  private concurrency = 1
   // 请求间隔
   private reqDelay = 100
 
   private constructor() {
-    // 监听配置更新事件
-    configCache.on('configUpdated', ({ code }) => {
-      if ([
-        'ALIST_HOST',
-        'ALIST_TOKEN',
-        'ALIST_PER_PAGE',
-        'ALIST_REQ_RETRY_COUNT',
-        'ALIST_REQ_RETRY_INTERVAL',
-        'ALIST_REQ_CONCURRENCY',
-        'ALIST_REQ_INTERVAL',
-      ].includes(code)) {
-        this._initializeHttp()
-      }
-    })
+    // 空构造函数
   }
 
   static getInstance(): AlistService {
@@ -49,17 +36,29 @@ class AlistService {
       return
 
     try {
-      // 确保配置缓存已初始化
-      if (!configCache.isInitialized())
-        await configCache.initialize()
+      // 获取配置缓存实例
+      this.configCache = await getConfigCache()
 
-      const host = configCache.getRequired('ALIST_HOST')
-      const token = configCache.getRequired('ALIST_TOKEN')
-      const perPage = configCache.get('ALIST_PER_PAGE')
-      const maxRetries = configCache.get('ALIST_REQ_RETRY_COUNT')
-      const retryDelay = configCache.get('ALIST_REQ_RETRY_INTERVAL')
-      const concurrency = configCache.get('ALIST_REQ_CONCURRENCY')
-      const reqDelay = configCache.get('ALIST_REQ_INTERVAL')
+      // 设置配置更新监听
+      this.configCache.on('configUpdated', (data: { code: string }) => {
+        if ([
+          'ALIST_HOST',
+          'ALIST_TOKEN',
+          'ALIST_PER_PAGE',
+          'ALIST_REQ_RETRY_COUNT',
+          'ALIST_REQ_RETRY_INTERVAL',
+          'ALIST_REQ_INTERVAL',
+        ].includes(data.code)) {
+          this._initializeHttp()
+        }
+      })
+
+      const host = this.configCache.getRequired('ALIST_HOST')
+      const token = this.configCache.getRequired('ALIST_TOKEN')
+      const perPage = this.configCache.get('ALIST_PER_PAGE')
+      const maxRetries = this.configCache.get('ALIST_REQ_RETRY_COUNT')
+      const retryDelay = this.configCache.get('ALIST_REQ_RETRY_INTERVAL')
+      const reqDelay = this.configCache.get('ALIST_REQ_INTERVAL')
 
       if (perPage)
         this.perPage = parseInt(perPage)
@@ -67,8 +66,6 @@ class AlistService {
         this.maxRetries = parseInt(maxRetries)
       if (retryDelay)
         this.retryDelay = parseInt(retryDelay)
-      if (concurrency)
-        this.concurrency = parseInt(concurrency)
       if (reqDelay)
         this.reqDelay = parseInt(reqDelay)
 
@@ -90,7 +87,6 @@ class AlistService {
         perPage: this.perPage,
         maxRetries: this.maxRetries,
         retryDelay: this.retryDelay,
-        concurrency: this.concurrency,
         reqDelay: this.reqDelay,
       })
     }

@@ -2,6 +2,9 @@
 import type { DataTableColumns } from 'naive-ui'
 import { fileHistoryAPI } from '~/api/file-history'
 
+const { width } = useWindowSize()
+const isMobile = computed(() => width.value <= 768)
+
 // 计算表格可用高度
 const tableHeight = ref(0)
 function updateTableHeight() {
@@ -10,7 +13,7 @@ function updateTableHeight() {
   const footerHeight = 64 + 24
   const contentPadding = 24 * 2
   const cardTitleHeight = 68 // 卡片标题高度
-  const searchFormHeight = 58 // 搜索表单预估高度
+  const searchFormHeight = isMobile.value ? 10 : 58 // 搜索表单预估高度
   const paginationHeight = 40 // 分页器预估高度
   const margin = 20 // 额外边距
 
@@ -41,12 +44,6 @@ const pagination = ref({
 // 搜索表单
 const searchForm = ref({
   keyword: '',
-  fileType: '',
-  fileSuffix: '',
-  dateRange: [
-    new Date(new Date().setHours(0, 0, 0, 0) - 3 * 24 * 60 * 60 * 1000).getTime(),
-    new Date(new Date().setHours(23, 59, 59, 999)).getTime(),
-  ] as [number, number],
 })
 
 // 加载数据
@@ -56,9 +53,7 @@ async function loadData() {
     const { data } = await fileHistoryAPI.findByPage({
       page: pagination.value.page,
       pageSize: pagination.value.pageSize,
-      ...searchForm.value,
-      startTime: searchForm.value.dateRange[0] ? new Date(searchForm.value.dateRange[0]).toISOString() : undefined,
-      endTime: searchForm.value.dateRange[1] ? new Date(searchForm.value.dateRange[1]).toISOString() : undefined,
+      keyword: searchForm.value.keyword,
     })
     if (data) {
       fileHistories.value = data.list
@@ -97,38 +92,62 @@ function handleSearch() {
 function handleReset() {
   searchForm.value = {
     keyword: '',
-    fileType: '',
-    fileSuffix: '',
-    dateRange: [
-      new Date(new Date().setHours(0, 0, 0, 0) - 3 * 24 * 60 * 60 * 1000).getTime(),
-      new Date(new Date().setHours(23, 59, 59, 999)).getTime(),
-    ] as [number, number],
   }
   handleSearch()
 }
 
 // 表格列定义
-const columns: DataTableColumns<Api.FileHistory.Record> = [
-  { title: '文件名', key: 'fileName', width: 200, ellipsis: { tooltip: true } },
-  { title: '源路径', key: 'sourcePath', width: 200, ellipsis: { tooltip: true } },
-  { title: '目标路径', key: 'targetFilePath', width: 200, ellipsis: { tooltip: true } },
-  { title: '文件大小', key: 'fileSize', width: 100, render: (row) => {
-    return h('span', {}, formatFileSize(row.fileSize))
-  } },
-  // { title: '文件类型', key: 'fileType', width: 100 },
-  { title: '文件后缀', key: 'fileSuffix', width: 100 },
-  { title: '创建时间', key: 'createdAt', width: 180, render: (row) => {
-    return h('span', {}, new Date(row.createdAt).toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    }))
-  } },
-]
+const columns = computed<DataTableColumns<Api.FileHistory.Record>>(() => [
+  {
+    title: '文件名',
+    key: 'fileName',
+    width: isMobile.value ? 180 : 200,
+    ellipsis: { tooltip: true },
+  },
+  {
+    title: '源路径',
+    key: 'sourcePath',
+    width: 200,
+    ellipsis: { tooltip: true },
+    hidden: isMobile.value,
+  },
+  {
+    title: '目标路径',
+    key: 'targetFilePath',
+    width: 200,
+    ellipsis: { tooltip: true },
+    hidden: isMobile.value,
+  },
+  {
+    title: '文件大小',
+    key: 'fileSize',
+    width: isMobile.value ? 80 : 100,
+    render: (row) => {
+      return h('span', {}, formatFileSize(row.fileSize))
+    },
+  },
+  {
+    title: '文件后缀',
+    key: 'fileSuffix',
+    width: isMobile.value ? 80 : 100,
+  },
+  {
+    title: '创建时间',
+    key: 'createdAt',
+    width: isMobile.value ? 150 : 180,
+    render: (row) => {
+      return h('span', {}, new Date(row.createdAt).toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: isMobile.value ? undefined : '2-digit',
+        hour12: false,
+      }))
+    },
+  },
+])
 
 // 格式化文件大小
 function formatFileSize(size: number): string {
@@ -149,47 +168,39 @@ loadData()
   <div class="h-full">
     <NCard title="文件生成记录">
       <!-- 搜索表单 -->
-      <NForm
-        inline
-        :model="searchForm"
-        label-placement="left"
-        label-width="auto"
-      >
-        <NFormItem label="关键字">
-          <NInput
-            v-model:value="searchForm.keyword"
-            placeholder="文件名/路径"
-            clearable
-            @keyup.enter="handleSearch"
-          />
-        </NFormItem>
-        <NFormItem label="文件后缀">
-          <NInput
-            v-model:value="searchForm.fileSuffix"
-            placeholder="文件后缀"
-            clearable
-            @keyup.enter="handleSearch"
-          />
-        </NFormItem>
-        <NFormItem label="时间范围">
-          <NDatePicker
-            v-model:value="searchForm.dateRange"
-            type="daterange"
-            clearable
-            placeholder="选择日期范围"
-          />
-        </NFormItem>
-        <NFormItem>
-          <NSpace>
-            <NButton type="primary" @click="handleSearch">
-              搜索
-            </NButton>
-            <NButton @click="handleReset">
-              重置
-            </NButton>
-          </NSpace>
-        </NFormItem>
-      </NForm>
+      <div class="mb-4 flex gap-2">
+        <NInput
+          v-model:value="searchForm.keyword"
+          size="small"
+          placeholder="搜索文件名或路径"
+          :style="isMobile ? 'width: 100%' : 'width: 300px'"
+          clearable
+          @keyup.enter="handleSearch"
+        >
+          <template #prefix>
+            <div class="i-ri:search-line" />
+          </template>
+        </NInput>
+        <NSpace :wrap="false">
+          <NButton
+            size="small"
+            type="primary"
+            @click="handleSearch"
+          >
+            <template #icon>
+              <div class="i-ri:search-line" />
+            </template>
+          </NButton>
+          <NButton
+            size="small"
+            @click="handleReset"
+          >
+            <template #icon>
+              <div class="i-ri:refresh-line" />
+            </template>
+          </NButton>
+        </NSpace>
+      </div>
 
       <!-- 数据表格 -->
       <NDataTable
@@ -207,3 +218,20 @@ loadData()
     </NCard>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  :deep(.n-form-item-label) {
+    padding-bottom: 6px;
+  }
+  :deep(.n-card-header) {
+    padding: 12px 16px;
+  }
+  :deep(.n-card__content) {
+    padding: 12px 16px;
+  }
+  :deep(.n-data-table .n-data-table-td) {
+    padding: 8px;
+  }
+}
+</style>
