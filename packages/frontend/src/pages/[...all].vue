@@ -10,7 +10,7 @@
       <p class="error-message">
         抱歉，您访问的页面不存在
       </p>
-      <router-link to="/" class="back-home">
+      <router-link to="/admin" class="back-home">
         返回首页
       </router-link>
     </div>
@@ -22,6 +22,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
+  min-height: 100vh;
 }
 
 .not-found-content {
@@ -62,3 +63,9 @@
   background-color: #0056b3;
 }
 </style>
+
+<route lang="yaml">
+name: not-found
+layout: empty
+path: "/:all(.*)*"
+</route>

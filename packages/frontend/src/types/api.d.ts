@@ -33,6 +33,33 @@ declare namespace Api {
 
   }
 
+  // 授权
+  namespace Auth {
+    interface LoginParams {
+      username: string
+      password: string
+    }
+    interface RegisterParams {
+      username: string
+      password: string
+      nickname?: string
+    }
+
+    interface LoginResult {
+      token: string
+      user: {
+        id: number
+        username: string
+        nickname?: string
+        email?: string
+        status: 'active' | 'disabled'
+        lastLoginAt?: string
+        createdAt: string
+        updatedAt: string
+      }
+    }
+  }
+
   // 系统配置
   namespace Config {
     // 配置相关类型

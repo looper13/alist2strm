@@ -1,42 +1,33 @@
 <script setup lang="ts">
-import { useWindowSize } from '@vueuse/core'
+import type { DropdownOption } from 'naive-ui'
+import { useRouter } from 'vue-router'
+import { useAuth, useMobile } from '~/composables'
+import { toggleTheme } from '~/composables/dark'
 import SiderMenu from './SiderMenu.vue'
 
-const { width } = useWindowSize()
-const isMobile = computed(() => width.value <= 768)
+const { isMobile } = useMobile()
+const { logout, userInfo } = useAuth()
+const router = useRouter()
 
-function toggleTheme(event: MouseEvent) {
-  const x = event.clientX
-  const y = event.clientY
-  const endRadius = Math.hypot(
-    Math.max(x, innerWidth - x),
-    Math.max(y, innerHeight - y),
-  )
-  if (!document.startViewTransition) {
-    toggleDark()
-    return
-  }
-  const transition = document.startViewTransition(async () => {
-    toggleDark()
-  })
-  transition.ready.then(() => {
-    const clipPath = [
-      `circle(0px at ${x}px ${y}px)`,
-      `circle(${endRadius}px at ${x}px ${y}px)`,
-    ]
-    document.documentElement.animate(
-      {
-        clipPath: isDark.value ? [...clipPath].reverse() : clipPath,
-      },
-      {
-        duration: 500,
-        easing: 'ease-in',
-        pseudoElement: isDark.value
-          ? '::view-transition-old(root)'
-          : '::view-transition-new(root)',
-      },
-    )
-  })
+// 处理退出登录
+function handleLogout() {
+  logout()
+  router.push('/auth')
+}
+
+// 用户菜单选项
+const userMenuOptions: DropdownOption[] = [
+  {
+    label: '退出登录',
+    key: 'logout',
+    icon: () => h('div', { class: 'i-carbon-logout' }),
+  },
+]
+
+// 处理菜单选择
+function handleSelect(key: string) {
+  if (key === 'logout')
+    handleLogout()
 }
 </script>
 
@@ -45,14 +36,27 @@ function toggleTheme(event: MouseEvent) {
     <!-- 头部导航 -->
     <n-layout-header class="header" bordered>
       <div class="px-4 flex h-full items-center justify-between">
-        <p class="text-xl text-green-400 font-bold md:text-2xl">
-          AList2Strm
-        </p>
-        <!-- 主题切换按钮 -->
-        <div class="flex items-center">
+        <div class="flex gap-2 items-center">
+          <div class="i-carbon-media-library text-2xl text-green-400 md:text-3xl" />
+          <p class="text-xl text-green-400 font-bold md:text-2xl">
+            AList2Strm
+          </p>
+        </div>
+        <!-- 主题切换按钮和用户菜单 -->
+        <div class="flex gap-4 items-center">
           <button class="btn" @click="toggleTheme">
             <div class="i-carbon-sun dark:i-carbon-moon text-xl" />
           </button>
+          <n-dropdown
+            trigger="click"
+            :options="userMenuOptions"
+            @select="handleSelect"
+          >
+            <div class="flex gap-2 cursor-pointer select-none items-center hover:opacity-80">
+              <div class="i-carbon-user-avatar text-xl" />
+              <span v-if="!isMobile" class="text-sm">{{ userInfo?.nickname || userInfo?.username }}</span>
+            </div>
+          </n-dropdown>
         </div>
       </div>
     </n-layout-header>

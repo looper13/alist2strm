@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { useWindowSize } from '@vueuse/core'
 import { configAPI } from '~/api/config'
+import { useMobile } from '~/composables'
 
 defineOptions({
   name: 'ConfigForm',
 })
 
-const { width } = useWindowSize()
-const isMobile = computed(() => width.value <= 768)
+const { isMobile } = useMobile()
 
 interface ConfigItem {
   name: string
@@ -31,20 +30,32 @@ const CONFIG_ITEMS: ConfigGroup[] = [
     title: 'AList 配置',
     prefix: 'ALIST_',
     items: [
-      { name: 'Alist地址', code: 'ALIST_HOST', type: 'text', placeholder: 'http://127.0.0.1:5244', describe: 'Alist 服务器地址' },
+      { name: 'Alist地址', code: 'ALIST_HOST', type: 'text', placeholder: 'http://127.0.0.1:5244', describe: 'Alist 服务器地址，建议内网地址' },
       { name: 'Alist Token', code: 'ALIST_TOKEN', type: 'password', placeholder: 'alist-token-xxxx', describe: 'Alist 访问令牌' },
-      { name: 'Alist 内容地址', code: 'ALIST_REPLACE_HOST', type: 'text', placeholder: '将内 strm 内容请求地址替换', describe: '用于替换 strm 文件中的请求地址' },
-      { name: '任务请求间隔', code: 'ALIST_REQ_INTERVAL', type: 'number', placeholder: '请输入任务请求间隔（毫秒）', min: 0, step: 100, describe: '两次请求之间的间隔时间' },
-      { name: '请求重试次数', code: 'ALIST_REQ_RETRY_COUNT', type: 'number', placeholder: '请输入请求重试次数', min: 0, step: 1, describe: '请求失败时的重试次数' },
-      { name: '请求重试间隔', code: 'ALIST_REQ_RETRY_INTERVAL', type: 'number', placeholder: '请输入请求重试间隔（毫秒）', min: 0, step: 100, describe: '重试请求之间的间隔时间' },
+      { name: 'Alist 域名', code: 'ALIST_REPLACE_HOST', type: 'text', placeholder: '将内 strm 内容请求地址替换', describe: '用于替换 strm 文件中的请求地址，优先级高于 Alist地址，建议外网域名或地址' },
+      { name: '任务请求间隔', code: 'ALIST_REQ_INTERVAL', type: 'number', placeholder: '请输入任务请求间隔（毫秒）', min: 0, step: 100, describe: '每次请求之间的间隔时间，默认100' },
+      { name: '请求重试次数', code: 'ALIST_REQ_RETRY_COUNT', type: 'number', placeholder: '请输入请求重试次数', min: 0, step: 1, describe: '请求失败时的重试次数，默认3次' },
+      { name: '请求重试间隔', code: 'ALIST_REQ_RETRY_INTERVAL', type: 'number', placeholder: '请输入请求重试间隔（毫秒）', min: 0, step: 100, describe: '重试请求之间的间隔时间，建议大于任务请求间隔，默认10000' },
     ],
   },
   {
     title: 'strm 配置',
     prefix: 'STRM_',
     items: [
-      { name: '替换扩展名', code: 'STRM_REPLACE_SUFFIX', type: 'switch', describe: '开启后将文件扩展名替换为 strm', placeholder: '替换扩展名' },
-      { name: 'URL编码', code: 'STRM_URL_ENCODE', type: 'switch', describe: '开启后会对 strm 内容进行 URL 编码', placeholder: '替换扩展名' },
+      {
+        name: '替换扩展名',
+        code: 'STRM_REPLACE_SUFFIX',
+        type: 'switch',
+        describe: '开启后，生成的 strm 文件则不包含源文件的扩展名，例如：test.mp4 将生成 test.strm',
+        placeholder: '替换扩展名',
+      },
+      {
+        name: 'URL编码',
+        code: 'STRM_URL_ENCODE',
+        type: 'switch',
+        describe: '开启后会对 strm 内容进行URL编码，建议开启',
+        placeholder: 'URL编码',
+      },
     ],
   },
 ]
@@ -246,7 +257,7 @@ onMounted(() => {
                       @update:value="val => handleValueUpdate(item.code, item.type, val)"
                     />
                   </div>
-                  <div v-if="item.describe" class="text-sm text-gray-400 mt-2">
+                  <div v-if="item.describe" class="text-sm text-gray-500 mt-2">
                     {{ item.describe }}
                   </div>
                 </div>

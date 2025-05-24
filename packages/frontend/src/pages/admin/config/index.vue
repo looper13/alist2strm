@@ -7,3 +7,9 @@ defineOptions({
 <template>
   <ConfigForm />
 </template>
+
+<route lang="yaml">
+name: config
+layout: default
+path: /admin/config
+</route>

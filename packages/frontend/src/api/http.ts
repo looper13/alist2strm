@@ -1,5 +1,7 @@
 import type { AxiosInstance, AxiosRequestConfig } from 'axios'
 import axios from 'axios'
+import { useRouter } from 'vue-router'
+import { useAuth } from '~/composables'
 
 export class HttpClient {
   private instance: AxiosInstance
@@ -24,9 +26,9 @@ export class HttpClient {
     this.instance.interceptors.request.use(
       (config) => {
         // 添加 token
-        // const userStore = useUserStore()
-        // if (userStore.token)
-        //   config.headers.Authorization = `Bearer ${userStore.token}`
+        const { token } = useAuth()
+        if (token.value)
+          config.headers.Authorization = `Bearer ${token.value}`
         return config
       },
       (error) => {
@@ -40,34 +42,25 @@ export class HttpClient {
         const res = response.data as Api.Common.HttpResponse
         if (res.code === 0)
           return response
-
-        // 处理业务错误
-        // const error = new Error(res.message) as App.AppError
-        // error.code = res.code
-        // error.status = response.status
-        // error.details = res.data
         return Promise.reject(res)
       },
       (error) => {
         // 处理 HTTP 错误
-        // if (error.response) {
-        //   const appError = new Error(
-        //     error.response.data?.message || '请求失败',
-        //   ) as App.AppError
-        //   appError.code = error.response.status
-        //   appError.status = error.response.status
-        //   appError.details = error.response.data
-        //   return Promise.reject(appError)
-        // }
-
-        // if (error.request) {
-        //   const appError = new Error('网络错误，请检查网络连接') as App.AppError
-        //   appError.code = -1
-        //   return Promise.reject(appError)
-        // }
-
-        // const appError = new Error(error.message || '请求配置错误') as App.AppError
-        // appError.code = -2
+        if (error.response) {
+          const { data } = error.response as Api.Common.HttpResponse
+          if (data.code === 401) {
+            const { logout } = useAuth()
+            const router = useRouter()
+            logout() // 清除 token 和用户信息
+            router.push({
+              path: '/auth',
+              query: {
+                redirect: router.currentRoute.value.fullPath,
+              },
+            })
+            return Promise.reject(error)
+          }
+        }
         return Promise.reject(error)
       },
     )

@@ -9,22 +9,22 @@ const router = useRouter()
 const menuOptions = ref<MenuOption[]>([
   {
     label: '介绍',
-    key: '/',
+    key: '/admin/',
     icon: renderIcon(IconDashboard),
   },
   {
     label: '基础配置',
-    key: '/config',
+    key: '/admin/config',
     icon: renderIcon(IconSettings),
   },
   {
     label: '任务管理',
-    key: '/task',
+    key: '/admin/task',
     icon: renderIcon(IconSchedule),
   },
   {
     label: '生成记录',
-    key: '/file-history',
+    key: '/admin/file-history',
     icon: renderIcon(IconFiles),
   },
 ])

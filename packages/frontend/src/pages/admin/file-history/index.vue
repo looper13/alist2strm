@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { DataTableColumns } from 'naive-ui'
 import { fileHistoryAPI } from '~/api/file-history'
+import { useMobile } from '~/composables'
 
-const { width } = useWindowSize()
-const isMobile = computed(() => width.value <= 768)
+const { isMobile } = useMobile()
 
 // 计算表格可用高度
 const tableHeight = ref(0)
@@ -235,3 +235,9 @@ loadData()
   }
 }
 </style>
+
+<route lang="yaml">
+name: file-history
+layout: default
+path: /admin/file-history
+</route>

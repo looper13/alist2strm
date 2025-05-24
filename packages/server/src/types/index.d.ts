@@ -19,6 +19,7 @@ declare namespace NodeJS {
     LOG_MAX_FILE_SIZE?: string
     DB_BASE_DIR?: string
     DB_NAME?: string
+    JWT_SECRET?: string
   }
 }
 
@@ -41,11 +42,16 @@ declare namespace App {
     path: string
     name: string
   }
+  // JWT 配置类型
+  interface JwtConfig {
+    secret: string
+  }
 
   interface Config {
     server: ServerConfig
     logger: LoggerConfig
     database: DatabaseConfig
+    jwt: JwtConfig
   }
 
   // 错误处理相关类型
@@ -194,7 +200,7 @@ declare namespace App {
   }
 
   namespace AList {
-     interface AlistListResponse<T> {
+    interface AlistListResponse<T> {
       code: number
       message: string
       data: {
@@ -229,6 +235,14 @@ declare namespace App {
     interface AlistDir {
       name: string
       modified: string
+    }
+  }
+
+  namespace Jwt {
+    interface User {
+      id: number
+      username: string
+      nickname: string
     }
   }
 }

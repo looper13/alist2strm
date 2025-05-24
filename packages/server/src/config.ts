@@ -42,6 +42,10 @@ const config: App.Config = {
     // 数据库文件名
     name: process.env.DB_NAME || 'database.sqlite',
   },
+  jwt: {
+    // JWT 密钥
+    secret: process.env.JWT_SECRET || '63fe1d02ac6da7fe325f3e7545f9b954dc76f25495f73f6d0c0dc82ad44d5fd3',
+  },
 }
 
 export default config

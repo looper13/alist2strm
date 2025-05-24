@@ -1,4 +1,6 @@
 <script setup lang="ts" generic="T">
+import { useMobile } from '~/composables'
+
 defineProps<{
   item: Api.Task.Record
 }>()
@@ -11,8 +13,7 @@ defineEmits<{
   (e: 'update:enabled', task: Api.Task.Record): void
   (e: 'reset', task: Api.Task.Record): void
 }>()
-const { width } = useWindowSize()
-const isMobile = computed(() => width.value <= 768)
+const { isMobile } = useMobile()
 </script>
 
 <template>

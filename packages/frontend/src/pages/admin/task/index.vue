@@ -530,3 +530,9 @@ onMounted(() => {
     </NDrawer>
   </NSpin>
 </template>
+
+<route lang="yaml">
+name: task
+layout: default
+path: /admin/task
+</route>

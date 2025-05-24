@@ -42,4 +42,12 @@ declare namespace Models {
     fileType: string
     fileSuffix: string
   }
+
+  interface UserAttributes extends BaseAttributes {
+    username: string
+    password: string
+    nickname: string
+    email: string
+    status: string
+  }
 } 

@@ -7,6 +7,7 @@ import { Config } from '@/models/config.js'
 import { Task } from '@/models/task.js'
 import { TaskLog } from '@/models/task-log.js'
 import { FileHistory } from '@/models/file-history.js'
+import { User } from '@/models/user.js'
 import { setupAssociations } from '@/models/associations.js'
 import { QueryTypes } from 'sequelize'
 
@@ -20,7 +21,7 @@ if (!existsSync(dbDir)) {
 const sequelize = new Sequelize({
   dialect: 'sqlite',
   storage: join(config.database.path, config.database.name),
-  models: [Config, Task, TaskLog, FileHistory],
+  models: [Config, Task, TaskLog, FileHistory, User],
   logging: (msg) => logger.debug.debug(msg),
 })
 
@@ -121,3 +122,4 @@ export * from '@/models/config.js'
 export * from '@/models/task.js'
 export * from '@/models/task-log.js'
 export * from '@/models/file-history.js' 
+export * from '@/models/user.js'

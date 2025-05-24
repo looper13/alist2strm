@@ -82,3 +82,8 @@ defineOptions({
 
 <style scoped>
 </style>
+
+<route lang="yaml">
+name: home
+layout: default
+</route>
