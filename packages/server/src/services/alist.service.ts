@@ -32,15 +32,17 @@ class AlistService {
   }
 
   private async _initializeHttp() {
-    if (this.initialized)
-      return
-
     try {
       // 获取配置缓存实例
       this.configCache = await getConfigCache()
 
       // 设置配置更新监听
-      this.configCache.on('configUpdated', (data: { code: string }) => {
+      this.configCache.on('configUpdated', async (data: { code: string }) => {
+        // 确保configCache已初始化
+        if (!this.configCache) {
+          this.configCache = await getConfigCache()
+        }
+
         if ([
           'ALIST_HOST',
           'ALIST_TOKEN',
@@ -49,9 +51,47 @@ class AlistService {
           'ALIST_REQ_RETRY_INTERVAL',
           'ALIST_REQ_INTERVAL',
         ].includes(data.code)) {
-          this._initializeHttp()
+          // 根据更新的配置项更新相应的值
+          switch (data.code) {
+            case 'ALIST_HOST':
+            case 'ALIST_TOKEN':
+              // 这两个配置变更需要重新初始化客户端
+              this.initialized = false
+              await this._initializeHttp()
+              break
+            case 'ALIST_PER_PAGE': {
+              const perPage = this.configCache.get('ALIST_PER_PAGE')
+              if (perPage) this.perPage = parseInt(perPage)
+              break
+            }
+            case 'ALIST_REQ_RETRY_COUNT': {
+              const maxRetries = this.configCache.get('ALIST_REQ_RETRY_COUNT')
+              if (maxRetries) this.maxRetries = parseInt(maxRetries)
+              break
+            }
+            case 'ALIST_REQ_RETRY_INTERVAL': {
+              const retryDelay = this.configCache.get('ALIST_REQ_RETRY_INTERVAL')
+              if (retryDelay) this.retryDelay = parseInt(retryDelay)
+              break
+            }
+            case 'ALIST_REQ_INTERVAL': {
+              const reqDelay = this.configCache.get('ALIST_REQ_INTERVAL')
+              if (reqDelay) this.reqDelay = parseInt(reqDelay)
+              break
+            }
+          }
+          logger.info.info('AList 配置已更新', {
+            code: data.code,
+            perPage: this.perPage,
+            maxRetries: this.maxRetries,
+            retryDelay: this.retryDelay,
+            reqDelay: this.reqDelay,
+          })
         }
       })
+
+      // 如果已经初始化，且不是强制重新初始化，则直接返回
+      if (this.initialized) return
 
       const host = this.configCache.getRequired('ALIST_HOST')
       const token = this.configCache.getRequired('ALIST_TOKEN')
