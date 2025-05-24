@@ -59,25 +59,64 @@ export class GeneratorService {
     const sourceFilePath = this._normalizePath(path.join(currentPath, file.name))
     // 相对路径
     const relativePath = this._normalizePath(path.relative(sourcePath, currentPath))
+    const configCache = await getConfigCache()
+    const isReplaceSuffix = configCache.get(GENERATOR_CONFIG.REPLACE_SUFFIX) === 'Y'
 
-    // 目标文件路径（不含扩展名）
-    const targetFilePath = this._normalizePath(path.join(targetBase, relativePath, path.parse(file.name).name))
-  
-    // strm 文件路径（替换原扩展名）
-    const strmPath = `${targetFilePath}.strm`
-
-    if (overwrite || !(await this._fileExists(strmPath))) {
-      return {
-        sourceFilePath,
-        targetFilePath,
-        strmPath,
-        name: file.name,
-        sign: file.sign,
-        type: `${file.type}`,
-        fileSize: file.size || 0,
+    // 计算两种可能的目标路径
+    const paths = {
+      withSuffix: {
+        target: this._normalizePath(path.join(targetBase, relativePath, file.name)),
+        strm: '' as string
+      },
+      withoutSuffix: {
+        target: this._normalizePath(path.join(targetBase, relativePath, path.parse(file.name).name)),
+        strm: '' as string
       }
     }
-    return null
+    
+    // 计算strm文件路径
+    paths.withSuffix.strm = `${paths.withSuffix.target}.strm`
+    paths.withoutSuffix.strm = `${paths.withoutSuffix.target}.strm`
+
+    // 检查文件是否存在并在覆盖模式下删除
+    const fileExists = {
+      withSuffix: await this._fileExists(paths.withSuffix.strm),
+      withoutSuffix: await this._fileExists(paths.withoutSuffix.strm)
+    }
+
+    if (overwrite) {
+      // 删除已存在的文件
+      for (const [key, pathExists] of Object.entries(fileExists)) {
+        if (pathExists) {
+          const strmPath = paths[key as keyof typeof paths].strm
+          try {
+            await fs.unlink(strmPath)
+            logger.info.info('删除旧文件', { path: strmPath })
+          } catch (error) {
+            logger.error.error('删除旧文件失败', { 
+              path: strmPath,
+              error: (error as Error).message 
+            })
+          }
+        }
+      }
+    } else if (fileExists.withSuffix || fileExists.withoutSuffix) {
+      // 非覆盖模式且文件存在，跳过处理
+      return null
+    }
+
+    // 根据配置选择最终路径
+    const selectedPaths = isReplaceSuffix ? paths.withoutSuffix : paths.withSuffix
+
+    return {
+      sourceFilePath,
+      targetFilePath: selectedPaths.target,
+      strmPath: selectedPaths.strm,
+      name: file.name,
+      sign: file.sign,
+      type: `${file.type}`,
+      fileSize: file.size || 0,
+    }
   }
 
   /**
@@ -91,7 +130,7 @@ export class GeneratorService {
       await this.fileHistoryService.create({
         fileName: task.name,
         sourcePath: task.sourceFilePath,
-        targetFilePath: task.targetFilePath,
+        targetFilePath: task.strmPath,
         fileSize: task.fileSize,
         fileType: task.type,
         fileSuffix,
