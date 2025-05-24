@@ -6,10 +6,12 @@ export function setupAssociations(): void {
   Task.hasMany(TaskLog, {
     foreignKey: 'taskId',
     as: 'logs',
+    constraints: false,
   })
 
   TaskLog.belongsTo(Task, {
     foreignKey: 'taskId',
     as: 'task',
+    constraints: false,
   })
 } 

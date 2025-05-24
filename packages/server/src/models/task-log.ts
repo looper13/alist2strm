@@ -1,13 +1,11 @@
-import { Column, Table, DataType, ForeignKey } from 'sequelize-typescript'
+import { Column, Table, DataType } from 'sequelize-typescript'
 import { BaseModel } from './base.js'
-import { Task } from './task.js'
 
 @Table({
   tableName: 'task_logs',
   timestamps: true,
 })
 export class TaskLog extends BaseModel {
-  @ForeignKey(() => Task)
   @Column({
     type: DataType.INTEGER,
     allowNull: false,
