@@ -46,6 +46,12 @@ AList2Strm 是一个用于将 AList 媒体文件转换为 Strm 格式的工具�
 #### 文件记录
 [![文件记录](./screenshot/screenshot20250524011029@2x.png)](https://github.com/MccRay-s/alist2strm/raw/main/screenshot/screenshot20250524011029@2x.png)
 
+## 功能计划
+- Emby 入库通知，strm 实时入库支持
+- 用户授权中心，公网暴露的情况确实挺不安全的
+- strm 失效检测，预估方案应该是每个 strm 都需要一次网络请求来判断是否有效
+- Telgram 消息通知，具体通知规则还没想好
+
 
 ## 项目结构
 
