@@ -1,11 +1,18 @@
 import { authAPI } from '~/api/auth'
 
+const USER_INFO_KEY = 'user-info'
+const TOKEN_KEY = 'token'
+
 export const useAuth = createGlobalState(() => {
   // 持久化存储 token
-  const token = useStorage('token', '')
+  const token = useStorage(TOKEN_KEY, '')
 
   // 用户信息
-  const userInfo = useStorage<Api.Auth.LoginResult['user'] | null>('user-info', null)
+  const userInfo = useStorage<Pick<Api.Auth.LoginResult['user'], 'id' | 'username' | 'nickname'> | null>(USER_INFO_KEY, {
+    id: -1,
+    username: '',
+    nickname: '',
+  })
 
   // 计算属性：是否已登录
   const isAuthenticated = computed(() => !!token.value)
@@ -51,9 +58,9 @@ export const useAuth = createGlobalState(() => {
 
     try {
       const response = await authAPI.getCurrentUser()
-      if (response?.data?.user) {
-        userInfo.value = response.data.user
-        return response.data.user
+      if (response?.data) {
+        userInfo.value = response.data
+        return response.data
       }
       throw new Error('获取用户信息失败')
     }

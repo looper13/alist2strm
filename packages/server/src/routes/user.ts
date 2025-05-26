@@ -77,17 +77,31 @@ router.get('/me', auth, async (req: Request, res: Response) => {
 // 更新用户信息
 router.put('/me', auth, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { nickname, email, password } = req.body
+    const { nickname, email, password, oldPassword } = req.body
     const user = await userService.update(req.user!.id, {
       nickname,
       email,
       password,
+      oldPassword,
     })
 
     success(res, user, '更新成功')
   } catch (error) {
-    logger.error.error('更新用户信息失败:', error)
-    next(new HttpError('更新失败', 500))
+    if (error instanceof Error) {
+      switch (error.message) {
+        case '请输入原密码':
+          next(new HttpError('请输入原密码', 400))
+          break
+        case '原密码错误':
+          next(new HttpError('原密码错误', 400))
+          break
+        default:
+          logger.error.error('更新用户信息失败:', error)
+          next(new HttpError('更新失败', 500))
+      }
+    } else {
+      next(new HttpError('更新失败', 500))
+    }
   }
 })
 

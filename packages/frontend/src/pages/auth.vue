@@ -58,10 +58,12 @@ const registerRules = {
 }
 
 // 切换模式
+/* 暂时注释掉切换模式功能
 function toggleMode() {
   mode.value = mode.value === 'login' ? 'register' : 'login'
   formRef.value?.restoreValidation()
 }
+*/
 
 // 提交表单
 async function handleSubmit() {
@@ -187,16 +189,16 @@ async function handleSubmit() {
             :size="isMobile ? 'small' : 'large'"
             @click="handleSubmit"
           >
-            {{ loading
-              ? (mode === 'login' ? '登录中...' : '注册中...')
-              : (mode === 'login' ? '登录' : '注册') }}
+            {{ loading ? '登录中...' : '登录' }}
           </NButton>
 
+          <!-- 注释掉注册入口按钮
           <div class="text-center">
             <NButton text :size="isMobile ? 'small' : 'medium'" @click="toggleMode">
               {{ mode === 'login' ? '没有账号？立即注册' : '已有账号？立即登录' }}
             </NButton>
           </div>
+          -->
         </div>
       </NForm>
     </NCard>

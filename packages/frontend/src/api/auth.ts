@@ -20,8 +20,15 @@ class AuthAPI {
   /**
    * 获取当前用户信息
    */
-  async getCurrentUser(): Promise<Api.Common.HttpResponse<Api.Auth.LoginResult>> {
-    return http.get<Api.Auth.LoginResult>(`${this.baseUrl}/me`)
+  async getCurrentUser(): Promise<Api.Common.HttpResponse<Api.Auth.UserInfo>> {
+    return http.get<Api.Auth.UserInfo>(`${this.baseUrl}/me`)
+  }
+
+  /**
+   * 更新当前用户信息
+   */
+  async updateCurrentUser(params: Api.Auth.UpdateUserParams): Promise<Api.Common.HttpResponse<Api.Auth.LoginResult['user']>> {
+    return http.put<Api.Auth.LoginResult['user']>(`${this.baseUrl}/me`, params)
   }
 }
 

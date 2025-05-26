@@ -20,6 +20,8 @@ declare namespace NodeJS {
     DB_BASE_DIR?: string
     DB_NAME?: string
     JWT_SECRET?: string
+    USER_NAME?: string
+    USER_PASSWORD?: string
   }
 }
 
@@ -47,11 +49,18 @@ declare namespace App {
     secret: string
   }
 
+  // 用户配置类型
+  interface UserConfig {
+    username: string
+    password?: string
+  }
+
   interface Config {
     server: ServerConfig
     logger: LoggerConfig
     database: DatabaseConfig
     jwt: JwtConfig
+    user: UserConfig
   }
 
   // 错误处理相关类型

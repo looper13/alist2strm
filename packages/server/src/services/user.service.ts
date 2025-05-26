@@ -101,6 +101,7 @@ class UserService {
     nickname?: string
     email?: string
     password?: string
+    oldPassword?: string
     status?: 'active' | 'disabled'
   }): Promise<User> {
     try {
@@ -109,16 +110,29 @@ class UserService {
         throw new Error('用户不存在')
       }
 
-      // 更新用户信息
+      // 如果要更新密码，先验证原密码
+      if (data.password) {
+        if (!data.oldPassword) {
+          throw new Error('请输入原密码')
+        }
+        
+        // 验证原密码是否正确
+        const isPasswordValid = await bcrypt.compare(data.oldPassword, user.password)
+        if (!isPasswordValid) {
+          throw new Error('原密码错误')
+        }
+
+        // 更新为新密码
+        user.password = await bcrypt.hash(data.password, 10)
+        delete data.password // 防止下面的批量更新再次设置密码
+        delete data.oldPassword
+      }
+
+      // 更新其他信息
       if (data.nickname !== undefined) user.nickname = data.nickname
       if (data.email !== undefined) user.email = data.email
       if (data.status !== undefined) user.status = data.status
       
-      // 如果要更新密码
-      if (data.password) {
-        user.password = await bcrypt.hash(data.password, 10)
-      }
-
       await user.save()
 
       logger.info.info('用户信息更新成功', { userId })
@@ -181,6 +195,52 @@ class UserService {
       logger.info.info('用户删除成功', { id })
     } catch (error) {
       logger.error.error('删除用户失败:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 检查并创建管理员用户
+   */
+  async initAdminUser(): Promise<void> {
+    try {
+      // 检查是否存在任何用户
+      const userCount = await User.count()
+      if (userCount === 0) {
+        // 获取配置的用户名
+        const username = config.user.username
+
+        // 生成随机密码或使用配置的密码
+        const generatePassword = () => {
+          const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*'
+          let password = ''
+          for (let i = 0; i < 12; i++) {
+            password += chars.charAt(Math.floor(Math.random() * chars.length))
+          }
+          return password
+        }
+
+        const adminPassword = config.user.password || generatePassword()
+        
+        // 创建管理员用户
+        await this.create({
+          username,
+          password: adminPassword,
+          nickname: '管理员',
+        })
+
+        // 使用醒目的方式打印密码
+        logger.info.info('=========================================')
+        logger.info.info('初始管理员账户已创建')
+        logger.info.info(`用户名: ${username}`)
+        logger.info.info(`密码: ${adminPassword}`)
+        if (!config.user.password) {
+          logger.info.info('请及时修改随机生成的密码！')
+        }
+        logger.info.info('=========================================')
+      }
+    } catch (error) {
+      logger.error.error('初始化管理员账户失败:', error)
       throw error
     }
   }

@@ -46,6 +46,12 @@ const config: App.Config = {
     // JWT 密钥
     secret: process.env.JWT_SECRET || '63fe1d02ac6da7fe325f3e7545f9b954dc76f25495f73f6d0c0dc82ad44d5fd3',
   },
+  user: {
+    // 初始用户名
+    username: process.env.USER_NAME || 'admin',
+    // 初始密码，如果未设置则生成随机密码
+    password: process.env.USER_PASSWORD,
+  },
 }
 
 export default config

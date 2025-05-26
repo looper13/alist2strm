@@ -58,6 +58,22 @@ declare namespace Api {
         updatedAt: string
       }
     }
+
+    interface UserInfo {
+      id: number
+      username: string
+      nickname?: string
+      email?: string
+      status: 'active' | 'disabled'
+      lastLoginAt?: string
+    }
+
+    // 用户信息更新参数
+    interface UpdateUserParams {
+      nickname?: string
+      password?: string
+      oldPassword?: string
+    }
   }
 
   // 系统配置

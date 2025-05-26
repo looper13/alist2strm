@@ -66,51 +66,76 @@ alist2strm/
 
 ## 安装说明
 
-1. 克隆项目
-```bash
-git clone https://github.com/MccRay-s/alist2strm
-cd alist2strm
+#### docker-compose
+
+```yml
+networks:
+  media_network:
+    external: true
+
+services:
+  alist2strm:
+    image: mccray/alist2strm:latest
+    container_name: alist2strm
+    restart: unless-stopped
+    networks:
+      - media_network
+    ports:
+      - "3456:80"   # 前端访问端口
+      - "4567:3210" # 后端API端口
+    volumes:
+      # 数据挂载目录
+      - /share/Docker/data/alist2strm/data:/app/data
+      # 媒体目录
+      - /share/MediaCenter:/media
+    environment:
+      - 'PUID=1000'
+      - 'PGID=0'
+      - 'UMASK=000'
+      - 'TZ=Asia/Shanghai'
+      # 用户相关
+      - 'JWT_SECRET={你的JWT密钥}'
+      - 'USER_NAME={管理员账号}'
+      - 'USER_PASSWORD={管理员密码}'
 ```
 
-2. 安装依赖
-```bash
-# 安装根目录依赖
-npm install
-
-# 安装后端依赖
-cd packages/server
-npm install
-
-# 安装前端依赖
-cd ../frontend
-npm install
+#### docker run 
+```**bash**
+docker run -d \
+  --name alist2strm \
+  --restart unless-stopped \
+  -p 3456:80 \
+  -p 4567:3210 \
+  -v /share/Docker/data/alist2strm/data:/app/data \
+  -v /share/MediaCenter:/media \
+  -e PUID=1000 \
+  -e PGID=0 \
+  -e UMASK=000 \
+  -e TZ=Asia/Shanghai \
+  -e JWT_SECRET={你的JWT密钥} \
+  -e USER_NAME={管理员账号} \
+  -e USER_PASSWORD={管理员密码} \
+  mccray/alist2strm:latest
 ```
 
-3. 配置环境变量
-```bash
-# 在 packages/server 目录下创建 .env 文件
-cp .env.example .env
-```
+#### 环境变量说明
 
-4. 修改配置
-编辑 `.env` 文件，配置数据库连接和 AList 相关信息。
+| 变量名称    | 说明 | 默认值 |
+| -------- | ------- |------- |
+| PORT  | 后台服务端口    |`3210` |
+| LOG_BASE_DIR | 日志目录     |`/app/data/logs`|
+| LOG_LEVEL    | 日志级别    |`info`|
+| LOG_LEVEL    | 日志级别    |`info`|
+| LOG_APP_NAME    | App名称    |`alist2strm`|
+| LOG_MAX_DAYS    | 日志保留天数    |`30`|
+| LOG_MAX_FILE_SIZE    | 日志单文件大小/M    |`10`|
+| DB_BASE_DIR    | 数据库目录    |`/app/data/db`|
+| DB_NAME    | 日志级别    |`database.sqlite`|
+| JWT_SECRET    | JWT密钥，自行处理   ||
+| USER_NAME    | 管理员账号    |`admin`|
+| USER_PASSWORD    | 管理员密码，不填随机生成   |见日志内容|
 
-## 使用说明
 
-1. 启动后端服务
-```bash
-cd packages/server
-npm run dev
-```
-
-2. 启动前端应用
-```bash
-cd packages/frontend
-npm run dev
-```
-
-3. 访问应用
-打开浏览器访问 `http://localhost:3000`
 
 ## 任务配置
 
@@ -169,6 +194,13 @@ V1.0.3: `2025-05-25 23:05`
 - 添加用户授权相关表结构，以及路由拦截
 - 添加用户登录、注册、退出功能
 - 其他代码优化
+
+V1.0.4: `2025-05-26 22:20`
+- 增强安全性，移除用户注册功能
+- 增加容器启动变量，初始管理员账号、密码 `USER_NAME`、`USER_PASSWORD` 
+- 个人信息修改和密码修改
+
+
 
 ### Bugs 
 1. AList 原路径，未编码导致API 调用异常，例如：`我的接收/【BD-ISO】`

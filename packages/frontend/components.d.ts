@@ -28,6 +28,7 @@ declare module 'vue' {
     NDataTable: typeof import('naive-ui')['NDataTable']
     NDatePicker: typeof import('naive-ui')['NDatePicker']
     NDialogProvider: typeof import('naive-ui')['NDialogProvider']
+    NDivider: typeof import('naive-ui')['NDivider']
     NDrawer: typeof import('naive-ui')['NDrawer']
     NDrawerContent: typeof import('naive-ui')['NDrawerContent']
     NDropdown: typeof import('naive-ui')['NDropdown']
@@ -60,5 +61,6 @@ declare module 'vue' {
     SetupForm: typeof import('./src/components/setup/SetupForm.vue')['default']
     SiderMenu: typeof import('./src/components/layout/SiderMenu.vue')['default']
     TaskItem: typeof import('./src/components/task/TaskItem.vue')['default']
+    UserInfoModal: typeof import('./src/components/user/UserInfoModal.vue')['default']
   }
 }

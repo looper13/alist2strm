@@ -6,8 +6,8 @@ import { setupLogger, httpLogger, logger } from '@/utils/logger.js'
 import { setupDatabase } from '@/database/index.js'
 import { setupRoutes } from '@/routes/index.js'
 import { initConfigCache } from '@/services/config-cache.service.js'
-import { alistService } from '@/services/alist.service.js'
 import { taskScheduler } from '@/services/task-scheduler.service.js'
+import { userService } from '@/services/user.service.js'
 
 
 const app: Express = express()
@@ -20,8 +20,11 @@ async function bootstrap() {
   // 设置数据库
   await setupDatabase()
 
+  // 初始化管理员用户
+  await userService.initAdminUser()
+
   // 中间件
-  app.use(httpLogger) // 添加日志中间件
+  app.use(httpLogger)
   app.use(express.json())
   app.use(express.urlencoded({ extended: true }))
 

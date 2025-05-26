@@ -46,8 +46,7 @@ ENV PORT=3210 \
     LOG_MAX_DAYS=30 \
     LOG_MAX_FILE_SIZE=10 \
     DB_BASE_DIR=/app/data/db \
-    DB_NAME=database.sqlite \ 
-    JWT_SECRET=63fe1d02ac6da7fe325f3e7545f9b954dc76f25495f73f6d0c0dc82ad44d5fd3
+    DB_NAME=database.sqlite
 
 # 脚本
 COPY builder/default.conf /etc/nginx/http.d/default.conf
