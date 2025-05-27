@@ -27,6 +27,7 @@ export class ConfigCacheService extends EventEmitter {
       configs.forEach(config => this.configCache.set(config.dataValues.code, config.dataValues.value))
       this.initialized = true
       logger.info.info('配置缓存初始化成功')
+      this.emit('configCacheInitialized')
     }
     catch (error) {
       logger.error.error('配置缓存初始化失败:', error)

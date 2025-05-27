@@ -1,4 +1,6 @@
-import { alistService } from '@/services/alist.service.js'
+// import { alistService } from '@/services/alist.service.js'
+import { alistService } from '@/services/alist/index.js'
+
 import { logger } from '@/utils/logger.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'

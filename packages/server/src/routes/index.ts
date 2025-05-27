@@ -1,5 +1,4 @@
 import type { Express, Request, Response } from 'express'
-import { alistRouter } from './alist.js'
 import { errorHandler, notFoundHandler } from '@/middlewares/error.js'
 import { configRouter } from './config.js'
 import { taskRouter } from './task.js'
@@ -19,7 +18,6 @@ export function setupRoutes(app: Express): void {
   })
 
   // 以下路由需要认证
-  app.use('/api/alist', auth, alistRouter)
   app.use('/api/configs', auth, configRouter)
   app.use('/api/tasks', auth, taskRouter)
   app.use('/api/task-logs', auth, taskLogRouter)
