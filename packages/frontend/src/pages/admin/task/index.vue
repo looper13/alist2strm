@@ -3,6 +3,7 @@ import type { DataTableColumns, FormRules } from 'naive-ui'
 import cronValidate from 'cron-validate'
 import { taskAPI } from '~/api/task'
 
+const { isMobile } = useMobile()
 // 状态定义
 const loading = ref(false)
 const showModal = ref(false)
@@ -291,7 +292,7 @@ const logColumns: DataTableColumns<Api.Task.Log> = [
   {
     title: '状态',
     key: 'status',
-    width: 100,
+    width: isMobile ? 70 : 100,
     render: (row) => {
       const statusMap = {
         running: { type: 'info', text: '运行中' },
@@ -300,48 +301,48 @@ const logColumns: DataTableColumns<Api.Task.Log> = [
         stopped: { type: 'warning', text: '已停止' },
       }
       const status = statusMap[row.status as keyof typeof statusMap] || { type: 'default', text: row.status }
-      return h(NTag, { type: status.type as any, size: 'small' }, { default: () => status.text })
+      return h(NTag, { type: status.type as any, size: 'small', style: isMobile ? 'padding: 0 4px;' : '' }, { default: () => status.text })
     },
   },
   {
     title: '开始时间',
     key: 'startTime',
-    width: 180,
-    render: row => h(NTime, { time: new Date(row.startTime), type: 'datetime' }),
+    width: isMobile ? 150 : 180,
+    render: row => h(NTime, { time: new Date(row.startTime), type: 'datetime', format: isMobile ? 'MM-dd HH:mm' : 'yyyy-MM-dd HH:mm:ss' }),
   },
   {
     title: '结束时间',
     key: 'endTime',
-    width: 180,
+    width: isMobile ? 150 : 180,
     render: row => row.endTime
-      ? h(NTime, { time: new Date(row.endTime), type: 'datetime' })
+      ? h(NTime, { time: new Date(row.endTime), type: 'datetime', format: isMobile ? 'MM-dd HH:mm' : 'yyyy-MM-dd HH:mm:ss' })
       : h(NText, { depth: 3 }, { default: () => '-' }),
   },
   {
     title: '总文件数',
     key: 'totalFile',
-    width: 100,
+    width: isMobile ? 70 : 100,
     align: 'right',
     render: (row) => {
-      return h(NTag, { type: 'info', size: 'small' }, { default: () => row.totalFile })
+      return h(NTag, { type: 'info', size: 'small', style: isMobile ? 'padding: 0 4px;' : '' }, { default: () => row.totalFile })
     },
   },
   {
     title: '已生成',
     key: 'generatedFile',
-    width: 100,
+    width: isMobile ? 70 : 100,
     align: 'right',
     render: (row) => {
-      return h(NTag, { type: 'success', size: 'small' }, { default: () => row.generatedFile })
+      return h(NTag, { type: 'success', size: 'small', style: isMobile ? 'padding: 0 4px;' : '' }, { default: () => row.generatedFile })
     },
   },
   {
     title: '已跳过',
     key: 'skipFile',
-    width: 100,
+    width: isMobile ? 70 : 100,
     align: 'right',
     render: (row) => {
-      return h(NTag, { type: 'warning', size: 'small' }, { default: () => row.skipFile })
+      return h(NTag, { type: 'warning', size: 'small', style: isMobile ? 'padding: 0 4px;' : '' }, { default: () => row.skipFile })
     },
   },
   {
@@ -425,15 +426,16 @@ onMounted(() => {
       preset="card"
       :close-on-esc="false"
       :mask-closable="false"
-      :style="{ width: '800px' }"
+      :style="{ width: isMobile ? '95%' : '800px' }"
     >
       <NForm
         ref="formRef"
         :model="formModel"
         :rules="rules"
-        label-placement="left"
-        label-width="100"
+        :label-placement="isMobile ? 'top' : 'left'"
+        :label-width="isMobile ? 'auto' : '100'"
         require-mark-placement="right-hanging"
+        :size="isMobile ? 'small' : 'medium'"
       >
         <NFormItem label="任务名称" path="name">
           <NInput v-model:value="formModel.name" placeholder="请输入任务名称">
@@ -471,21 +473,27 @@ onMounted(() => {
           </NInput>
         </NFormItem>
 
-        <div class="flex justify-start">
-          <NFormItem label="覆盖生成" path="overwrite">
-            <NSwitch v-model:value="formModel.overwrite" />
+        <div :class="isMobile ? 'space-y-4' : 'flex justify-start space-x-8'">
+          <NFormItem :label-width="isMobile ? 'auto' : '100'" label="覆盖生成" path="overwrite">
+            <div class="flex items-center space-x-2">
+              <NSwitch v-model:value="formModel.overwrite" />
+              <span class="text-sm text-gray-500">{{ formModel.overwrite ? '是' : '否' }}</span>
+            </div>
           </NFormItem>
-          <NFormItem label="是否启用" path="enabled">
-            <NSwitch v-model:value="formModel.enabled" />
+          <NFormItem :label-width="isMobile ? 'auto' : '100'" label="是否启用" path="enabled">
+            <div class="flex items-center space-x-2">
+              <NSwitch v-model:value="formModel.enabled" />
+              <span class="text-sm text-gray-500">{{ formModel.enabled ? '是' : '否' }}</span>
+            </div>
           </NFormItem>
         </div>
       </NForm>
       <template #footer>
-        <NSpace justify="end">
-          <NButton @click="showModal = false">
+        <NSpace :justify="isMobile ? 'center' : 'end'" :size="isMobile ? 'large' : 'medium'">
+          <NButton :block="isMobile" @click="showModal = false">
             取消
           </NButton>
-          <NButton type="primary" @click="handleSave">
+          <NButton :block="isMobile" type="primary" @click="handleSave">
             确定
           </NButton>
         </NSpace>
@@ -495,8 +503,9 @@ onMounted(() => {
     <!-- 日志查看抽屉 -->
     <NDrawer
       v-model:show="showLogDrawer"
-      placement="bottom"
-      :height="600"
+      :placement="isMobile ? 'right' : 'bottom'"
+      :height="isMobile ? '100%' : 600"
+      :width="isMobile ? '100%' : 'calc(100% - 48px)'"
       :trap-focus="false"
       :block-scroll="false"
     >
@@ -517,15 +526,20 @@ onMounted(() => {
             </NButton>
           </div>
         </template>
-        <NSpin :show="logLoading">
-          <NDataTable
-            :columns="logColumns"
-            remote
-            :max-height="420"
-            :data="taskLogs"
-            :pagination="logPagination"
-          />
-        </NSpin>
+        <div class="flex flex-col h-full">
+          <NSpin :show="logLoading">
+            <NDataTable
+              :columns="logColumns"
+              remote
+              :scroll-x="1000"
+              :max-height="isMobile ? 'calc(100vh - 180px)' : 420"
+              :data="taskLogs"
+              :pagination="logPagination"
+              :row-class-name="() => 'text-sm'"
+              size="small"
+            />
+          </NSpin>
+        </div>
       </NDrawerContent>
     </NDrawer>
   </NSpin>
