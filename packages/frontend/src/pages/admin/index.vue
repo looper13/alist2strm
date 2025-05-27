@@ -86,4 +86,5 @@ defineOptions({
 <route lang="yaml">
 name: home
 layout: default
+path: "/admin"
 </route>

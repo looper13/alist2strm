@@ -53,7 +53,7 @@ function handleSelect(key: string) {
         </div>
         <!-- 主题切换按钮和用户菜单 -->
         <div class="flex gap-4 items-center">
-          <button class="btn" @click="toggleTheme">
+          <button class="btn" cursor-pointer @click="toggleTheme">
             <div class="i-carbon-sun dark:i-carbon-moon text-xl" />
           </button>
           <NDropdown
