@@ -1,13 +1,11 @@
-import { getConfigCache } from './config-cache.service.js'
+import { configCache } from './config-cache.service.js'
 import { logger } from '@/utils/logger.js'
 import axios, { AxiosInstance } from 'axios'
-import type { ConfigCacheService } from './config-cache.service.js'
 
 class AlistService {
   private static instance: AlistService
   private client: AxiosInstance | undefined
   private initialized = false
-  private configCache: ConfigCacheService | undefined
   // 分页大小
   private perPage = 100
   // 最大重试次数
@@ -33,16 +31,8 @@ class AlistService {
 
   private async _initializeHttp() {
     try {
-      // 获取配置缓存实例
-      this.configCache = await getConfigCache()
-
       // 设置配置更新监听
-      this.configCache.on('configUpdated', async (data: { code: string }) => {
-        // 确保configCache已初始化
-        if (!this.configCache) {
-          this.configCache = await getConfigCache()
-        }
-
+      configCache.on('configUpdated', async (data: { code: string }) => {
         if ([
           'ALIST_HOST',
           'ALIST_TOKEN',
@@ -60,22 +50,22 @@ class AlistService {
               await this._initializeHttp()
               break
             case 'ALIST_PER_PAGE': {
-              const perPage = this.configCache.get('ALIST_PER_PAGE')
+              const perPage = configCache.get('ALIST_PER_PAGE')
               if (perPage) this.perPage = parseInt(perPage)
               break
             }
             case 'ALIST_REQ_RETRY_COUNT': {
-              const maxRetries = this.configCache.get('ALIST_REQ_RETRY_COUNT')
+              const maxRetries = configCache.get('ALIST_REQ_RETRY_COUNT')
               if (maxRetries) this.maxRetries = parseInt(maxRetries)
               break
             }
             case 'ALIST_REQ_RETRY_INTERVAL': {
-              const retryDelay = this.configCache.get('ALIST_REQ_RETRY_INTERVAL')
+              const retryDelay = configCache.get('ALIST_REQ_RETRY_INTERVAL')
               if (retryDelay) this.retryDelay = parseInt(retryDelay)
               break
             }
             case 'ALIST_REQ_INTERVAL': {
-              const reqDelay = this.configCache.get('ALIST_REQ_INTERVAL')
+              const reqDelay = configCache.get('ALIST_REQ_INTERVAL')
               if (reqDelay) this.reqDelay = parseInt(reqDelay)
               break
             }
@@ -93,12 +83,12 @@ class AlistService {
       // 如果已经初始化，且不是强制重新初始化，则直接返回
       if (this.initialized) return
 
-      const host = this.configCache.getRequired('ALIST_HOST')
-      const token = this.configCache.getRequired('ALIST_TOKEN')
-      const perPage = this.configCache.get('ALIST_PER_PAGE')
-      const maxRetries = this.configCache.get('ALIST_REQ_RETRY_COUNT')
-      const retryDelay = this.configCache.get('ALIST_REQ_RETRY_INTERVAL')
-      const reqDelay = this.configCache.get('ALIST_REQ_INTERVAL')
+      const host = configCache.getRequired('ALIST_HOST')
+      const token = configCache.getRequired('ALIST_TOKEN')
+      const perPage = configCache.get('ALIST_PER_PAGE')
+      const maxRetries = configCache.get('ALIST_REQ_RETRY_COUNT')
+      const retryDelay = configCache.get('ALIST_REQ_RETRY_INTERVAL')
+      const reqDelay = configCache.get('ALIST_REQ_INTERVAL')
 
       if (perPage)
         this.perPage = parseInt(perPage)

@@ -3,7 +3,7 @@ import { logger } from '@/utils/logger.js'
 import EventEmitter from 'events'
 
 export class ConfigCacheService extends EventEmitter {
-  private static instance: ConfigCacheService
+  private static _instance: ConfigCacheService | null = null
   private configCache: Map<string, string> = new Map()
   private initialized = false
 
@@ -11,17 +11,15 @@ export class ConfigCacheService extends EventEmitter {
     super()
   }
 
-  static async createInstance(): Promise<ConfigCacheService> {
-    if (!ConfigCacheService.instance) {
-      ConfigCacheService.instance = new ConfigCacheService()
-      await ConfigCacheService.instance.initialize()
+  static get instance(): ConfigCacheService {
+    if (!this._instance) {
+      this._instance = new ConfigCacheService()
     }
-    return ConfigCacheService.instance
+    return this._instance
   }
 
-  private async initialize(): Promise<void> {
-    if (this.initialized)
-      return
+  async initialize(): Promise<void> {
+    if (this.initialized) return
 
     try {
       const configs = await Config.findAll()
@@ -64,22 +62,12 @@ export class ConfigCacheService extends EventEmitter {
   isInitialized(): boolean {
     return this.initialized
   }
-
-  static async getInstance(): Promise<ConfigCacheService> {
-    return ConfigCacheService.createInstance()
-  }
-
-  static hasInstance(): boolean {
-    return !!ConfigCacheService.instance
-  }
 }
 
-// 导出一个初始化函数，用于应用启动时初始化配置缓存
-export const initConfigCache = async () => {
-  return await ConfigCacheService.createInstance()
-}
+// 导出单例实例
+export const configCache = ConfigCacheService.instance
 
-// 导出实例获取方法
-export const getConfigCache = async () => {
-  return await ConfigCacheService.getInstance()
+// 导出初始化函数
+export async function initConfigCache(): Promise<void> {
+  await configCache.initialize()
 } 

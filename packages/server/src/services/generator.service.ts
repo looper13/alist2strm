@@ -2,7 +2,7 @@ import { alistService } from '@/services/alist.service.js'
 import { logger } from '@/utils/logger.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { getConfigCache } from './config-cache.service.js'
+import { configCache } from './config-cache.service.js'
 import { FileHistoryService } from './file-history.service.js'
 import { ALIST_CONFIG, GENERATOR_CONFIG } from '@/constant/index.js'
 
@@ -59,7 +59,6 @@ export class GeneratorService {
     const sourceFilePath = this._normalizePath(path.join(currentPath, file.name))
     // 相对路径
     const relativePath = this._normalizePath(path.relative(sourcePath, currentPath))
-    const configCache = await getConfigCache()
     const isReplaceSuffix = configCache.get(GENERATOR_CONFIG.REPLACE_SUFFIX) === 'Y'
 
     // 计算两种可能的目标路径
@@ -151,8 +150,7 @@ export class GeneratorService {
   private async _generateStrmFiles(tasks: App.Generate.Task[]): Promise<void> {
     if (tasks.length === 0) return
 
-    const configCache = await getConfigCache()
-    const alistHost = configCache.get(ALIST_CONFIG.ALIST_REPLACE_HOST) ||  configCache.getRequired(ALIST_CONFIG.ALIST_HOST)
+    const alistHost = configCache.get(ALIST_CONFIG.ALIST_REPLACE_HOST) || configCache.getRequired(ALIST_CONFIG.ALIST_HOST)
     const chunks = this._chunkArray(tasks, 500)
     const urlEncode = configCache.get(GENERATOR_CONFIG.URL_ENCODE)
 
