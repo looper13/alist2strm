@@ -9,6 +9,10 @@ services:
     volumes:
       - ./data:/app/data
     environment:
+      - 'PUID=1000'
+      - 'PGID=100'
+      - 'UMASK=022'
+      - 'TZ=Asia/Shanghai'
       # 服务器配置
       - PORT=3210
       # 日志配置

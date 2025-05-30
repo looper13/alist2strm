@@ -1,5 +1,6 @@
 # 基础镜像
-FROM node:22.15.1-alpine AS base
+FROM node:22.16.0-alpine AS base
+
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
     corepack enable && corepack prepare pnpm@10.11.0 --activate && \
     pnpm config set registry https://registry.npmmirror.com && \
@@ -7,7 +8,8 @@ RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
     python3 \
     build-base \
     sqlite-dev \
-    musl-dev
+    musl-dev \
+    tzdata
 WORKDIR /app
 
 # ---------- 后端构建 ----------
@@ -30,23 +32,30 @@ COPY packages/frontend/ ./
 RUN pnpm install --frozen-lockfile --force && pnpm run build 
 
 # ---------- 最终运行镜像 ----------
-FROM node:22.15.1-alpine
+FROM node:22.16.0-alpine
 WORKDIR /app
 
-# nginx
+# nginx 和必要工具
 RUN apk update && \
-    apk add --no-cache nginx && \
+    apk add --no-cache nginx shadow su-exec tzdata && \
     rm -rf /var/cache/apk/*
 
 # 默认环境
 ENV PORT=3210 \
+    TZ=Asia/Shanghai \
     LOG_BASE_DIR=/app/data/logs \
     LOG_LEVEL=info \
     LOG_APP_NAME=alist2strm \
     LOG_MAX_DAYS=30 \
     LOG_MAX_FILE_SIZE=10 \
     DB_BASE_DIR=/app/data/db \
-    DB_NAME=database.sqlite
+    DB_NAME=database.sqlite \
+    PUID=1000 \
+    PGID=1000 \
+    UMASK=022
+
+# 创建必要的目录
+RUN mkdir -p /app/data/logs/nginx /app/data/db
 
 # 脚本
 COPY builder/default.conf /etc/nginx/http.d/default.conf
