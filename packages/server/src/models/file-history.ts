@@ -47,4 +47,30 @@ export class FileHistory extends BaseModel {
     comment: '文件后缀',
   })
   declare fileSuffix: string
+
+  /**
+   * 批量删除文件历史记录
+   * @param ids ID列表
+   * @returns 删除的记录数
+   */
+  static async bulkDelete(ids: number[]): Promise<number> {
+    const result = await this.destroy({
+      where: {
+        id: ids,
+      },
+    })
+    return result
+  }
+
+  /**
+   * 清空所有文件历史记录
+   * @returns 删除的记录数
+   */
+  static async clearAll(): Promise<number> {
+    const result = await this.destroy({
+      where: {},
+      truncate: true,
+    })
+    return result
+  }
 } 

@@ -80,4 +80,36 @@ router.get('/check', async (req: Request, res: Response, next: NextFunction) => 
   }
 })
 
+// 批量删除文件历史记录
+router.delete('/', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { ids } = req.body
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new HttpError('请选择要删除的记录', 400)
+    }
+    const count = await fileHistoryService.bulkDelete(ids)
+    success(res, { count })
+  }
+  catch (err) {
+    if (err instanceof HttpError)
+      next(err)
+    else {
+      logger.error.error('批量删除文件历史记录失败:', err)
+      next(new HttpError('批量删除文件历史记录失败', 500))
+    }
+  }
+})
+
+// 清空所有文件历史记录
+router.delete('/clear', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const count = await fileHistoryService.clearAll()
+    success(res, { count })
+  }
+  catch (err) {
+    logger.error.error('清空文件历史记录失败:', err)
+    next(new HttpError('清空文件历史记录失败', 500))
+  }
+})
+
 export { router as fileHistoryRouter } 

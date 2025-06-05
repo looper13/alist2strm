@@ -111,6 +111,23 @@ export class FileHistoryService {
       throw error
     }
   }
+
+  /**
+   * 批量删除文件历史记录
+   * @param ids ID列表
+   * @returns 删除的记录数
+   */
+  async bulkDelete(ids: number[]): Promise<number> {
+    return await FileHistory.bulkDelete(ids)
+  }
+
+  /**
+   * 清空所有文件历史记录
+   * @returns 删除的记录数
+   */
+  async clearAll(): Promise<number> {
+    return await FileHistory.clearAll()
+  }
 }
 
 export const fileHistoryService = new FileHistoryService() 

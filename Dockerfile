@@ -1,8 +1,7 @@
 # 基础镜像
 FROM node:22.16.0-alpine AS base
 
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
-    corepack enable && corepack prepare pnpm@10.11.0 --activate && \
+RUN corepack enable && corepack prepare pnpm@10.11.0 --activate && \
     pnpm config set registry https://registry.npmmirror.com && \
     apk add --no-cache \
     python3 \
