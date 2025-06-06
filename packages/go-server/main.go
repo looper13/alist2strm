@@ -74,6 +74,15 @@ func main() {
 			auth.GET("/config/:id", handler.GetConfig)
 			auth.GET("/config/code/:code", handler.GetConfigByCode)
 			auth.GET("/configs", handler.ListConfigs)
+
+			// 任务相关路由
+			auth.POST("/task", handler.CreateTask)
+			auth.PUT("/task/:id", handler.UpdateTask)
+			auth.DELETE("/task/:id", handler.DeleteTask)
+			auth.GET("/task/:id", handler.GetTask)
+			auth.GET("/tasks", handler.ListTasks)
+			auth.PUT("/task/:id/status", handler.SetTaskStatus)
+			auth.PUT("/task/:id/reset", handler.ResetTaskStatus)
 		}
 	}
 

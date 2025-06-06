@@ -1,22 +1,4 @@
-CREATE TABLE `tasks` (
-    `id` INTEGER PRIMARY KEY,
-    `createdAt` DATETIME,
-    `updatedAt` DATETIME,
-    `name` VARCHAR(255) NOT NULL,
-    `sourcePath` VARCHAR(255) NOT NULL,
-    `targetPath` VARCHAR(255) NOT NULL,
-    `fileSuffix` VARCHAR(255) NOT NULL,
-    `overwrite` TINYINT (1) NOT NULL DEFAULT 0,
-    `enabled` TINYINT (1) NOT NULL DEFAULT 1,
-    `cron` VARCHAR(255),
-    `running` TINYINT (1) NOT NULL DEFAULT 0,
-    `lastRunAt` DATETIME,
-    -- 新增字段
-    `downloadMetadata` TINYINT(1) NOT NULL DEFAULT 0,  -- 是否下载刮削数据
-    `downloadSubtitle` TINYINT(1) NOT NULL DEFAULT 0,  -- 是否下载字幕
-    `metadataExtensions` VARCHAR(255) DEFAULT '.nfo,.jpg,.png',  -- 刮削数据文件扩展名
-    `subtitleExtensions` VARCHAR(255) DEFAULT '.srt,.ass,.ssa'   -- 字幕文件扩展名
-);
+
 -- 配置表
 CREATE TABLE `configs` (
 	`id` INTEGER PRIMARY KEY,
@@ -41,20 +23,23 @@ CREATE TABLE `users` (
 
 -- 任务表
 CREATE TABLE `tasks` (
-	`id` INTEGER PRIMARY KEY,
-	`createdAt` DATETIME,
-	`updatedAt` DATETIME,
-	`name` VARCHAR(255) NOT NULL,
-	`sourcePath` VARCHAR(255) NOT NULL,
-	`targetPath` VARCHAR(255) NOT NULL,
-	`fileSuffix` VARCHAR(255) NOT NULL,
-	`overwrite` TINYINT (1) NOT NULL DEFAULT 0,
-	`enabled` TINYINT (1) NOT NULL DEFAULT 1,
-	`cron` VARCHAR(255),
-	`running` TINYINT (1) NOT NULL DEFAULT 0,
-	`lastRunAt` DATETIME
+    `id` INTEGER PRIMARY KEY,
+    `createdAt` DATETIME,
+    `updatedAt` DATETIME,
+    `name` VARCHAR(255) NOT NULL,
+    `sourcePath` VARCHAR(255) NOT NULL,
+    `targetPath` VARCHAR(255) NOT NULL,
+    `fileSuffix` VARCHAR(255) NOT NULL,
+    `overwrite` TINYINT (1) NOT NULL DEFAULT 0,
+    `enabled` TINYINT (1) NOT NULL DEFAULT 1,
+    `cron` VARCHAR(255),
+    `running` TINYINT (1) NOT NULL DEFAULT 0,
+    `lastRunAt` DATETIME,
+    `downloadMetadata` TINYINT(1) NOT NULL DEFAULT 0,  -- 是否下载刮削数据
+    `downloadSubtitle` TINYINT(1) NOT NULL DEFAULT 0,  -- 是否下载字幕
+    `metadataExtensions` VARCHAR(255) DEFAULT '.nfo,.jpg,.png',  -- 刮削数据文件扩展名
+    `subtitleExtensions` VARCHAR(255) DEFAULT '.srt,.ass,.ssa'   -- 字幕文件扩展名
 );
-
 -- 任务日志表
 CREATE TABLE `task_logs` (
 	`id` INTEGER PRIMARY KEY,
@@ -68,7 +53,6 @@ CREATE TABLE `task_logs` (
 	`totalFile` INTEGER NOT NULL DEFAULT '0',
 	`generatedFile` INTEGER NOT NULL DEFAULT '0',
 	`skipFile` INTEGER NOT NULL DEFAULT 0,
-	-- 新增字段
 	`metadataCount` INTEGER NOT NULL DEFAULT 0,  -- 下载的刮削数据文件数
 	`subtitleCount` INTEGER NOT NULL DEFAULT 0    -- 下载的字幕文件数
 );
