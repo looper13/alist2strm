@@ -84,6 +84,7 @@ func main() {
 			auth.GET("/tasks/all", handler.ListTasks)
 			auth.PUT("/tasks/:id/status", handler.SetTaskStatus)
 			auth.PUT("/tasks/:id/reset", handler.ResetTaskStatus)
+			auth.POST("/tasks/:id/execute", handler.ExecuteTaskHandler)
 		}
 	}
 
