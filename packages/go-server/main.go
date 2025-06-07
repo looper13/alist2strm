@@ -40,7 +40,7 @@ func main() {
 	utils.Info("数据库初始化完成")
 
 	// 创建默认用户
-	userService := service.NewUserService(model.DB, utils.Logger)
+	userService := service.GetUserService()
 	if err := userService.CreateDefaultUser(
 		config.GlobalConfig.USER.UserName,
 		config.GlobalConfig.USER.UserPassword,
@@ -57,32 +57,33 @@ func main() {
 	api := r.Group("/api")
 	{
 		// 公开路由
-		api.POST("/register", handler.Register)
-		api.POST("/login", handler.Login)
+		api.POST("/register", handler.RegisterHandler)
+		api.POST("/login", handler.LoginHandler)
 
 		// 需要认证的路由
 		auth := api.Group("/")
 		auth.Use(middleware.AuthMiddleware())
 		{
 			// 用户相关路由
-			auth.GET("/user/info", handler.GetUserInfo)
+			auth.GET("/users/info", handler.GetUserInfoHandler)
+			auth.PUT("/users/:id", handler.UpdateUserInfoHandler)
 
 			// 配置相关路由
-			auth.POST("/config", handler.CreateConfig)
-			auth.PUT("/config/:id", handler.UpdateConfig)
-			auth.DELETE("/config/:id", handler.DeleteConfig)
-			auth.GET("/config/:id", handler.GetConfig)
-			auth.GET("/config/code/:code", handler.GetConfigByCode)
-			auth.GET("/configs", handler.ListConfigs)
+			auth.POST("/configs", handler.CreateConfig)
+			auth.PUT("/configs/:id", handler.UpdateConfig)
+			auth.DELETE("/configs/:id", handler.DeleteConfig)
+			auth.GET("/configs/:id", handler.GetConfig)
+			auth.GET("/configs/code/:code", handler.GetConfigByCode)
+			auth.GET("/configs/all", handler.ListConfigs)
 
 			// 任务相关路由
-			auth.POST("/task", handler.CreateTask)
-			auth.PUT("/task/:id", handler.UpdateTask)
-			auth.DELETE("/task/:id", handler.DeleteTask)
-			auth.GET("/task/:id", handler.GetTask)
-			auth.GET("/tasks", handler.ListTasks)
-			auth.PUT("/task/:id/status", handler.SetTaskStatus)
-			auth.PUT("/task/:id/reset", handler.ResetTaskStatus)
+			auth.POST("/tasks", handler.CreateTask)
+			auth.PUT("/tasks/:id", handler.UpdateTask)
+			auth.DELETE("/tasks/:id", handler.DeleteTask)
+			auth.GET("/tasks/:id", handler.GetTask)
+			auth.GET("/tasks/all", handler.ListTasks)
+			auth.PUT("/tasks/:id/status", handler.SetTaskStatus)
+			auth.PUT("/tasks/:id/reset", handler.ResetTaskStatus)
 		}
 	}
 

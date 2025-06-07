@@ -40,8 +40,9 @@ export class HttpClient {
     this.instance.interceptors.response.use(
       (response) => {
         const res = response.data as Api.Common.HttpResponse
-        if (res.code === 0)
+        if (res.code === 0 || res.code === 200) {
           return response
+        }
         return Promise.reject(res)
       },
       (error) => {

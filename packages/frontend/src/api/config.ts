@@ -27,7 +27,7 @@ export class ConfigAPI {
   /**
    * 查询所有配置
    */
-  async findAll() {
+  async configs() {
     return http.get<Api.Config.Record[]>(`${this.baseUrl}/all`)
   }
 }

@@ -27,6 +27,7 @@ CREATE TABLE `tasks` (
     `createdAt` DATETIME,
     `updatedAt` DATETIME,
     `name` VARCHAR(255) NOT NULL,
+    `mediaType` VARCHAR(50) NOT NULL DEFAULT 'movie',  -- 媒体类型：movie/tv
     `sourcePath` VARCHAR(255) NOT NULL,
     `targetPath` VARCHAR(255) NOT NULL,
     `fileSuffix` VARCHAR(255) NOT NULL,

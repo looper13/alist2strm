@@ -64,6 +64,8 @@ export default defineConfig({
             'NSwitch',
             'NTooltip',
             'NFloatButton',
+            'NTabs',
+            'NTabPane',
           ],
         },
       ],

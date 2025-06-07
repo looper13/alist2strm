@@ -9,6 +9,7 @@ type Task struct {
 	CreatedAt          time.Time  `json:"createdAt"`
 	UpdatedAt          time.Time  `json:"updatedAt"`
 	Name               string     `gorm:"not null" json:"name"`
+	MediaType          string     `gorm:"not null;default:movie" json:"mediaType"`
 	SourcePath         string     `gorm:"not null" json:"sourcePath"`
 	TargetPath         string     `gorm:"not null" json:"targetPath"`
 	FileSuffix         string     `gorm:"not null" json:"fileSuffix"`

@@ -39,6 +39,10 @@ const { isMobile } = useMobile()
           <span>{{ item.cron || '未设置定时' }}</span>
         </div>
         <div class="flex gap-1 items-center">
+          <div class="i-material-symbols:movie" mr-1 />
+          <span>{{ item.mediaType === 'movie' ? '电影' : '电视剧' }}</span>
+        </div>
+        <div class="flex gap-1 items-center">
           <div class="i-ri:folder-line" mr-1 />
           <span class="truncate" :title="item.sourcePath">{{ item.sourcePath }}</span>
         </div>
@@ -46,6 +50,59 @@ const { isMobile } = useMobile()
           <div class="i-ri:folder-transfer-line" mr-1 />
           <span class="truncate" :title="item.targetPath">{{ item.targetPath }}</span>
         </div>
+      </div>
+
+      <!-- 扩展功能信息 -->
+      <div class="mt-2 flex flex-wrap gap-2">
+        <NTooltip :trigger="isMobile ? 'click' : 'hover'">
+          <template #trigger>
+            <NTag
+              size="small"
+              :type="item.downloadMetadata ? 'success' : 'default'"
+              :style="!item.downloadMetadata ? 'text-decoration: line-through; opacity: 0.6;' : ''"
+            >
+              <template #icon>
+                <div :class="item.downloadMetadata ? 'i-ri:information-line' : 'i-ri:forbid-line'" />
+              </template>
+              <span class="flex items-center gap-1">
+                元数据
+                <div v-if="item.downloadMetadata" class="i-ri:check-line text-green-500" />
+                <div v-else class="i-ri:close-line text-red-500" />
+              </span>
+            </NTag>
+          </template>
+          <div class="text-center">
+            {{ item.downloadMetadata ? '已开启元数据下载' : '已关闭元数据下载' }}
+            <template v-if="item.downloadMetadata">
+              <br />支持格式：{{ item.metadataExtensions || '.nfo,.jpg,.png' }}
+            </template>
+          </div>
+        </NTooltip>
+
+        <NTooltip :trigger="isMobile ? 'click' : 'hover'">
+          <template #trigger>
+            <NTag
+              size="small"
+              :type="item.downloadSubtitle ? 'success' : 'default'"
+              :style="!item.downloadSubtitle ? 'text-decoration: line-through; opacity: 0.6;' : ''"
+            >
+              <template #icon>
+                <div :class="item.downloadSubtitle ? 'i-ri:subtitle-line' : 'i-ri:forbid-line'" />
+              </template>
+              <span class="flex items-center gap-1">
+                字幕
+                <div v-if="item.downloadSubtitle" class="i-ri:check-line text-green-500" />
+                <div v-else class="i-ri:close-line text-red-500" />
+              </span>
+            </NTag>
+          </template>
+          <div class="text-center">
+            {{ item.downloadSubtitle ? '已开启字幕下载' : '已关闭字幕下载' }}
+            <template v-if="item.downloadSubtitle">
+              <br />支持格式：{{ item.subtitleExtensions || '.srt,.ass,.ssa' }}
+            </template>
+          </div>
+        </NTooltip>
       </div>
     </div>
 

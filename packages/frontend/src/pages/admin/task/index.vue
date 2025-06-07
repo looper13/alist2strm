@@ -41,12 +41,18 @@ const searchForm = reactive({
 const formRef = ref<any>(null)
 const formModel = ref<Api.Task.Create>({
   name: '',
+  mediaType: 'movie',
   sourcePath: '',
   targetPath: '',
   fileSuffix: '',
   overwrite: false,
   enabled: true,
   cron: '',
+
+  downloadMetadata: false,
+  metadataExtensions: '',
+  downloadSubtitle: false,
+  subtitleExtensions: '',
 })
 
 // 文件后缀验证规则
@@ -123,12 +129,17 @@ function handleCreate() {
   currentId.value = null
   formModel.value = {
     name: '',
+    mediaType: 'movie',
     sourcePath: '',
     targetPath: '',
     fileSuffix: '',
     overwrite: false,
     enabled: true,
     cron: '',
+    downloadMetadata: false,
+    metadataExtensions: '',
+    downloadSubtitle: false,
+    subtitleExtensions: '',
   }
   showModal.value = true
 }
@@ -139,6 +150,7 @@ async function handleEdit(row: Api.Task.Record) {
     isEdit.value = true
     currentId.value = row.id
     formModel.value = {
+      mediaType: row.mediaType || 'movie',
       name: row.name,
       sourcePath: row.sourcePath,
       targetPath: row.targetPath,
@@ -146,6 +158,10 @@ async function handleEdit(row: Api.Task.Record) {
       overwrite: row.overwrite,
       enabled: row.enabled,
       cron: row.cron || '',
+      downloadMetadata: row.downloadMetadata || false,
+      metadataExtensions: row.metadataExtensions || '',
+      downloadSubtitle: row.downloadSubtitle || false,
+      subtitleExtensions: row.subtitleExtensions || '',
     }
     showModal.value = true
   }
@@ -159,6 +175,7 @@ function handleCopy(row: Api.Task.Record) {
   isEdit.value = false
   currentId.value = null
   formModel.value = {
+    mediaType: row.mediaType || 'movie',
     name: `${row.name}_复制`,
     sourcePath: row.sourcePath,
     targetPath: row.targetPath,
@@ -166,6 +183,10 @@ function handleCopy(row: Api.Task.Record) {
     overwrite: row.overwrite,
     enabled: row.enabled,
     cron: row.cron || '',
+    downloadMetadata: row.downloadMetadata || false,
+    metadataExtensions: row.metadataExtensions || '',
+    downloadSubtitle: row.downloadSubtitle || false,
+    subtitleExtensions: row.subtitleExtensions || '',
   }
   showModal.value = true
 }
@@ -183,6 +204,11 @@ async function handleSave() {
         overwrite: formModel.value.overwrite,
         enabled: formModel.value.enabled,
         cron: formModel.value.cron,
+        mediaType: formModel.value.mediaType,
+        downloadMetadata: formModel.value.downloadMetadata,
+        metadataExtensions: formModel.value.metadataExtensions,
+        downloadSubtitle: formModel.value.downloadSubtitle,
+        subtitleExtensions: formModel.value.subtitleExtensions,
       } as Api.Task.Update)
     }
     else {
@@ -426,14 +452,14 @@ onMounted(() => {
       preset="card"
       :close-on-esc="false"
       :mask-closable="false"
-      :style="{ width: isMobile ? '95%' : '800px' }"
+      :style="{ width: isMobile ? '100%' : '800px' }"
     >
       <NForm
         ref="formRef"
         :model="formModel"
         :rules="rules"
         :label-placement="isMobile ? 'top' : 'left'"
-        :label-width="isMobile ? 'auto' : '100'"
+        :label-width="isMobile ? 'auto' : '120'"
         require-mark-placement="right-hanging"
         :size="isMobile ? 'small' : 'medium'"
       >
@@ -465,6 +491,19 @@ onMounted(() => {
             </template>
           </NInput>
         </NFormItem>
+        <NFormItem label="媒体类型" path="mediaType">
+          <NRadioGroup v-model:value="formModel.mediaType">
+            <NSpace>
+              <NRadio value="movie">
+                电影
+              </NRadio>
+              <NRadio value="tv">
+                电视剧
+              </NRadio>
+            </NSpace>
+          </NRadioGroup>
+        </NFormItem>
+
         <NFormItem label="cron表达式" path="cron">
           <NInput v-model:value="formModel.cron" placeholder="*/5 * * * *">
             <template #prefix>
@@ -473,18 +512,65 @@ onMounted(() => {
           </NInput>
         </NFormItem>
 
-        <div :class="isMobile ? 'space-y-4' : 'flex justify-start space-x-8'">
-          <NFormItem :label-width="isMobile ? 'auto' : '100'" label="覆盖生成" path="overwrite">
-            <div class="flex items-center space-x-2">
-              <NSwitch v-model:value="formModel.overwrite" />
-              <span class="text-sm text-gray-500">{{ formModel.overwrite ? '是' : '否' }}</span>
-            </div>
+        <div class="space-y-4">
+          <div :class="isMobile ? 'space-y-4' : 'flex justify-start space-x-8'">
+            <NFormItem :label-width="isMobile ? 'auto' : '120'" label="覆盖生成" path="overwrite">
+              <div class="flex items-center space-x-2">
+                <NSwitch v-model:value="formModel.overwrite" />
+                <span class="text-sm text-gray-500">{{ formModel.overwrite ? '是' : '否' }}</span>
+              </div>
+            </NFormItem>
+            <NFormItem :label-width="isMobile ? 'auto' : '100'" label="是否启用" path="enabled">
+              <div class="flex items-center space-x-2">
+                <NSwitch v-model:value="formModel.enabled" />
+                <span class="text-sm text-gray-500">{{ formModel.enabled ? '是' : '否' }}</span>
+              </div>
+            </NFormItem>
+          </div>
+
+          <div :class="isMobile ? 'space-y-4' : 'flex justify-start space-x-8'">
+            <NFormItem :label-width="isMobile ? 'auto' : '120'" label="下载元数据" path="downloadMetadata">
+              <div class="flex items-center space-x-2">
+                <NSwitch v-model:value="formModel.downloadMetadata" />
+                <span class="text-sm text-gray-500">{{ formModel.downloadMetadata ? '是' : '否' }}</span>
+              </div>
+            </NFormItem>
+            <NFormItem :label-width="isMobile ? 'auto' : '100'" label="下载字幕" path="downloadSubtitle">
+              <div class="flex items-center space-x-2">
+                <NSwitch v-model:value="formModel.downloadSubtitle" />
+                <span class="text-sm text-gray-500">{{ formModel.downloadSubtitle ? '是' : '否' }}</span>
+              </div>
+            </NFormItem>
+          </div>
+
+          <NFormItem
+            v-if="formModel.downloadMetadata"
+            label="元数据扩展名"
+            path="metadataExtensions"
+          >
+            <NInput
+              v-model:value="formModel.metadataExtensions"
+              placeholder=".nfo,.jpg,.png"
+            >
+              <template #prefix>
+                <div class="i-ri:information-line" />
+              </template>
+            </NInput>
           </NFormItem>
-          <NFormItem :label-width="isMobile ? 'auto' : '100'" label="是否启用" path="enabled">
-            <div class="flex items-center space-x-2">
-              <NSwitch v-model:value="formModel.enabled" />
-              <span class="text-sm text-gray-500">{{ formModel.enabled ? '是' : '否' }}</span>
-            </div>
+
+          <NFormItem
+            v-if="formModel.downloadSubtitle"
+            label="字幕扩展名"
+            path="subtitleExtensions"
+          >
+            <NInput
+              v-model:value="formModel.subtitleExtensions"
+              placeholder=".srt,.ass,.ssa"
+            >
+              <template #prefix>
+                <div class="i-ri:subtitle-line" />
+              </template>
+            </NInput>
           </NFormItem>
         </div>
       </NForm>

@@ -83,11 +83,10 @@ declare namespace Api {
       name: string
       code: string
       value: string
-      description?: strin
     }>
 
-    type Create = Pick<Config, 'name' | 'code' | 'value' | 'description'>
-    type Update = Pick<Config, 'id' | 'name' | 'code' | 'value' | 'description'>
+    type Create = Pick<Config, 'name' | 'code' | 'value'>
+    type Update = Pick<Config, 'name' | 'code' | 'value'>
 
   }
 
@@ -95,6 +94,7 @@ declare namespace Api {
   namespace Task {
     type Record = Common.CommonRecord<{
       name: string
+      mediaType: 'movie' | 'tv'
       sourcePath: string
       targetPath: string
       fileSuffix: string
@@ -103,11 +103,16 @@ declare namespace Api {
       cron?: string
       running: boolean
       lastRunAt?: string
+
+      downloadMetadata: boolean
+      metadataExtensions: string
+      downloadSubtitle: boolean
+      subtitleExtensions: string
     }>
 
     type Query = Pick<Record, 'name' | 'enabled' | 'overwrite'>
-    type Update = Pick<Record, 'id' | 'name' | 'sourcePath' | 'targetPath' | 'fileSuffix' | 'overwrite' | 'enabled' | 'cron'>
-    type Create = Pick<Record, 'name' | 'sourcePath' | 'targetPath' | 'fileSuffix' | 'overwrite' | 'enabled' | 'cron'>
+    type Update = Pick<Record, 'id' | 'name' | 'sourcePath' | 'targetPath' | 'fileSuffix' | 'overwrite' | 'enabled' | 'cron' | 'mediaType' | 'downloadMetadata' | 'metadataExtensions' | 'downloadSubtitle' | 'subtitleExtensions'>
+    type Create = Pick<Record, 'name' | 'sourcePath' | 'targetPath' | 'fileSuffix' | 'overwrite' | 'enabled' | 'cron' | 'mediaType' | 'downloadMetadata' | 'metadataExtensions' | 'downloadSubtitle' | 'subtitleExtensions'>
 
     type Log = Common.CommonRecord<{
       taskId: number

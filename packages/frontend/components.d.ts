@@ -8,9 +8,11 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AlistConfig: typeof import('./src/components/config/AlistConfig.vue')['default']
     AppProvider: typeof import('./src/components/AppProvider.vue')['default']
     BaseLayout: typeof import('./src/components/layout/BaseLayout.vue')['default']
     ConfigForm: typeof import('./src/components/config/ConfigForm.vue')['default']
+    ConfigPanel: typeof import('./src/components/config/ConfigPanel.vue')['default']
     copy: typeof import('./src/components/layout/SiderMenu copy.vue')['default']
     Footer: typeof import('./src/components/layout/Footer.vue')['default']
     IconCollapseLeft: typeof import('./src/components/icons/IconCollapseLeft.vue')['default']
@@ -50,9 +52,13 @@ declare module 'vue' {
     NModal: typeof import('naive-ui')['NModal']
     NNotificationProvider: typeof import('naive-ui')['NNotificationProvider']
     NPopconfirm: typeof import('naive-ui')['NPopconfirm']
+    NRadio: typeof import('naive-ui')['NRadio']
+    NRadioGroup: typeof import('naive-ui')['NRadioGroup']
     NSpace: typeof import('naive-ui')['NSpace']
     NSpin: typeof import('naive-ui')['NSpin']
     NSwitch: typeof import('naive-ui')['NSwitch']
+    NTabPane: typeof import('naive-ui')['NTabPane']
+    NTabs: typeof import('naive-ui')['NTabs']
     NTag: typeof import('naive-ui')['NTag']
     NTime: typeof import('naive-ui')['NTime']
     NTooltip: typeof import('naive-ui')['NTooltip']
@@ -60,6 +66,7 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     SetupForm: typeof import('./src/components/setup/SetupForm.vue')['default']
     SiderMenu: typeof import('./src/components/layout/SiderMenu.vue')['default']
+    StrmConfig: typeof import('./src/components/config/StrmConfig.vue')['default']
     TaskItem: typeof import('./src/components/task/TaskItem.vue')['default']
     UserInfoModal: typeof import('./src/components/user/UserInfoModal.vue')['default']
   }

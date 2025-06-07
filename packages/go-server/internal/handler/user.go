@@ -3,54 +3,78 @@ package handler
 import (
 	"alist2strm/internal/service"
 	"alist2strm/internal/utils"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
-func Register(c *gin.Context) {
+// RegisterHandler 处理用户注册请求
+func RegisterHandler(c *gin.Context) {
 	var req service.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, utils.NewErrorResponse(http.StatusBadRequest, err.Error()))
+		utils.ResponseError(c, "参数错误")
 		return
 	}
 
-	if err := service.Register(&req); err != nil {
-		c.JSON(http.StatusBadRequest, utils.NewErrorResponse(http.StatusBadRequest, err.Error()))
+	if err := service.GetUserService().Register(&req); err != nil {
+		utils.ResponseError(c, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, utils.NewSuccessResponse("注册成功"))
+	utils.ResponseSuccessWithMessage(c, "注册成功", nil)
 }
 
-func Login(c *gin.Context) {
+// LoginHandler 处理用户登录请求
+func LoginHandler(c *gin.Context) {
 	var req service.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, utils.NewErrorResponse(http.StatusBadRequest, err.Error()))
+		utils.ResponseError(c, "参数错误")
 		return
 	}
 
-	resp, err := service.Login(&req)
+	resp, err := service.GetUserService().Login(&req)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, utils.NewErrorResponse(http.StatusUnauthorized, err.Error()))
+		utils.ResponseError(c, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, utils.NewSuccessResponse(resp))
+	utils.ResponseSuccess(c, resp)
 }
 
-func GetUserInfo(c *gin.Context) {
-	userID, exists := c.Get("userID")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, utils.NewErrorResponse(http.StatusUnauthorized, "user not found in context"))
+// GetUserInfoHandler 获取用户信息
+func GetUserInfoHandler(c *gin.Context) {
+	userID := utils.GetContextUserID(c)
+	if userID == 0 {
+		utils.ResponseError(c, "未登录")
 		return
 	}
 
-	resp, err := service.GetUserInfo(userID.(uint))
+	userInfo, err := service.GetUserService().GetUserInfo(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, utils.NewErrorResponse(http.StatusInternalServerError, err.Error()))
+		utils.ResponseError(c, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, utils.NewSuccessResponse(resp))
+	utils.ResponseSuccess(c, userInfo)
+}
+
+// UpdateUserInfoHandler 更新用户信息
+func UpdateUserInfoHandler(c *gin.Context) {
+	userID := utils.GetContextUserID(c)
+	if userID == 0 {
+		utils.ResponseError(c, "未登录")
+		return
+	}
+
+	var req service.UpdateUserInfoRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ResponseError(c, "参数错误")
+		return
+	}
+
+	if err := service.GetUserService().UpdateUserInfo(userID, &req); err != nil {
+		utils.ResponseError(c, err.Error())
+		return
+	}
+
+	utils.ResponseSuccessWithMessage(c, "更新成功", nil)
 }

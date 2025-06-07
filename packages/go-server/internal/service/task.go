@@ -2,7 +2,9 @@ package service
 
 import (
 	"alist2strm/internal/model"
+	"alist2strm/internal/utils"
 	"errors"
+	"sync"
 
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -13,8 +15,14 @@ type TaskService struct {
 	logger *zap.Logger
 }
 
+var (
+	taskService *TaskService
+	taskOnce    sync.Once
+)
+
 type CreateTaskRequest struct {
 	Name               string `json:"name" binding:"required"`
+	MediaType          string `json:"mediaType" binding:"required,oneof=movie tv"`
 	SourcePath         string `json:"sourcePath" binding:"required"`
 	TargetPath         string `json:"targetPath" binding:"required"`
 	FileSuffix         string `json:"fileSuffix" binding:"required"`
@@ -29,6 +37,7 @@ type CreateTaskRequest struct {
 
 type UpdateTaskRequest struct {
 	Name               *string `json:"name"`
+	MediaType          *string `json:"mediaType" binding:"omitempty,oneof=movie tv"`
 	SourcePath         *string `json:"sourcePath"`
 	TargetPath         *string `json:"targetPath"`
 	FileSuffix         *string `json:"fileSuffix"`
@@ -41,17 +50,22 @@ type UpdateTaskRequest struct {
 	SubtitleExtensions *string `json:"subtitleExtensions"`
 }
 
-func NewTaskService(db *gorm.DB, logger *zap.Logger) *TaskService {
-	return &TaskService{
-		db:     db,
-		logger: logger,
-	}
+// GetTaskService 获取 TaskService 单例
+func GetTaskService() *TaskService {
+	taskOnce.Do(func() {
+		taskService = &TaskService{
+			db:     model.DB,
+			logger: utils.Logger,
+		}
+	})
+	return taskService
 }
 
 // Create 创建新任务
-func (s *TaskService) Create(req *CreateTaskRequest) (*model.Task, error) {
+func (s *TaskService) CreateTask(req *CreateTaskRequest) (*model.Task, error) {
 	task := &model.Task{
 		Name:               req.Name,
+		MediaType:          req.MediaType,
 		SourcePath:         req.SourcePath,
 		TargetPath:         req.TargetPath,
 		FileSuffix:         req.FileSuffix,
@@ -73,14 +87,17 @@ func (s *TaskService) Create(req *CreateTaskRequest) (*model.Task, error) {
 }
 
 // Update 更新任务
-func (s *TaskService) Update(id uint, req *UpdateTaskRequest) (*model.Task, error) {
-	task, err := s.GetByID(id)
+func (s *TaskService) UpdateTask(id uint, req *UpdateTaskRequest) (*model.Task, error) {
+	task, err := s.GetTaskByID(id)
 	if err != nil {
 		return nil, err
 	}
 
 	if req.Name != nil {
 		task.Name = *req.Name
+	}
+	if req.MediaType != nil {
+		task.MediaType = *req.MediaType
 	}
 	if req.SourcePath != nil {
 		task.SourcePath = *req.SourcePath
@@ -122,8 +139,8 @@ func (s *TaskService) Update(id uint, req *UpdateTaskRequest) (*model.Task, erro
 }
 
 // Delete 删除任务
-func (s *TaskService) Delete(id uint) error {
-	task, err := s.GetByID(id)
+func (s *TaskService) DeleteTask(id uint) error {
+	task, err := s.GetTaskByID(id)
 	if err != nil {
 		return err
 	}
@@ -141,7 +158,7 @@ func (s *TaskService) Delete(id uint) error {
 }
 
 // GetByID 通过ID获取任务
-func (s *TaskService) GetByID(id uint) (*model.Task, error) {
+func (s *TaskService) GetTaskByID(id uint) (*model.Task, error) {
 	var task model.Task
 	if err := s.db.First(&task, id).Error; err != nil {
 		s.logger.Error("获取任务失败", zap.Error(err))
@@ -151,18 +168,28 @@ func (s *TaskService) GetByID(id uint) (*model.Task, error) {
 }
 
 // List 获取任务列表
-func (s *TaskService) List() ([]model.Task, error) {
+func (s *TaskService) ListTasks(name string) ([]model.Task, error) {
 	var tasks []model.Task
-	if err := s.db.Find(&tasks).Error; err != nil {
-		s.logger.Error("获取任务列表失败", zap.Error(err))
+	query := s.db
+
+	// 如果提供了name参数，添加模糊查询条件
+	if name != "" {
+		query = query.Where("name LIKE ?", "%"+name+"%")
+	}
+
+	if err := query.Find(&tasks).Error; err != nil {
+		s.logger.Error("获取任务列表失败",
+			zap.Error(err),
+			zap.String("name", name))
 		return nil, err
 	}
+
 	return tasks, nil
 }
 
 // SetStatus 设置任务状态（启用/禁用）
-func (s *TaskService) SetStatus(id uint, enabled bool) error {
-	task, err := s.GetByID(id)
+func (s *TaskService) SetTaskStatus(id uint, enabled bool) error {
+	task, err := s.GetTaskByID(id)
 	if err != nil {
 		return err
 	}
@@ -178,7 +205,7 @@ func (s *TaskService) SetStatus(id uint, enabled bool) error {
 
 // ResetRunningStatus 重置任务的运行状态
 func (s *TaskService) ResetRunningStatus(id uint) error {
-	task, err := s.GetByID(id)
+	task, err := s.GetTaskByID(id)
 	if err != nil {
 		return err
 	}

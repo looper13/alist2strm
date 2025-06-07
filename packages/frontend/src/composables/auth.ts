@@ -22,6 +22,7 @@ export const useAuth = createGlobalState(() => {
    */
   async function login(username: string, password: string) {
     const response = await authAPI.login({ username, password })
+
     if (response?.data?.token) {
       token.value = response.data.token
       userInfo.value = response.data.user

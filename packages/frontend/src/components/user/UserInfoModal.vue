@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import { useMessage } from 'naive-ui'
 import { authAPI } from '~/api/auth'
 import { useAuth } from '~/composables/auth'
-
 defineProps<{
   show: boolean
 }>()
@@ -10,8 +8,7 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'update:show', value: boolean): void
 }>()
-
-const message = useMessage()
+const notification = useNotification()
 const { userInfo, refreshUserInfo } = useAuth()
 
 const formRef = ref()
@@ -92,13 +89,22 @@ async function handleSubmit() {
       return
     }
 
-    await authAPI.updateCurrentUser(params)
+    await authAPI.updateUser(userInfo.value?.id!, params)
     await refreshUserInfo() // 更新成功后刷新用户信息
-    message.success('更新成功')
+    notification.success({
+      title: '操作提示',
+      description: '个人信息已成功更新。',
+      duration: 1500,
+    })
     emit('update:show', false)
   }
   catch (error: any) {
-    message.error((error?.response?.data?.message || error?.message) || '更新失败')
+    console.error('更新个人信息失败:', error)
+    notification.error({
+      title: '操作提示',
+      description: (error?.response?.data?.message || error?.message) || '更新失败',
+      duration: 3000,
+    })
   }
   finally {
     loading.value = false

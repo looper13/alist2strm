@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"alist2strm/internal/utils"
-	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -15,7 +14,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		if authHeader == "" {
 			utils.Warn("认证失败：缺少Authorization头",
 				zap.String("path", c.Request.URL.Path))
-			c.JSON(http.StatusUnauthorized, utils.NewErrorResponse(http.StatusUnauthorized, "请先登录"))
+			utils.ResponseErrorWithCode(c, 401, "请先登录")
 			c.Abort()
 			return
 		}
@@ -25,7 +24,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			utils.Warn("认证失败：Authorization格式错误",
 				zap.String("path", c.Request.URL.Path),
 				zap.String("auth", authHeader))
-			c.JSON(http.StatusUnauthorized, utils.NewErrorResponse(http.StatusUnauthorized, "认证格式错误"))
+			utils.ResponseErrorWithCode(c, 401, "认证格式错误")
 			c.Abort()
 			return
 		}
@@ -35,7 +34,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			utils.Warn("认证失败：Token无效或已过期",
 				zap.String("path", c.Request.URL.Path),
 				zap.Error(err))
-			c.JSON(http.StatusUnauthorized, utils.NewErrorResponse(http.StatusUnauthorized, "Token无效或已过期"))
+			utils.ResponseErrorWithCode(c, 401, "Token无效或已过期")
 			c.Abort()
 			return
 		}
