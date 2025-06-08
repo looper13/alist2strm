@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path"
-	"strings"
 	"sync"
 	"time"
 
@@ -126,88 +124,81 @@ func (c *AlistClient) doRequest(req *http.Request) (*http.Response, error) {
 	return nil, fmt.Errorf("请求失败，已重试 %d 次: %w", retryCount-1, err)
 }
 
-// ListFiles 递归获取目录下的所有文件
+// ListFiles 获取指定目录下的所有文件（非递归）
 func (c *AlistClient) ListFiles(dirPath string) ([]AlistFile, error) {
-	var allFiles []AlistFile
-	err := c.listFilesRecursive(dirPath, &allFiles)
-	return allFiles, err
+	return c.listSingleDirectory(dirPath)
 }
 
-func (c *AlistClient) listFilesRecursive(dirPath string, allFiles *[]AlistFile) error {
+// listSingleDirectory 获取单个目录下的所有文件（支持分页）
+func (c *AlistClient) listSingleDirectory(dirPath string) ([]AlistFile, error) {
 	if c.config == nil {
-		return fmt.Errorf("alist 配置未设置")
+		return nil, fmt.Errorf("alist 配置未设置")
 	}
 
+	var allFiles []AlistFile
+	page := 1
 	const defaultPerPage = 100
-	data := map[string]interface{}{
-		"path":     dirPath,
-		"password": "",
-		"page":     1,
-		"per_page": defaultPerPage,
-		"refresh":  true, // 第一页时强制刷新目录缓存，确保获取最新文件列表
-	}
 
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/fs/list", c.config.Host), bytes.NewBuffer(jsonData))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", c.config.Token)
-
-	resp, err := c.doRequest(req)
-	if err != nil {
-		return fmt.Errorf("请求失败: %w", err)
-	}
-	if resp != nil {
-		defer resp.Body.Close()
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	var response AlistListResponse
-	if err := json.Unmarshal(body, &response); err != nil {
-		return err
-	}
-
-	if response.Code != 200 {
-		return errors.New(response.Message)
-	}
-
-	// 处理当前页的所有文件和文件夹
-	for _, file := range response.Data.Content {
-		if file.IsDir {
-			// 对于文件夹，递归获取其中的文件
-			if err := c.listFilesRecursive(path.Join(dirPath, file.Name), allFiles); err != nil {
-				c.logger.Error("获取子目录失败",
-					zap.String("path", path.Join(dirPath, file.Name)),
-					zap.Error(err))
-				continue
-			}
-		} else {
-			// 对于文件，直接添加到结果列表中
-			*allFiles = append(*allFiles, file)
+	for {
+		data := map[string]interface{}{
+			"path":     dirPath,
+			"password": "",
+			"page":     page,
+			"per_page": defaultPerPage,
+			"refresh":  false,
+			// "refresh":  page == 1, // 第一页时强制刷新目录缓存
 		}
+
+		jsonData, err := json.Marshal(data)
+		if err != nil {
+			return nil, err
+		}
+
+		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/fs/list", c.config.Host), bytes.NewBuffer(jsonData))
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", c.config.Token)
+
+		resp, err := c.doRequest(req)
+		if err != nil {
+			return nil, fmt.Errorf("请求失败: %w", err)
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		var response AlistListResponse
+		if err := json.Unmarshal(body, &response); err != nil {
+			return nil, err
+		}
+
+		if response.Code != 200 {
+			return nil, errors.New(response.Message)
+		}
+
+		// 添加当前页的文件到结果列表
+		allFiles = append(allFiles, response.Data.Content...)
+
+		c.logger.Debug("获取目录文件列表",
+			zap.String("path", dirPath),
+			zap.Int("page", page),
+			zap.Int("currentCount", len(response.Data.Content)),
+			zap.Int("totalCount", len(allFiles)))
+
+		// 检查是否还有下一页
+		if len(response.Data.Content) < defaultPerPage {
+			break
+		}
+		page++
 	}
 
-	// 如果还有更多页，继续获取
-	if response.Data.Total > len(response.Data.Content) {
-		nextPage := data["page"].(int) + 1
-		data["page"] = nextPage
-		data["refresh"] = false // 后续分页不需要刷新缓存
-		// 递归获取下一页，使用相同的路径
-		return c.listFilesRecursive(dirPath, allFiles)
-	}
-
-	return nil
+	return allFiles, nil
 }
 
 // GetFileURL 获取文件的完整URL（包含签名如果有的话）
@@ -217,37 +208,4 @@ func (c *AlistClient) GetFileURL(sourcePath, filename, sign string) string {
 		return fmt.Sprintf("%s?sign=%s", baseURL, sign)
 	}
 	return baseURL
-}
-
-// IsVideo 检查文件是否为视频文件
-func (c *AlistClient) IsVideo(filename string) bool {
-	ext := strings.ToLower(path.Ext(filename))
-	switch ext {
-	case ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".mpeg", ".mpg", ".ts":
-		return true
-	default:
-		return false
-	}
-}
-
-// IsMetadata 检查文件是否为元数据文件
-func (c *AlistClient) IsMetadata(filename string, metadataExts []string) bool {
-	ext := strings.ToLower(path.Ext(filename))
-	for _, allowedExt := range metadataExts {
-		if strings.TrimSpace(allowedExt) == ext {
-			return true
-		}
-	}
-	return false
-}
-
-// IsSubtitle 检查文件是否为字幕文件
-func (c *AlistClient) IsSubtitle(filename string, subtitleExts []string) bool {
-	ext := strings.ToLower(path.Ext(filename))
-	for _, allowedExt := range subtitleExts {
-		if strings.TrimSpace(allowedExt) == ext {
-			return true
-		}
-	}
-	return false
 }

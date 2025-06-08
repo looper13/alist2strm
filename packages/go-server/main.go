@@ -2,9 +2,8 @@ package main
 
 import (
 	"alist2strm/config"
-	"alist2strm/internal/handler"
-	"alist2strm/internal/middleware"
 	"alist2strm/internal/model"
+	"alist2strm/internal/router"
 	"alist2strm/internal/service"
 	"alist2strm/internal/utils"
 	"os"
@@ -53,40 +52,8 @@ func main() {
 	// 创建 Gin 实例
 	r := gin.Default()
 
-	// 注册路由
-	api := r.Group("/api")
-	{
-		// 公开路由
-		api.POST("/register", handler.RegisterHandler)
-		api.POST("/login", handler.LoginHandler)
-
-		// 需要认证的路由
-		auth := api.Group("/")
-		auth.Use(middleware.AuthMiddleware())
-		{
-			// 用户相关路由
-			auth.GET("/users/info", handler.GetUserInfoHandler)
-			auth.PUT("/users/:id", handler.UpdateUserInfoHandler)
-
-			// 配置相关路由
-			auth.POST("/configs", handler.CreateConfig)
-			auth.PUT("/configs/:id", handler.UpdateConfig)
-			auth.DELETE("/configs/:id", handler.DeleteConfig)
-			auth.GET("/configs/:id", handler.GetConfig)
-			auth.GET("/configs/code/:code", handler.GetConfigByCode)
-			auth.GET("/configs/all", handler.ListConfigs)
-
-			// 任务相关路由
-			auth.POST("/tasks", handler.CreateTask)
-			auth.PUT("/tasks/:id", handler.UpdateTask)
-			auth.DELETE("/tasks/:id", handler.DeleteTask)
-			auth.GET("/tasks/:id", handler.GetTask)
-			auth.GET("/tasks/all", handler.ListTasks)
-			auth.PUT("/tasks/:id/status", handler.SetTaskStatus)
-			auth.PUT("/tasks/:id/reset", handler.ResetTaskStatus)
-			auth.POST("/tasks/:id/execute", handler.ExecuteTaskHandler)
-		}
-	}
+	// 设置路由
+	router.SetupRoutes(r)
 
 	// 启动服务器
 	utils.Info("服务器准备启动", zap.String("port", config.GlobalConfig.Server.Port))

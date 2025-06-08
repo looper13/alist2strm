@@ -17,7 +17,16 @@ func InitDB() error {
 	}
 
 	// 自动迁移
-	err = DB.AutoMigrate(&User{}, &Config{}, &Task{})
+	err = DB.AutoMigrate(
+		&User{},
+		&Config{},
+		&Task{},
+		&TaskLog{},
+		&FileHistory{},
+		&NotificationQueue{},
+		&ValidationTask{},
+		&SystemLog{},
+	)
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"alist2strm/internal/model"
 	"bytes"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 //go:generate stringer -type=MediaType
@@ -102,22 +104,30 @@ type TaskConfig struct {
 
 // FileService 文件服务，处理strm文件生成、元数据和字幕文件下载等
 type FileService struct {
-	alistClient *AlistClient
-	logger      *zap.Logger
-	config      *TaskConfig // 当前任务配置
+	alistClient        *AlistClient
+	logger             *zap.Logger
+	config             *TaskConfig // 当前任务配置
+	fileHistoryService *FileHistoryService
+	taskLogID          uint // 当前任务日志ID
 }
 
 // NewFileService 创建FileService实例
-func NewFileService(logger *zap.Logger) *FileService {
+func NewFileService(logger *zap.Logger, db *gorm.DB) *FileService {
 	return &FileService{
-		alistClient: GetAlistClient(logger),
-		logger:      logger,
+		alistClient:        GetAlistClient(logger),
+		logger:             logger,
+		fileHistoryService: GetFileHistoryService(db, logger),
 	}
 }
 
 // SetTaskConfig 设置任务配置
 func (s *FileService) SetTaskConfig(config *TaskConfig) {
 	s.config = config
+}
+
+// SetTaskLogID 设置当前任务日志ID
+func (s *FileService) SetTaskLogID(taskLogID uint) {
+	s.taskLogID = taskLogID
 }
 
 // GenerateStrm 生成strm文件
@@ -274,15 +284,6 @@ func (s *FileService) DownloadSubtitle(sourcePath, filename, targetSubPath, sign
 }
 
 // downloadFile 通用的文件下载函数
-// isSubtitleExt 检查是否是字幕文件扩展名
-func (s *FileService) isSubtitleExt(ext string) bool {
-	for _, allowedExt := range s.config.SubtitleExtensions {
-		if s.normalizeExtension(ext) == s.normalizeExtension(allowedExt) {
-			return true
-		}
-	}
-	return false
-}
 
 // normalizeExtension 标准化文件扩展名（确保以点号开头）
 func (s *FileService) normalizeExtension(ext string) string {
@@ -337,25 +338,58 @@ func (s *FileService) downloadFile(url, destPath string) error {
 	return err
 }
 
-// ProcessDirectory 处理目录，生成strm文件并下载相关文件
+// ProcessDirectory 处理单个目录，生成strm文件并下载元数据和字幕
+// 这个方法只处理当前目录的文件，不进行递归处理
 func (s *FileService) ProcessDirectory(sourcePath string) error {
 	if s.config == nil {
 		return fmt.Errorf("任务配置未设置")
 	}
-	// log
+
 	s.logger.Info("开始处理目录",
-		zap.String("sourcePath", sourcePath),
-		zap.String("targetPath", s.config.TargetPath),
+		zap.String("path", sourcePath),
 		zap.String("mediaType", string(s.config.MediaType)),
 		zap.Bool("downloadMetadata", s.config.DownloadMetadata),
 		zap.Bool("downloadSubtitle", s.config.DownloadSubtitle))
 
+	// 获取当前目录的所有文件（非递归）
 	files, err := s.alistClient.ListFiles(sourcePath)
 	if err != nil {
 		return fmt.Errorf("获取目录文件列表失败: %w", err)
 	}
 
-	// 计算相对于 SourcePath 的路径
+	// 计算相对路径
+	relPath := s.calculateRelativePath(sourcePath)
+
+	// 分类文件
+	videoFiles, metadataFiles, subtitleFiles, directories := s.categorizeFiles(files)
+
+	s.logger.Debug("文件分类统计",
+		zap.String("path", sourcePath),
+		zap.Int("videoFiles", len(videoFiles)),
+		zap.Int("metadataFiles", len(metadataFiles)),
+		zap.Int("subtitleFiles", len(subtitleFiles)),
+		zap.Int("directories", len(directories)))
+
+	// 处理当前目录的文件
+	if err := s.processCurrentDirectoryFiles(sourcePath, relPath, videoFiles, metadataFiles, subtitleFiles); err != nil {
+		return fmt.Errorf("处理当前目录文件失败: %w", err)
+	}
+
+	// 记录子目录，但不进行递归处理
+	if len(directories) > 0 {
+		s.logger.Debug("发现子目录",
+			zap.String("path", sourcePath),
+			zap.Int("count", len(directories)))
+		for _, dir := range directories {
+			s.logger.Debug("子目录", zap.String("name", dir.Name))
+		}
+	}
+
+	return nil
+}
+
+// calculateRelativePath 计算相对于 SourcePath 的路径
+func (s *FileService) calculateRelativePath(sourcePath string) string {
 	relPath := ""
 	if s.config.SourcePath == "" {
 		s.logger.Error("未设置 SourcePath，将使用完整路径",
@@ -367,7 +401,8 @@ func (s *FileService) ProcessDirectory(sourcePath string) error {
 			s.logger.Error("源文件路径不在配置的基础路径下",
 				zap.String("sourcePath", sourcePath),
 				zap.String("configSourcePath", s.config.SourcePath))
-			return fmt.Errorf("源文件路径 %s 不在配置的基础路径 %s 下", sourcePath, s.config.SourcePath)
+			// 返回完整路径而不是报错
+			return sourcePath
 		}
 
 		// 获取相对路径部分（去掉 SourcePath 前缀）
@@ -381,172 +416,242 @@ func (s *FileService) ProcessDirectory(sourcePath string) error {
 		relPath = filepath.FromSlash(relPath)
 	}
 
+	return relPath
+}
+
+// categorizeFiles 将文件按类型分类
+func (s *FileService) categorizeFiles(files []AlistFile) (videoFiles, metadataFiles, subtitleFiles, directories []AlistFile) {
 	for _, file := range files {
 		if file.IsDir {
-			// 递归处理子目录
-			subPath := filepath.Join(sourcePath, file.Name)
-			if err := s.ProcessDirectory(subPath); err != nil {
-				s.logger.Error("处理子目录失败",
-					zap.String("path", subPath),
-					zap.Error(err))
-			}
+			directories = append(directories, file)
 			continue
 		}
 
-		// 获取文件名相关信息
-		baseName := strings.TrimSuffix(file.Name, filepath.Ext(file.Name))
-		extWithoutDot := s.getExtWithoutDot(file.Name)
-
-		// 检查是否是支持的视频文件类型
-		isVideo := false
-		for _, suffix := range s.config.FileSuffix {
-			suffixWithoutDot := strings.TrimPrefix(s.normalizeExtension(suffix), ".")
-			if strings.EqualFold(extWithoutDot, suffixWithoutDot) {
-				isVideo = true
-				break
-			}
+		// 检查是否是视频文件
+		if s.isVideoFile(file.Name) {
+			videoFiles = append(videoFiles, file)
+			continue
 		}
 
-		// 处理视频文件，生成strm文件
-		if isVideo {
-			// log
-			s.logger.Info("处理视频文件",
+		// 检查是否是元数据文件
+		if s.config.DownloadMetadata && s.isMetadataFile(file.Name) {
+			metadataFiles = append(metadataFiles, file)
+			continue
+		}
+
+		// 检查是否是字幕文件
+		if s.config.DownloadSubtitle && s.isSubtitleFile(file.Name) {
+			subtitleFiles = append(subtitleFiles, file)
+			continue
+		}
+	}
+
+	return videoFiles, metadataFiles, subtitleFiles, directories
+}
+
+// isVideoFile 检查是否是支持的视频文件类型
+func (s *FileService) isVideoFile(filename string) bool {
+	extWithoutDot := s.getExtWithoutDot(filename)
+	for _, suffix := range s.config.FileSuffix {
+		suffixWithoutDot := strings.TrimPrefix(s.normalizeExtension(suffix), ".")
+		if strings.EqualFold(extWithoutDot, suffixWithoutDot) {
+			return true
+		}
+	}
+	return false
+}
+
+// isMetadataFile 检查是否是元数据文件
+func (s *FileService) isMetadataFile(filename string) bool {
+	// 检查是否是配置的元数据扩展名
+	extWithoutDot := s.getExtWithoutDot(filename)
+	for _, allowedExt := range s.config.MetadataExtensions {
+		allowedExtWithoutDot := strings.TrimPrefix(s.normalizeExtension(allowedExt), ".")
+		if strings.EqualFold(extWithoutDot, allowedExtWithoutDot) {
+			return true
+		}
+	}
+
+	// 检查是否是预定义的元数据文件
+	switch s.config.MediaType {
+	case MediaTypeMovie:
+		for _, metaFile := range MovieMetadata {
+			if filename == metaFile {
+				return true
+			}
+		}
+	case MediaTypeTVShow:
+		// 检查剧集级别元数据
+		for _, metaFile := range TVShowMetadata["show"] {
+			if filename == metaFile {
+				return true
+			}
+		}
+		// 检查季级别元数据
+		for _, metaFile := range TVShowMetadata["season"] {
+			if filename == metaFile {
+				return true
+			}
+		}
+		// 检查单集元数据
+		for _, metaFile := range TVShowMetadata["episode"] {
+			if strings.HasSuffix(filename, metaFile) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// isSubtitleFile 检查是否是字幕文件
+func (s *FileService) isSubtitleFile(filename string) bool {
+	extWithoutDot := s.getExtWithoutDot(filename)
+	for _, allowedExt := range s.config.SubtitleExtensions {
+		allowedExtWithoutDot := strings.TrimPrefix(s.normalizeExtension(allowedExt), ".")
+		if strings.EqualFold(extWithoutDot, allowedExtWithoutDot) {
+			return true
+		}
+	}
+	return false
+}
+
+// processCurrentDirectoryFiles 处理当前目录的文件
+func (s *FileService) processCurrentDirectoryFiles(sourcePath, relPath string, videoFiles, metadataFiles, subtitleFiles []AlistFile) error {
+	// 处理视频文件 - 生成 strm 文件
+	for _, file := range videoFiles {
+		s.logger.Info("处理视频文件",
+			zap.String("path", sourcePath),
+			zap.String("file", file.Name),
+			zap.String("relPath", relPath))
+
+		if err := s.GenerateStrm(sourcePath, file.Name, relPath, file.Sign); err != nil {
+			s.logger.Error("生成strm文件失败",
+				zap.String("path", sourcePath),
+				zap.String("file", file.Name),
+				zap.Error(err))
+		}
+	}
+
+	// 处理元数据文件 - 下载元数据
+	if s.config.DownloadMetadata {
+		for _, file := range metadataFiles {
+			fileRelPath := relPath
+			if fileRelPath == "" {
+				fileRelPath = "."
+			}
+
+			s.logger.Debug("处理元数据文件",
+				zap.String("sourcePath", sourcePath),
+				zap.String("file", file.Name),
+				zap.String("relPath", fileRelPath))
+
+			if err := s.DownloadMetadata(sourcePath, file.Name, fileRelPath, file.Sign); err != nil {
+				s.logger.Error("下载元数据文件失败",
+					zap.String("path", sourcePath),
+					zap.String("file", file.Name),
+					zap.Error(err))
+			}
+		}
+	}
+
+	// 处理字幕文件 - 下载字幕
+	if s.config.DownloadSubtitle {
+		for _, file := range subtitleFiles {
+			s.logger.Debug("处理字幕文件",
 				zap.String("path", sourcePath),
 				zap.String("file", file.Name),
 				zap.String("relPath", relPath))
-			if err := s.GenerateStrm(sourcePath, file.Name, relPath, file.Sign); err != nil {
-				s.logger.Error("生成strm文件失败",
+
+			if err := s.DownloadSubtitle(sourcePath, file.Name, relPath, file.Sign); err != nil {
+				s.logger.Error("下载字幕文件失败",
 					zap.String("path", sourcePath),
 					zap.String("file", file.Name),
 					zap.Error(err))
 			}
 		}
 
-		// 检查并下载字幕文件
-		if s.config.DownloadSubtitle {
-			// log
-			s.logger.Info("处理字幕文件",
-				zap.String("path", sourcePath),
-				zap.String("file", file.Name),
-				zap.String("relPath", relPath))
-			// 如果当前文件是字幕文件，直接下载
-			// 使用 getExtWithoutDot 处理扩展名
-			extWithoutDot := s.getExtWithoutDot(file.Name)
-			if s.isSubtitleExt("." + extWithoutDot) {
-				if err := s.DownloadSubtitle(sourcePath, file.Name, relPath, file.Sign); err != nil {
-					s.logger.Error("下载字幕文件失败",
+		// 为视频文件尝试下载关联的字幕文件
+		for _, videoFile := range videoFiles {
+			baseName := strings.TrimSuffix(videoFile.Name, filepath.Ext(videoFile.Name))
+
+			// 尝试下载不带语言代码的字幕
+			for _, subtitleExt := range s.config.SubtitleExtensions {
+				subtitleName := baseName + subtitleExt
+				if err := s.DownloadSubtitle(sourcePath, subtitleName, relPath, ""); err != nil {
+					s.logger.Debug("尝试下载无语言代码字幕失败",
 						zap.String("path", sourcePath),
-						zap.String("file", file.Name),
-						zap.Error(err))
+						zap.String("file", subtitleName))
 				}
 			}
 
-			// 如果是视频文件，尝试下载关联的字幕
-			if isVideo {
-				// 尝试下载不带语言代码的字幕
+			// 尝试下载带语言代码的字幕
+			for _, lang := range LanguageCodes {
 				for _, subtitleExt := range s.config.SubtitleExtensions {
-					subtitleName := baseName + subtitleExt
+					subtitleName := fmt.Sprintf("%s.%s%s", baseName, lang, subtitleExt)
 					if err := s.DownloadSubtitle(sourcePath, subtitleName, relPath, ""); err != nil {
-						s.logger.Debug("尝试下载无语言代码字幕失败",
+						s.logger.Debug("尝试下载带语言字幕失败",
 							zap.String("path", sourcePath),
-							zap.String("file", subtitleName))
-					}
-				}
-				// 尝试下载带语言代码的字幕
-				for _, lang := range LanguageCodes {
-					for _, subtitleExt := range s.config.SubtitleExtensions {
-						subtitleName := fmt.Sprintf("%s.%s%s", baseName, lang, subtitleExt)
-						if err := s.DownloadSubtitle(sourcePath, subtitleName, relPath, ""); err != nil {
-							s.logger.Debug("尝试下载带语言字幕失败",
-								zap.String("path", sourcePath),
-								zap.String("file", subtitleName),
-								zap.String("lang", lang))
-						}
-					}
-				}
-			}
-		}
-
-		// 根据媒体类型处理元数据
-		if s.config.DownloadMetadata {
-			// 计算当前文件的相对路径
-			fileRelPath := relPath
-			if fileRelPath == "" {
-				// 如果在根目录，使用文件名作为相对路径
-				fileRelPath = "."
-			}
-
-			switch s.config.MediaType {
-			case MediaTypeMovie:
-				for _, metaFile := range MovieMetadata {
-					// 构建元数据文件名
-					metaFileName := metaFile
-					// 检查元数据文件是否存在
-					if file.Name == metaFileName {
-						s.logger.Debug("发现电影元数据文件",
-							zap.String("sourcePath", sourcePath),
-							zap.String("file", file.Name),
-							zap.String("relPath", fileRelPath))
-						if err := s.DownloadMetadata(sourcePath, file.Name, fileRelPath, file.Sign); err != nil {
-							s.logger.Error("下载电影元数据文件失败",
-								zap.String("path", sourcePath),
-								zap.String("file", file.Name),
-								zap.Error(err))
-						}
-					}
-				}
-
-			case MediaTypeTVShow:
-				// 检查是否为剧集级别的元数据
-				for _, metaFile := range TVShowMetadata["show"] {
-					if file.Name == metaFile {
-						s.logger.Debug("发现剧集元数据文件",
-							zap.String("sourcePath", sourcePath),
-							zap.String("file", file.Name),
-							zap.String("relPath", fileRelPath))
-						if err := s.DownloadMetadata(sourcePath, file.Name, fileRelPath, file.Sign); err != nil {
-							s.logger.Error("下载剧集元数据文件失败",
-								zap.String("path", sourcePath),
-								zap.String("file", file.Name),
-								zap.Error(err))
-						}
-					}
-				}
-
-				// 检查是否为季级别的元数据
-				for _, metaFile := range TVShowMetadata["season"] {
-					if file.Name == metaFile {
-						s.logger.Debug("发现季度元数据文件",
-							zap.String("sourcePath", sourcePath),
-							zap.String("file", file.Name),
-							zap.String("relPath", fileRelPath))
-						if err := s.DownloadMetadata(sourcePath, file.Name, fileRelPath, file.Sign); err != nil {
-							s.logger.Error("下载季度元数据文件失败",
-								zap.String("path", sourcePath),
-								zap.String("file", file.Name),
-								zap.Error(err))
-						}
-					}
-				}
-
-				// 检查是否为单集元数据
-				for _, metaFile := range TVShowMetadata["episode"] {
-					if strings.HasSuffix(file.Name, metaFile) {
-						s.logger.Debug("发现单集元数据文件",
-							zap.String("sourcePath", sourcePath),
-							zap.String("file", file.Name),
-							zap.String("relPath", fileRelPath))
-						if err := s.DownloadMetadata(sourcePath, file.Name, fileRelPath, file.Sign); err != nil {
-							s.logger.Error("下载单集元数据文件失败",
-								zap.String("path", sourcePath),
-								zap.String("file", file.Name),
-								zap.Error(err))
-						}
+							zap.String("file", subtitleName),
+							zap.String("lang", lang))
 					}
 				}
 			}
 		}
 	}
+
+	return nil
+}
+
+// GetSubdirectories 获取子目录列表，供外部调用者进行递归处理
+func (s *FileService) GetSubdirectories(sourcePath string) ([]string, error) {
+	files, err := s.alistClient.ListFiles(sourcePath)
+	if err != nil {
+		return nil, fmt.Errorf("获取目录文件列表失败: %w", err)
+	}
+
+	var subdirs []string
+	for _, file := range files {
+		if file.IsDir {
+			subdirs = append(subdirs, filepath.Join(sourcePath, file.Name))
+		}
+	}
+
+	return subdirs, nil
+}
+
+// ProcessDirectoryRecursive 递归处理目录及其子目录
+func (s *FileService) ProcessDirectoryRecursive(sourcePath string) error {
+	if s.config == nil {
+		return fmt.Errorf("任务配置未设置")
+	}
+
+	s.logger.Info("开始递归处理目录",
+		zap.String("sourcePath", sourcePath))
+
+	// 处理当前目录
+	if err := s.ProcessDirectory(sourcePath); err != nil {
+		return fmt.Errorf("处理目录失败: %w", err)
+	}
+
+	// 获取子目录列表
+	subdirs, err := s.GetSubdirectories(sourcePath)
+	if err != nil {
+		return fmt.Errorf("获取子目录列表失败: %w", err)
+	}
+
+	// 递归处理每个子目录
+	for _, subdir := range subdirs {
+		if err := s.ProcessDirectoryRecursive(subdir); err != nil {
+			s.logger.Error("递归处理子目录失败",
+				zap.String("subdir", subdir),
+				zap.Error(err))
+			// 继续处理其他目录，不中断整个流程
+		}
+	}
+
+	s.logger.Info("完成递归处理目录",
+		zap.String("sourcePath", sourcePath))
 
 	return nil
 }
