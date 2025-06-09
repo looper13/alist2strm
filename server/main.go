@@ -17,8 +17,6 @@ func main() {
 	if err := utils.InitLogger(cfg); err != nil {
 		log.Fatalf("日志系统初始化失败: %v", err)
 	}
-	utils.Info("日志系统初始化完成")
-
 	// 初始化数据库
 	if err := database.InitDatabase(cfg); err != nil {
 		log.Fatalf("数据库初始化失败: %v", err)
@@ -27,13 +25,6 @@ func main() {
 
 	// 设置路由
 	r := SetupRoutes()
-
-	utils.Info("测试日志记录功能", "user_id", 123, "username", "admin", "ip", "192.168.1.100")
-	// 测试日志记录功能
-	utils.Debug("调试信息", "key", "value")
-	utils.Warn("警告信息", "key", "value")
-	utils.Error("错误信息", "key", "value")
-	utils.Info("服务器已成功启动，等待请求...")
 
 	// 启动服务器
 	utils.Info("服务器启动，监听端口: " + cfg.Server.Port)

@@ -51,6 +51,9 @@ type AppConfig struct {
 	User     UserConfig
 }
 
+// 全局配置变量
+var GlobalConfig *AppConfig
+
 // loadEnvFiles 加载环境配置文件
 func loadEnvFiles() {
 	// 环境文件优先级（从低到高）
@@ -87,7 +90,7 @@ func LoadConfig() *AppConfig {
 	// 尝试加载环境文件
 	loadEnvFiles()
 
-	return &AppConfig{
+	GlobalConfig = &AppConfig{
 		Server: ServerConfig{
 			Port: getEnv("PORT", "8080"),
 		},
@@ -105,7 +108,7 @@ func LoadConfig() *AppConfig {
 			Name:    getEnv("DB_NAME", "database.sqlite"),
 		},
 		JWT: JWTConfig{
-			SecretKey: getEnv("JWT_SECRET_KEY", ""),
+			SecretKey: getEnv("JWT_SECRET_KEY", "alist2strm-default-jwt-secret-key-2025"),
 			ExpiresIn: getEnv("JWT_EXPIRES_IN", "24h"),
 		},
 		User: UserConfig{
@@ -113,6 +116,8 @@ func LoadConfig() *AppConfig {
 			Password: getEnv("USER_PASSWORD", ""),
 		},
 	}
+
+	return GlobalConfig
 }
 
 // getEnv 获取环境变量，如果不存在则返回默认值

@@ -26,7 +26,3 @@ type UserListResp struct {
 	Page     int        `json:"page"`
 	PageSize int        `json:"pageSize"`
 }
-
-// 保持向后兼容的别名
-type LoginResponse = UserLoginResp
-type UserInfoResponse = UserInfo
