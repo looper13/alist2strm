@@ -76,6 +76,7 @@ type customEncoder struct {
 	appName string
 }
 
+// 这些方法是 zapcore.Encoder 接口的要求，但我们在 EncodeEntry 中直接处理所有逻辑
 func (e *customEncoder) AddArray(key string, marshaler zapcore.ArrayMarshaler) error   { return nil }
 func (e *customEncoder) AddObject(key string, marshaler zapcore.ObjectMarshaler) error { return nil }
 func (e *customEncoder) AddBinary(key string, value []byte)                            {}

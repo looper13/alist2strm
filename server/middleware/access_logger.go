@@ -57,7 +57,7 @@ func AccessLogger() gin.HandlerFunc {
 				"status", c.Writer.Status(),
 				"duration", duration,
 				"response_size", wrapper.body.Len(),
-				"request_id", c.GetHeader("X-Request-ID"),
+				"request_id", GetRequestID(c),
 				"timestamp", startTime.Format(time.RFC3339),
 			)
 		}

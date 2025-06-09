@@ -10,7 +10,7 @@ func SetupRoutes() *gin.Engine {
 	r := gin.Default()
 
 	// 中间件
-	// r.Use(middleware.RequestID())    // 请求ID中间件
+	r.Use(middleware.RequestID())    // 请求ID中间件
 	r.Use(middleware.AccessLogger()) // 访问日志中间件
 	r.Use(gin.Recovery())            // 错误恢复中间件
 
