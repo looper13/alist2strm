@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/MccRay-s/alist2strm/config"
 	"github.com/MccRay-s/alist2strm/model/user"
 	userRequest "github.com/MccRay-s/alist2strm/model/user/request"
 	userResponse "github.com/MccRay-s/alist2strm/model/user/response"
@@ -195,4 +196,54 @@ func (s *UserService) GetUserList(req *userRequest.UserListReq) (*userResponse.U
 	}
 
 	return resp, nil
+}
+
+// InitializeDefaultUser 初始化默认用户
+func (s *UserService) InitializeDefaultUser() error {
+	// 检查是否已有用户
+	count, err := repository.User.CountUsers()
+	if err != nil {
+		return err
+	}
+
+	// 如果已有用户，则不需要创建
+	if count > 0 {
+		return nil
+	}
+
+	// 获取配置中的用户信息
+	cfg := config.GlobalConfig
+	if cfg == nil {
+		return errors.New("配置未初始化")
+	}
+
+	username := cfg.User.Name
+	password := cfg.User.Password
+
+	// 如果用户名为空，使用默认值
+	if username == "" {
+		username = "admin"
+	}
+
+	// 如果密码为空，生成随机密码
+	if password == "" {
+		password = utils.GenerateRandomPassword(12)
+		utils.Info("==============================================")
+		utils.Info("🔐 系统已自动创建默认管理员账户")
+		utils.Info("👤 用户名: " + username)
+		utils.Info("🔑 密码: " + password)
+		utils.Info("⚠️  请妥善保存密码，首次登录后建议修改密码")
+		utils.Info("==============================================")
+	} else {
+		utils.Info("使用配置文件中的密码创建默认管理员账户", "username", username)
+	}
+
+	// 创建默认用户
+	req := &userRequest.UserRegisterReq{
+		Username: username,
+		Password: password,
+		Nickname: "系统管理员",
+	}
+
+	return s.Register(req)
 }

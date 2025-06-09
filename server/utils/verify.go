@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"crypto/rand"
+	"math/big"
 	"regexp"
 	"strings"
 
@@ -21,14 +23,21 @@ func CheckPasswordHash(password, hash string) bool {
 
 // GenerateRandomPassword 生成随机密码
 func GenerateRandomPassword(length int) string {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
 	if length < 8 {
 		length = 8
 	}
 
 	password := make([]byte, length)
 	for i := range password {
-		password[i] = charset[i%len(charset)]
+		// 使用加密安全的随机数生成器
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		if err != nil {
+			// 如果加密随机数生成失败，回退到简单方式
+			password[i] = charset[i%len(charset)]
+		} else {
+			password[i] = charset[num.Int64()]
+		}
 	}
 
 	return string(password)

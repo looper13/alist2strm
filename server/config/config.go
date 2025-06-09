@@ -54,33 +54,33 @@ type AppConfig struct {
 // 全局配置变量
 var GlobalConfig *AppConfig
 
-// loadEnvFiles 加载环境配置文件
+// loadEnvFiles 根据环境加载配置文件
 func loadEnvFiles() {
-	// 环境文件优先级（从低到高）
-	envFiles := []string{
-		".env",             // 基础配置
-		".env.local",       // 本地配置
-		".env.development", // 开发环境
-		".env.production",  // 生产环境
+	// 获取当前环境
+	appEnv := os.Getenv("APP_ENV")
+
+	// 如果没有设置APP_ENV，默认为生产环境
+	if appEnv == "" {
+		// 生产环境：只读取系统环境变量，不加载文件
+		return
 	}
 
-	// 获取当前工作目录的父目录（项目根目录）
+	// 开发环境：加载对应的环境文件
+	envFile := ".env." + appEnv
+
+	// 尝试从当前目录加载
+	if _, err := os.Stat(envFile); err == nil {
+		if loadErr := godotenv.Load(envFile); loadErr == nil {
+			return
+		}
+	}
+
+	// 尝试从父目录加载
 	if wd, err := os.Getwd(); err == nil {
 		parentDir := filepath.Dir(wd)
-
-		// 尝试加载项目根目录的环境文件
-		for _, envFile := range envFiles {
-			envPath := filepath.Join(parentDir, envFile)
-			if _, err := os.Stat(envPath); err == nil {
-				godotenv.Load(envPath)
-			}
-		}
-
-		// 尝试加载当前目录的环境文件
-		for _, envFile := range envFiles {
-			if _, err := os.Stat(envFile); err == nil {
-				godotenv.Load(envFile)
-			}
+		envPath := filepath.Join(parentDir, envFile)
+		if _, err := os.Stat(envPath); err == nil {
+			godotenv.Load(envPath)
 		}
 	}
 }
@@ -92,10 +92,10 @@ func LoadConfig() *AppConfig {
 
 	GlobalConfig = &AppConfig{
 		Server: ServerConfig{
-			Port: getEnv("PORT", "8080"),
+			Port: getEnv("PORT", "3210"),
 		},
 		Log: LogConfig{
-			BaseDir:     getEnv("LOG_BASE_DIR", "./data/logs"),
+			BaseDir:     getEnv("LOG_BASE_DIR", "../data/logs"),
 			AppName:     getEnv("LOG_APP_NAME", "alist2strm"),
 			Level:       getEnv("LOG_LEVEL", "info"),
 			MaxDays:     getEnvAsInt("LOG_MAX_DAYS", 7),
@@ -104,12 +104,12 @@ func LoadConfig() *AppConfig {
 			Compress:    getEnvAsBool("LOG_COMPRESS", true),
 		},
 		Database: DatabaseConfig{
-			BaseDir: getEnv("DB_BASE_DIR", "./data/db"),
+			BaseDir: getEnv("DB_BASE_DIR", "../data/db"),
 			Name:    getEnv("DB_NAME", "database.sqlite"),
 		},
 		JWT: JWTConfig{
 			SecretKey: getEnv("JWT_SECRET_KEY", "alist2strm-default-jwt-secret-key-2025"),
-			ExpiresIn: getEnv("JWT_EXPIRES_IN", "24h"),
+			ExpiresIn: getEnv("JWT_EXPIRES_IN", "24"),
 		},
 		User: UserConfig{
 			Name:     getEnv("USER_NAME", "admin"),

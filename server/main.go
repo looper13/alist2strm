@@ -5,6 +5,7 @@ import (
 
 	"github.com/MccRay-s/alist2strm/config"
 	"github.com/MccRay-s/alist2strm/database"
+	"github.com/MccRay-s/alist2strm/service"
 	"github.com/MccRay-s/alist2strm/utils"
 )
 
@@ -22,6 +23,12 @@ func main() {
 		log.Fatalf("数据库初始化失败: %v", err)
 	}
 	utils.Info("数据库初始化完成")
+
+	// 初始化默认用户（如果没有用户的话）
+	if err := service.User.InitializeDefaultUser(); err != nil {
+		utils.Error("初始化默认用户失败", "error", err.Error())
+		log.Fatalf("初始化默认用户失败: %v", err)
+	}
 
 	// 设置路由
 	r := SetupRoutes()

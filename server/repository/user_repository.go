@@ -95,3 +95,10 @@ func (r *UserRepository) CheckUsernameExists(username string) (bool, error) {
 	err := database.DB.Model(&user.User{}).Where("username = ?", username).Count(&count).Error
 	return count > 0, err
 }
+
+// CountUsers 统计用户总数
+func (r *UserRepository) CountUsers() (int64, error) {
+	var count int64
+	err := database.DB.Model(&user.User{}).Count(&count).Error
+	return count, err
+}
