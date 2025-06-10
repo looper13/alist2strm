@@ -8,6 +8,7 @@ import (
 
 	"github.com/MccRay-s/alist2strm/config"
 	"github.com/MccRay-s/alist2strm/model/configs"
+	"github.com/MccRay-s/alist2strm/model/task"
 	"github.com/MccRay-s/alist2strm/model/user"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -41,6 +42,7 @@ func InitDatabase(cfg *config.AppConfig) error {
 	if err := db.AutoMigrate(
 		&user.User{},
 		&configs.Config{},
+		&task.Task{},
 	); err != nil {
 		return fmt.Errorf("数据库表迁移失败: %v", err)
 	}
