@@ -13,12 +13,15 @@ type TaskLog struct {
 	Status        string     `json:"status" gorm:"not null"`
 	Message       string     `json:"message" gorm:"type:text"`
 	StartTime     time.Time  `json:"startTime" gorm:"not null"`
-	EndTime       *time.Time `json:"endTime"`
+	EndTime       *time.Time `json:"endTime" gorm:"default:null"`
+	Duration      int64      `json:"duration" gorm:"not null;default:0"` // 持续时间，单位为秒
 	TotalFile     int        `json:"totalFile" gorm:"not null;default:0"`
 	GeneratedFile int        `json:"generatedFile" gorm:"not null;default:0"`
 	SkipFile      int        `json:"skipFile" gorm:"not null;default:0"`
+	OverwriteFile int        `json:"overwriteFile" gorm:"not null;default:0"`
 	MetadataCount int        `json:"metadataCount" gorm:"not null;default:0"`
 	SubtitleCount int        `json:"subtitleCount" gorm:"not null;default:0"`
+	FailedCount   int        `json:"failedCount" gorm:"not null;default:0"`
 }
 
 // TableName 表名

@@ -70,6 +70,13 @@ func SetupRoutes() *gin.Engine {
 				task.PUT("/:id/reset", controller.Task.ResetTaskStatus)    // 重置任务运行状态
 				task.POST("/:id/execute", controller.Task.ExecuteTask)     // 执行任务
 			}
+
+			// 任务日志相关路由
+			taskLog := auth.Group("/task-log")
+			{
+				taskLog.GET("/:id", controller.TaskLogControllerInstance.GetTaskLogInfo) // 获取指定任务日志信息
+				taskLog.GET("/", controller.TaskLogControllerInstance.GetTaskLogList)    // 获取任务日志列表（分页）
+			}
 		}
 
 	}
