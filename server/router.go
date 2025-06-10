@@ -45,6 +45,17 @@ func SetupRoutes() *gin.Engine {
 				user.PUT("/:id", controller.User.UpdateUser)   // 更新用户信息
 				user.GET("/list", controller.User.GetUserList) // 获取用户列表
 			}
+
+			// 配置相关路由
+			config := auth.Group("/config")
+			{
+				config.POST("/", controller.Config.Create)                   // 创建配置
+				config.GET("/:id", controller.Config.GetConfigInfo)          // 获取指定配置信息
+				config.GET("/code/:code", controller.Config.GetConfigByCode) // 根据代码获取配置
+				config.PUT("/:id", controller.Config.UpdateConfig)           // 更新配置信息
+				config.DELETE("/:id", controller.Config.DeleteConfig)        // 删除配置
+				config.GET("/list", controller.Config.GetConfigList)         // 获取配置列表
+			}
 		}
 
 	}

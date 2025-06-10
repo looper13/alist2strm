@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/MccRay-s/alist2strm/config"
+	"github.com/MccRay-s/alist2strm/model/configs"
+	"github.com/MccRay-s/alist2strm/model/user"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -34,6 +36,15 @@ func InitDatabase(cfg *config.AppConfig) error {
 
 	DB = db
 	log.Printf("数据库连接成功: %s", dbPath)
+
+	// 自动迁移数据库表结构
+	if err := db.AutoMigrate(
+		&user.User{},
+		&configs.Config{},
+	); err != nil {
+		return fmt.Errorf("数据库表迁移失败: %v", err)
+	}
+	log.Printf("数据库表结构同步完成")
 
 	return nil
 }
