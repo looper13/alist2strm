@@ -77,6 +77,15 @@ func SetupRoutes() *gin.Engine {
 				taskLog.GET("/:id", controller.TaskLogControllerInstance.GetTaskLogInfo) // 获取指定任务日志信息
 				taskLog.GET("/", controller.TaskLogControllerInstance.GetTaskLogList)    // 获取任务日志列表（分页）
 			}
+
+			// 文件历史相关路由
+			fileHistory := auth.Group("/file-history")
+			{
+				fileHistoryController := &controller.FileHistoryController{}
+				fileHistory.GET("/", fileHistoryController.GetMainFileList)                // 获取主文件分页列表
+				fileHistory.GET("/:id", fileHistoryController.GetFileHistoryInfo)          // 获取文件历史详情
+				fileHistory.GET("/related", fileHistoryController.GetRelatedFilesByMainID) // 根据主文件ID查询关联文件
+			}
 		}
 
 	}

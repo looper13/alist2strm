@@ -349,15 +349,15 @@ func (s *TaskService) executeTaskSync(task *task.Task) *taskResponse.TaskExecute
 	// TODO: 实现具体的任务执行逻辑
 	// 这里可以根据任务类型执行不同的处理逻辑
 	// 示例逻辑：
-	result.TotalCount = 100                   // 模拟总文件数
-	result.SuccessCount = 85                  // 模拟成功数
-	result.FailedCount = 5                    // 模拟失败数
-	result.SkippedCount = 8                   // 模拟跳过数
-	result.OverwriteCount = 2                 // 模拟覆盖数
-	result.SubtitleCount = 15                 // 模拟字幕文件数
-	result.MetadataCount = 20                 // 模拟元数据文件数
-	result.ErrorFiles = 2                     // 模拟错误文件数
-	result.ProcessedBytes = 1024 * 1024 * 500 // 模拟处理500MB
+	// result.TotalCount = 100                   // 模拟总文件数
+	// result.SuccessCount = 85                  // 模拟成功数
+	// result.FailedCount = 5                    // 模拟失败数
+	// result.SkippedCount = 8                   // 模拟跳过数
+	// result.OverwriteCount = 2                 // 模拟覆盖数
+	// result.SubtitleCount = 15                 // 模拟字幕文件数
+	// result.MetadataCount = 20                 // 模拟元数据文件数
+	// result.ErrorFiles = 2                     // 模拟错误文件数
+	// result.ProcessedBytes = 1024 * 1024 * 500 // 模拟处理500MB
 
 	return result
 }
