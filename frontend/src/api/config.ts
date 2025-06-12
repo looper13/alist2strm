@@ -1,7 +1,7 @@
 import { http } from './http'
 
 export class ConfigAPI {
-  private baseUrl = '/configs'
+  private baseUrl = '/config'
 
   /**
    * 创建配置
@@ -28,7 +28,7 @@ export class ConfigAPI {
    * 查询所有配置
    */
   async configs() {
-    return http.get<Api.Config.Record[]>(`${this.baseUrl}/all`)
+    return http.get<Api.Config.Record[]>(`${this.baseUrl}/list`)
   }
 }
 

@@ -1,7 +1,7 @@
 import { http } from './http'
 
 export class TaskAPI {
-  private baseUrl = '/tasks'
+  private baseUrl = '/task'
 
   /**
    * 创建任务

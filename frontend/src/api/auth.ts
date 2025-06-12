@@ -1,20 +1,20 @@
 import { http } from './http'
 
 class AuthAPI {
-  private baseUrl = '/users'
+  private baseUrl = '/user'
 
   /**
    * 用户登录
    */
   async login(params: Api.Auth.LoginParams) {
-    return http.post<Api.Auth.LoginResult>(`/login`, params)
+    return http.post<Api.Auth.LoginResult>(`${this.baseUrl}/login`, params)
   }
 
   /**
    * 用户注册
    */
   async register(params: Api.Auth.RegisterParams) {
-    return http.post<Api.Auth.LoginResult>(`/register`, params)
+    return http.post<Api.Auth.LoginResult>(`${this.baseUrl}/register`, params)
   }
 
   /**
