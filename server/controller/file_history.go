@@ -11,15 +11,15 @@ import (
 
 type FileHistoryController struct{}
 
-// GetMainFileList 获取主文件分页列表
-func (c *FileHistoryController) GetMainFileList(ctx *gin.Context) {
+// GetFileList 获取主文件分页列表
+func (c *FileHistoryController) GetFileList(ctx *gin.Context) {
 	var req fileHistoryRequest.FileHistoryListReq
 	if err := ctx.ShouldBindQuery(&req); err != nil {
 		response.FailWithMessage("参数错误: "+err.Error(), ctx)
 		return
 	}
 
-	result, err := service.FileHistoryServiceApp.GetMainFileList(&req)
+	result, err := service.FileHistoryServiceApp.GetFileList(&req)
 	if err != nil {
 		response.FailWithMessage(err.Error(), ctx)
 		return
@@ -38,23 +38,6 @@ func (c *FileHistoryController) GetFileHistoryInfo(ctx *gin.Context) {
 	}
 
 	result, err := service.FileHistoryServiceApp.GetFileHistoryInfo(uint(id))
-	if err != nil {
-		response.FailWithMessage(err.Error(), ctx)
-		return
-	}
-
-	response.SuccessWithData(result, ctx)
-}
-
-// GetRelatedFilesByMainID 根据主文件ID查询关联文件
-func (c *FileHistoryController) GetRelatedFilesByMainID(ctx *gin.Context) {
-	var req fileHistoryRequest.FileHistoryByMainFileReq
-	if err := ctx.ShouldBindQuery(&req); err != nil {
-		response.FailWithMessage("参数错误", ctx)
-		return
-	}
-
-	result, err := service.FileHistoryServiceApp.GetRelatedFilesByMainID(req.MainFileID)
 	if err != nil {
 		response.FailWithMessage(err.Error(), ctx)
 		return

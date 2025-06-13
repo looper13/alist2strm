@@ -82,9 +82,8 @@ func SetupRoutes() *gin.Engine {
 			fileHistory := auth.Group("/file-history")
 			{
 				fileHistoryController := &controller.FileHistoryController{}
-				fileHistory.GET("/", fileHistoryController.GetMainFileList)                // 获取主文件分页列表
-				fileHistory.GET("/:id", fileHistoryController.GetFileHistoryInfo)          // 获取文件历史详情
-				fileHistory.GET("/related", fileHistoryController.GetRelatedFilesByMainID) // 根据主文件ID查询关联文件
+				fileHistory.GET("/", fileHistoryController.GetFileList)           // 获取主文件分页列表
+				fileHistory.GET("/:id", fileHistoryController.GetFileHistoryInfo) // 获取文件历史详情
 			}
 		}
 

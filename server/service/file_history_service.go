@@ -15,8 +15,8 @@ type FileHistoryService struct{}
 var FileHistoryServiceApp = &FileHistoryService{}
 
 // GetMainFileList 获取主文件分页列表
-func (s *FileHistoryService) GetMainFileList(req *fileHistoryRequest.FileHistoryListReq) (*fileHistoryResponse.FileHistoryListResp, error) {
-	fileHistories, total, err := repository.FileHistory.GetMainFileList(req)
+func (s *FileHistoryService) GetFileList(req *fileHistoryRequest.FileHistoryListReq) (*fileHistoryResponse.FileHistoryListResp, error) {
+	fileHistories, total, err := repository.FileHistory.GetFileList(req)
 	if err != nil {
 		return nil, err
 	}
@@ -41,33 +41,5 @@ func (s *FileHistoryService) GetFileHistoryInfo(id uint) (*fileHistoryResponse.F
 
 	return &fileHistoryResponse.FileHistoryInfoResp{
 		FileHistory: fileHistory,
-	}, nil
-}
-
-// GetRelatedFilesByMainID 根据主文件ID查询关联文件
-func (s *FileHistoryService) GetRelatedFilesByMainID(mainFileID uint) (*fileHistoryResponse.FileHistoryRelatedResp, error) {
-	// 先获取主文件信息
-	mainFile, err := repository.FileHistory.GetByID(mainFileID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("主文件记录不存在")
-		}
-		return nil, err
-	}
-
-	// 检查是否为主文件
-	if !mainFile.IsMainFile {
-		return nil, errors.New("指定的文件不是主文件")
-	}
-
-	// 获取关联文件
-	relatedFiles, err := repository.FileHistory.GetByMainFileID(mainFileID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &fileHistoryResponse.FileHistoryRelatedResp{
-		MainFile:     mainFile,
-		RelatedFiles: relatedFiles,
 	}, nil
 }

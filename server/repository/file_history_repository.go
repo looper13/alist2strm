@@ -11,8 +11,8 @@ type FileHistoryRepository struct{}
 // 包级别的全局实例
 var FileHistory = &FileHistoryRepository{}
 
-// GetMainFileList 获取主文件分页列表（只查询 isMainFile = true 的数据）
-func (r *FileHistoryRepository) GetMainFileList(req *fileHistoryRequest.FileHistoryListReq) ([]*filehistory.FileHistory, int64, error) {
+// 获取文件分页列表
+func (r *FileHistoryRepository) GetFileList(req *fileHistoryRequest.FileHistoryListReq) ([]*filehistory.FileHistory, int64, error) {
 	db := database.DB
 	var fileHistories []*filehistory.FileHistory
 	var total int64
@@ -23,6 +23,10 @@ func (r *FileHistoryRepository) GetMainFileList(req *fileHistoryRequest.FileHist
 	// 任务ID过滤
 	if req.TaskID != nil {
 		query = query.Where("task_id = ?", *req.TaskID)
+	}
+	// 任务日志ID过滤
+	if req.TaskLogID != nil {
+		query = query.Where("task_log_id = ?", *req.TaskLogID)
 	}
 
 	// 关键字搜索
@@ -43,19 +47,6 @@ func (r *FileHistoryRepository) GetMainFileList(req *fileHistoryRequest.FileHist
 	}
 
 	return fileHistories, total, nil
-}
-
-// GetByMainFileID 根据主文件ID查询关联的文件
-func (r *FileHistoryRepository) GetByMainFileID(mainFileID uint) ([]*filehistory.FileHistory, error) {
-	db := database.DB
-	var relatedFiles []*filehistory.FileHistory
-
-	// 查询关联文件（main_file_id = mainFileID）
-	if err := db.Where("main_file_id = ?", mainFileID).Order("created_at ASC").Find(&relatedFiles).Error; err != nil {
-		return nil, err
-	}
-
-	return relatedFiles, nil
 }
 
 // GetByID 根据ID获取文件历史记录
