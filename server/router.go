@@ -85,6 +85,12 @@ func SetupRoutes() *gin.Engine {
 				fileHistory.GET("/", fileHistoryController.GetFileList)           // 获取主文件分页列表
 				fileHistory.GET("/:id", fileHistoryController.GetFileHistoryInfo) // 获取文件历史详情
 			}
+
+			// AList 相关路由
+			alist := auth.Group("/alist")
+			{
+				alist.POST("/test", controller.AList.TestConnection) // 测试AList连接
+			}
 		}
 
 	}

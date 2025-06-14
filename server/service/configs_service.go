@@ -90,6 +90,9 @@ func (s *ConfigService) UpdateConfig(req *configRequest.ConfigUpdateReq) error {
 		return errors.New("配置不存在")
 	}
 
+	// 记录原始配置代码，用于后续通知
+	configCode := config.Code
+
 	// 更新名称
 	if req.Name != "" {
 		config.Name = req.Name
@@ -105,7 +108,14 @@ func (s *ConfigService) UpdateConfig(req *configRequest.ConfigUpdateReq) error {
 		return errors.New("请提供要更新的信息")
 	}
 
-	return repository.Config.Update(config)
+	// 执行更新
+	err = repository.Config.Update(config)
+	if err != nil {
+		return err
+	}
+  go GetConfigListenerService().Notify(configCode)
+
+	return nil
 }
 
 // DeleteConfig 删除配置
