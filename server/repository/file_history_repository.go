@@ -60,3 +60,8 @@ func (r *FileHistoryRepository) GetByID(id uint) (*filehistory.FileHistory, erro
 
 	return &fileHistory, nil
 }
+
+// Create 创建文件历史记录
+func (r *FileHistoryRepository) Create(fileHistory *filehistory.FileHistory) error {
+	return database.DB.Create(fileHistory).Error
+}

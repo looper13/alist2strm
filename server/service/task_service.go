@@ -372,3 +372,46 @@ func (s *TaskService) executeTaskAsync(task *task.Task) {
 	// 可以创建任务日志记录执行过程
 	// 执行完成后更新任务状态和结果
 }
+
+// ExecuteStrmGeneration 执行 STRM 文件生成任务
+func (s *TaskService) ExecuteStrmGeneration(taskID uint) error {
+	// 获取任务信息
+	taskInfo, err := repository.Task.GetByID(taskID)
+	if err != nil {
+		return err
+	}
+
+	if taskInfo == nil {
+		return errors.New("任务不存在")
+	}
+
+	// 检查任务是否启用
+	if !taskInfo.Enabled {
+		return errors.New("任务未启用")
+	}
+
+	// 检查任务是否正在运行
+	if taskInfo.Running {
+		return errors.New("任务正在运行中")
+	}
+
+	// 获取 STRM 生成服务
+	strmService := GetStrmGeneratorService()
+	if strmService == nil {
+		return errors.New("STRM 生成服务未初始化")
+	}
+
+	// 启动 STRM 文件生成
+	return strmService.GenerateStrmFiles(taskID)
+}
+
+// ExecuteStrmGenerationAsync 异步执行 STRM 文件生成任务
+func (s *TaskService) ExecuteStrmGenerationAsync(taskID uint) error {
+	go func() {
+		if err := s.ExecuteStrmGeneration(taskID); err != nil {
+			// 记录错误日志，可以通过任务日志记录
+			// TODO: 这里可以添加更详细的错误处理逻辑
+		}
+	}()
+	return nil
+}

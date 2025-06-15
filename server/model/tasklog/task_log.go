@@ -4,6 +4,14 @@ import (
 	"time"
 )
 
+// TaskLog 状态常量
+const (
+	TaskLogStatusRunning   = "running"
+	TaskLogStatusCompleted = "completed"
+	TaskLogStatusFailed    = "failed"
+	TaskLogStatusCancelled = "cancelled"
+)
+
 // TaskLog 任务日志模型
 type TaskLog struct {
 	ID            uint       `json:"id" gorm:"primaryKey"`

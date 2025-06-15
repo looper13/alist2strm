@@ -30,6 +30,16 @@ func main() {
 		log.Fatalf("初始化默认用户失败: %v", err)
 	}
 
+	// 初始化服务
+	// 获取 logger 实例
+	logger := utils.InfoLogger.Desugar()
+	// 初始化 AList 服务
+	service.InitializeAListService(logger)
+	// 初始化 STRM 生成服务
+	strmService := service.GetStrmGeneratorService()
+	strmService.Initialize(logger)
+	utils.Info("服务初始化完成")
+
 	// 设置路由
 	r := SetupRoutes()
 

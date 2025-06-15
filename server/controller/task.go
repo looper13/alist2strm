@@ -221,3 +221,40 @@ func (tc *TaskController) ExecuteTask(c *gin.Context) {
 	utils.Info("执行任务成功", "task_id", id, "sync", req.Sync, "request_id", c.GetString("request_id"))
 	response.SuccessWithData(result, c)
 }
+
+// ExecuteStrmGeneration 执行 STRM 文件生成
+func (tc *TaskController) ExecuteStrmGeneration(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		utils.Error("执行 STRM 生成任务ID参数错误", "id", idStr, "error", err.Error(), "request_id", c.GetString("request_id"))
+		response.FailWithMessage("任务ID参数错误", c)
+		return
+	}
+
+	// 获取是否异步执行参数
+	async := c.DefaultQuery("async", "false") == "true"
+
+	var err2 error
+	if async {
+		// 异步执行
+		err2 = service.Task.ExecuteStrmGenerationAsync(uint(id))
+		if err2 == nil {
+			utils.Info("异步执行 STRM 生成任务已启动", "task_id", id, "request_id", c.GetString("request_id"))
+			response.SuccessWithMessage("STRM 生成任务已启动", c)
+		}
+	} else {
+		// 同步执行
+		err2 = service.Task.ExecuteStrmGeneration(uint(id))
+		if err2 == nil {
+			utils.Info("同步执行 STRM 生成任务成功", "task_id", id, "request_id", c.GetString("request_id"))
+			response.SuccessWithMessage("STRM 生成任务执行成功", c)
+		}
+	}
+
+	if err2 != nil {
+		utils.Error("执行 STRM 生成任务失败", "task_id", id, "error", err2.Error(), "request_id", c.GetString("request_id"))
+		response.FailWithMessage(err2.Error(), c)
+		return
+	}
+}

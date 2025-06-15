@@ -35,6 +35,9 @@ type AListFile struct {
 	Sign     string    `json:"sign"`     // 签名
 	Thumb    string    `json:"thumb"`    // 缩略图
 	Type     int       `json:"type"`     // 类型
+	HashInfo struct {
+		Sha1 string `json:"sha1"` // SHA1 哈希
+	} `json:"hash_info"` // 哈希信息
 }
 
 // AListListResponse Alist 目录列表响应
