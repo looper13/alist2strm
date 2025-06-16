@@ -60,16 +60,15 @@ func SetupRoutes() *gin.Engine {
 			// 任务相关路由
 			task := auth.Group("/task")
 			{
-				task.POST("/", controller.Task.Create)                                 // 创建任务
-				task.GET("/:id", controller.Task.GetTaskInfo)                          // 获取指定任务信息
-				task.PUT("/:id", controller.Task.UpdateTask)                           // 更新任务信息
-				task.DELETE("/:id", controller.Task.DeleteTask)                        // 删除任务
-				task.GET("/list", controller.Task.GetTaskList)                         // 获取任务列表（分页）
-				task.GET("/all", controller.Task.GetAllTasks)                          // 获取所有任务（不分页）
-				task.PUT("/:id/toggle", controller.Task.ToggleTaskEnabled)             // 切换任务启用状态
-				task.PUT("/:id/reset", controller.Task.ResetTaskStatus)                // 重置任务运行状态
-				task.POST("/:id/execute", controller.Task.ExecuteTask)                 // 执行任务
-				task.POST("/:id/strm-generate", controller.Task.ExecuteStrmGeneration) // 执行 STRM 生成任务
+				task.POST("/", controller.Task.Create)                     // 创建任务
+				task.GET("/:id", controller.Task.GetTaskInfo)              // 获取指定任务信息
+				task.PUT("/:id", controller.Task.UpdateTask)               // 更新任务信息
+				task.DELETE("/:id", controller.Task.DeleteTask)            // 删除任务
+				task.GET("/list", controller.Task.GetTaskList)             // 获取任务列表（分页）
+				task.GET("/all", controller.Task.GetAllTasks)              // 获取所有任务（不分页）
+				task.PUT("/:id/toggle", controller.Task.ToggleTaskEnabled) // 切换任务启用状态
+				task.PUT("/:id/reset", controller.Task.ResetTaskStatus)    // 重置任务运行状态
+				task.POST("/:id/execute", controller.Task.ExecuteTask)     // 执行任务（支持同步/异步）
 			}
 
 			// 任务日志相关路由

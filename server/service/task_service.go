@@ -2,12 +2,14 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/MccRay-s/alist2strm/model/task"
 	taskRequest "github.com/MccRay-s/alist2strm/model/task/request"
 	taskResponse "github.com/MccRay-s/alist2strm/model/task/response"
 	"github.com/MccRay-s/alist2strm/repository"
+	"github.com/MccRay-s/alist2strm/utils"
 )
 
 type TaskService struct{}
@@ -36,13 +38,28 @@ func (s *TaskService) Create(req *taskRequest.TaskCreateReq) error {
 
 	// 设置默认值
 	if newTask.MetadataExtensions == "" {
-		newTask.MetadataExtensions = ".nfo,.jpg,.png"
+		newTask.MetadataExtensions = "nfo,jpg,png"
 	}
 	if newTask.SubtitleExtensions == "" {
-		newTask.SubtitleExtensions = ".srt,.ass,.ssa"
+		newTask.SubtitleExtensions = "srt,ass,ssa"
 	}
 
-	return repository.Task.Create(newTask)
+	err := repository.Task.Create(newTask)
+	if err != nil {
+		return err
+	}
+
+	// 如果任务启用并设置了cron表达式，添加到调度器
+	if newTask.Enabled && newTask.Cron != "" {
+		scheduler := GetTaskScheduler()
+		if err := scheduler.AddTask(newTask); err != nil {
+			utils.Warn("添加任务到调度器失败", "task_id", newTask.ID, "error", err.Error())
+		} else {
+			utils.Info("任务已添加到调度器", "task_id", newTask.ID, "name", newTask.Name)
+		}
+	}
+
+	return nil
 }
 
 // GetTaskInfo 获取任务信息
@@ -151,7 +168,20 @@ func (s *TaskService) UpdateTask(req *taskRequest.TaskUpdateReq) error {
 		return errors.New("请提供要更新的信息")
 	}
 
-	return repository.Task.Update(task)
+	err = repository.Task.Update(task)
+	if err != nil {
+		return err
+	}
+
+	// 更新任务调度
+	scheduler := GetTaskScheduler()
+	if err := scheduler.UpdateTask(task); err != nil {
+		utils.Warn("更新任务调度失败", "task_id", task.ID, "error", err.Error())
+	} else {
+		utils.Info("任务调度已更新", "task_id", task.ID, "name", task.Name)
+	}
+
+	return nil
 }
 
 // DeleteTask 删除任务
@@ -170,7 +200,20 @@ func (s *TaskService) DeleteTask(id uint) error {
 		return errors.New("任务正在运行，无法删除")
 	}
 
-	return repository.Task.Delete(id)
+	// 从队列中移除任务（如果存在）
+	GetTaskQueue().RemoveTaskFromQueue(id)
+
+	err = repository.Task.Delete(id)
+	if err != nil {
+		return err
+	}
+
+	// 从调度器中移除任务
+	scheduler := GetTaskScheduler()
+	scheduler.RemoveTask(id)
+	utils.Info("任务已删除", "task_id", id)
+
+	return nil
 }
 
 // GetTaskList 获取任务列表（分页）
@@ -266,7 +309,25 @@ func (s *TaskService) ToggleTaskEnabled(id uint) error {
 
 	// 切换启用状态
 	task.Enabled = !task.Enabled
-	return repository.Task.Update(task)
+
+	err = repository.Task.Update(task)
+	if err != nil {
+		return err
+	}
+
+	// 更新任务调度
+	scheduler := GetTaskScheduler()
+	if err := scheduler.UpdateTask(task); err != nil {
+		utils.Warn("更新任务调度失败", "task_id", task.ID, "error", err.Error())
+	} else {
+		if task.Enabled {
+			utils.Info("任务已启用", "task_id", task.ID, "name", task.Name)
+		} else {
+			utils.Info("任务已禁用", "task_id", task.ID, "name", task.Name)
+		}
+	}
+
+	return nil
 }
 
 // ResetTaskStatus 重置任务运行状态
@@ -284,25 +345,37 @@ func (s *TaskService) ResetTaskStatus(id uint) error {
 	return repository.Task.UpdateRunningStatus(id, false)
 }
 
-// ExecuteTask 执行任务
-func (s *TaskService) ExecuteTask(id uint, req *taskRequest.TaskExecuteReq) (*taskResponse.TaskExecuteResp, error) {
-	// 检查任务是否存在
-	task, err := repository.Task.GetByID(id)
+// checkTaskExecutable 检查任务是否可执行
+// 返回任务信息和错误（如果有）
+func (s *TaskService) checkTaskExecutable(taskID uint) (*task.Task, error) {
+	// 获取任务信息
+	taskInfo, err := repository.Task.GetByID(taskID)
 	if err != nil {
 		return nil, err
 	}
-	if task == nil {
+	if taskInfo == nil {
 		return nil, errors.New("任务不存在")
 	}
 
 	// 检查任务是否已启用
-	if !task.Enabled {
+	if !taskInfo.Enabled {
 		return nil, errors.New("任务已禁用，无法执行")
 	}
 
 	// 检查任务是否正在运行
-	if task.Running {
+	if taskInfo.Running {
 		return nil, errors.New("任务正在运行中")
+	}
+
+	return taskInfo, nil
+}
+
+// ExecuteTask 执行任务
+func (s *TaskService) ExecuteTask(id uint, req *taskRequest.TaskExecuteReq) (*taskResponse.TaskExecuteResp, error) {
+	// 使用辅助方法检查任务是否可执行
+	task, err := s.checkTaskExecutable(id)
+	if err != nil {
+		return nil, err
 	}
 
 	// 创建执行结果响应
@@ -316,102 +389,127 @@ func (s *TaskService) ExecuteTask(id uint, req *taskRequest.TaskExecuteReq) (*ta
 	}
 
 	if req.Sync {
-		// 同步执行
-		result := s.executeTaskSync(task)
-		return result, nil
+		// 同步执行 STRM 生成
+		execResult, err := s.ExecuteStrmGeneration(id)
+		if err != nil {
+			resp.Status = "failed"
+			resp.Message = err.Error()
+		} else {
+			resp.Status = "completed"
+			resp.Message = "任务执行完成"
+		}
+
+		// 复制详细执行结果
+		if execResult != nil {
+			resp.EndTime = execResult.EndTime
+			resp.Duration = execResult.Duration
+			resp.TotalCount = execResult.TotalCount
+			resp.SuccessCount = execResult.SuccessCount
+			resp.FailedCount = execResult.FailedCount
+			resp.SkippedCount = execResult.SkippedCount
+			resp.MetadataCount = execResult.MetadataCount
+			resp.SubtitleCount = execResult.SubtitleCount
+		} else {
+			resp.EndTime = time.Now().Format("2006-01-02 15:04:05")
+			resp.Duration = time.Since(startTime).String()
+		}
+
+		return resp, err
 	} else {
 		// 异步执行
-		go s.executeTaskAsync(task)
+		err := s.ExecuteStrmGenerationAsync(id)
+		if err != nil {
+			return nil, err
+		}
 		resp.Status = "running"
 		resp.Message = "任务已提交执行，请稍后查看执行结果"
 		return resp, nil
 	}
 }
 
-// executeTaskSync 同步执行任务
-func (s *TaskService) executeTaskSync(task *task.Task) *taskResponse.TaskExecuteResp {
-	// 设置任务为运行状态
-	repository.Task.UpdateRunningStatus(task.ID, true)
-	defer repository.Task.UpdateRunningStatus(task.ID, false)
-
-	startTime := time.Now()
-	result := &taskResponse.TaskExecuteResp{
-		TaskID:    task.ID,
-		TaskName:  task.Name,
-		IsSync:    true,
-		Status:    "completed",
-		StartTime: startTime.Format("2006-01-02 15:04:05"),
-		EndTime:   time.Now().Format("2006-01-02 15:04:05"),
-		Duration:  time.Since(startTime).String(),
-		Message:   "任务执行完成",
-	}
-
-	// TODO: 实现具体的任务执行逻辑
-	// 这里可以根据任务类型执行不同的处理逻辑
-	// 示例逻辑：
-	// result.TotalCount = 100                   // 模拟总文件数
-	// result.SuccessCount = 85                  // 模拟成功数
-	// result.FailedCount = 5                    // 模拟失败数
-	// result.SkippedCount = 8                   // 模拟跳过数
-	// result.OverwriteCount = 2                 // 模拟覆盖数
-	// result.SubtitleCount = 15                 // 模拟字幕文件数
-	// result.MetadataCount = 20                 // 模拟元数据文件数
-	// result.ErrorFiles = 2                     // 模拟错误文件数
-	// result.ProcessedBytes = 1024 * 1024 * 500 // 模拟处理500MB
-
-	return result
-}
-
-// executeTaskAsync 异步执行任务
-func (s *TaskService) executeTaskAsync(task *task.Task) {
-	// 设置任务为运行状态
-	repository.Task.UpdateRunningStatus(task.ID, true)
-	defer repository.Task.UpdateRunningStatus(task.ID, false)
-
-	// TODO: 实现异步执行逻辑
-	// 可以创建任务日志记录执行过程
-	// 执行完成后更新任务状态和结果
-}
-
 // ExecuteStrmGeneration 执行 STRM 文件生成任务
-func (s *TaskService) ExecuteStrmGeneration(taskID uint) error {
-	// 获取任务信息
-	taskInfo, err := repository.Task.GetByID(taskID)
+func (s *TaskService) ExecuteStrmGeneration(taskID uint) (*taskResponse.TaskExecuteResp, error) {
+	// 使用辅助方法检查任务是否可执行
+	taskInfo, err := s.checkTaskExecutable(taskID)
 	if err != nil {
-		return err
-	}
-
-	if taskInfo == nil {
-		return errors.New("任务不存在")
-	}
-
-	// 检查任务是否启用
-	if !taskInfo.Enabled {
-		return errors.New("任务未启用")
-	}
-
-	// 检查任务是否正在运行
-	if taskInfo.Running {
-		return errors.New("任务正在运行中")
+		return nil, err
 	}
 
 	// 获取 STRM 生成服务
 	strmService := GetStrmGeneratorService()
 	if strmService == nil {
-		return errors.New("STRM 生成服务未初始化")
+		return nil, errors.New("STRM 生成服务未初始化")
+	}
+
+	// 记录开始时间
+	startTime := time.Now()
+
+	// 更新任务运行状态
+	if err := repository.Task.UpdateRunningStatus(taskID, true); err != nil {
+		return nil, fmt.Errorf("更新任务运行状态失败: %w", err)
+	}
+
+	// 更新最后执行时间
+	if err := repository.Task.UpdateLastRunAt(taskID, startTime); err != nil {
+		utils.Error("更新任务最后执行时间失败", "task_id", taskID, "error", err.Error())
+	}
+
+	// 准备响应对象
+	resp := &taskResponse.TaskExecuteResp{
+		TaskID:    taskID,
+		TaskName:  taskInfo.Name,
+		IsSync:    true,
+		Status:    "running",
+		StartTime: startTime.Format("2006-01-02 15:04:05"),
 	}
 
 	// 启动 STRM 文件生成
-	return strmService.GenerateStrmFiles(taskID)
+	err = strmService.GenerateStrmFiles(taskID)
+
+	// 更新任务运行状态
+	if updateErr := repository.Task.UpdateRunningStatus(taskID, false); updateErr != nil {
+		utils.Error("更新任务运行状态失败", "task_id", taskID, "error", updateErr.Error())
+	}
+
+	// 记录结束时间
+	endTime := time.Now()
+	resp.EndTime = endTime.Format("2006-01-02 15:04:05")
+	resp.Duration = endTime.Sub(startTime).String()
+
+	// 获取最新的任务日志记录，填充详细执行结果
+	taskLogs, total, logErr := repository.TaskLog.GetLatestByTaskID(taskID, 1)
+	if logErr == nil && total > 0 && len(taskLogs) > 0 {
+		latestLog := taskLogs[0]
+		resp.TotalCount = latestLog.TotalFile
+		resp.SuccessCount = latestLog.GeneratedFile
+		resp.SkippedCount = latestLog.SkipFile
+		resp.MetadataCount = latestLog.MetadataCount
+		resp.SubtitleCount = latestLog.SubtitleCount
+
+		// 计算失败文件数
+		resp.FailedCount = resp.TotalCount - resp.SuccessCount - resp.SkippedCount
+	}
+
+	if err != nil {
+		resp.Status = "failed"
+		return resp, err
+	}
+
+	resp.Status = "completed"
+	return resp, nil
 }
 
 // ExecuteStrmGenerationAsync 异步执行 STRM 文件生成任务
 func (s *TaskService) ExecuteStrmGenerationAsync(taskID uint) error {
-	go func() {
-		if err := s.ExecuteStrmGeneration(taskID); err != nil {
-			// 记录错误日志，可以通过任务日志记录
-			// TODO: 这里可以添加更详细的错误处理逻辑
-		}
-	}()
+	// 验证任务是否可执行
+	taskInfo, err := s.checkTaskExecutable(taskID)
+	if err != nil {
+		return err
+	}
+
+	utils.Info("准备异步执行任务", "task_id", taskID, "name", taskInfo.Name)
+
+	// 将任务添加到队列
+	GetTaskQueue().AddTask(taskID)
 	return nil
 }

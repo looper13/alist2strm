@@ -130,3 +130,18 @@ func (r *TaskRepository) UpdateRunningStatus(id uint, running bool) error {
 func (r *TaskRepository) ResetRunningStatus() error {
 	return database.DB.Model(&task.Task{}).Where("running = ?", true).Update("running", false).Error
 }
+
+// GetAllEnabled 获取所有启用且有Cron表达式的任务
+func (r *TaskRepository) GetAllEnabled() ([]task.Task, error) {
+	var tasks []task.Task
+	// 查询启用且cron表达式不为空的任务
+	if err := database.DB.Where("enabled = ? AND cron != ?", true, "").Find(&tasks).Error; err != nil {
+		return nil, err
+	}
+	return tasks, nil
+}
+
+// UpdateLastRunAt 更新任务最后执行时间
+func (r *TaskRepository) UpdateLastRunAt(id uint, lastRunAt time.Time) error {
+	return database.DB.Model(&task.Task{}).Where("id = ?", id).Update("last_run_at", lastRunAt).Error
+}

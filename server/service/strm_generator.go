@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -297,39 +296,66 @@ func (s *StrmGeneratorService) processFile(file *AListFile, fileType FileType, t
 		Success:    false,
 	}
 
+	// 记录开始处理文件
+	s.logger.Debug("开始处理文件",
+		zap.String("文件名", file.Name),
+		zap.String("文件类型", getFileTypeString(fileType)),
+		zap.String("源路径", sourcePath),
+		zap.String("目标路径", targetPath),
+		zap.Int64("文件大小", file.Size))
+
 	switch fileType {
 	case FileTypeMedia:
+		// 生成 STRM 文件 - 仅使用 AListFile 中已有信息
 		result.Success, result.ErrorMessage = s.generateStrmFile(file, strmConfig, taskInfo, sourcePath, targetPath)
 	case FileTypeMetadata, FileTypeSubtitle:
+		// 下载元数据或字幕文件 - 仅使用 AListFile 中已有信息
 		result.Success, result.ErrorMessage = s.downloadFile(file, sourcePath, targetPath)
 	default:
-		result.ErrorMessage = "不支持的文件类型"
+		result.ErrorMessage = "不支持的文件类型，已跳过"
 	}
 
+	// 记录处理结果
 	if !result.Success {
 		s.logger.Warn("处理文件失败",
-			zap.String("fileName", file.Name),
-			zap.String("fileType", fmt.Sprintf("%d", fileType)),
-			zap.String("error", result.ErrorMessage))
+			zap.String("文件名", file.Name),
+			zap.String("文件类型", getFileTypeString(fileType)),
+			zap.String("错误", result.ErrorMessage))
+	} else {
+		s.logger.Debug("处理文件成功",
+			zap.String("文件名", file.Name),
+			zap.String("文件类型", getFileTypeString(fileType)))
 	}
 
 	return result
 }
 
+// getFileTypeString 获取文件类型的字符串表示
+func getFileTypeString(fileType FileType) string {
+	switch fileType {
+	case FileTypeMedia:
+		return "媒体文件"
+	case FileTypeMetadata:
+		return "元数据文件"
+	case FileTypeSubtitle:
+		return "字幕文件"
+	default:
+		return "其他文件"
+	}
+}
+
 // generateStrmFile 生成 STRM 文件
 func (s *StrmGeneratorService) generateStrmFile(file *AListFile, strmConfig *StrmConfig, taskConfig *task.Task, sourcePath, targetPath string) (bool, string) {
-	// 构建 STRM 文件内容
+	// TODO 处理URLEncode
+
+	// 构建 STRM 文件内容 - 直接使用 AListFile 中的信息，避免多余的 API 调用
+	// 注意：GetFileURL 方法不会发起额外的 API 请求，仅使用配置和参数构建 URL
 	fileURL := s.alistService.GetFileURL(filepath.Dir(sourcePath), file.Name, file.Sign)
 	if fileURL == "" {
-		return false, "无法生成文件URL"
+		return false, "无法生成文件URL，请检查 AList 配置是否完整"
 	}
 
-	// URL 编码
-	if strmConfig.URLEncode {
-		fileURL = url.QueryEscape(fileURL)
-	}
-
-	// 确定 STRM 文件名
+	// 生成 STRM 文件名
 	var strmFileName string
 	if strmConfig.ReplaceSuffix {
 		// 替换后缀为 .strm
@@ -340,11 +366,17 @@ func (s *StrmGeneratorService) generateStrmFile(file *AListFile, strmConfig *Str
 		strmFileName = file.Name + ".strm"
 	}
 
+	// 构建完整的 STRM 文件路径
 	strmFilePath := filepath.Join(filepath.Dir(targetPath), strmFileName)
 
-	// 检查是否需要覆盖
+	// 检查是否需要覆盖现有文件
 	if !s.shouldOverwrite(strmFilePath, taskConfig) {
 		return false, "文件已存在且不允许覆盖"
+	}
+
+	// 确保目标目录存在
+	if err := os.MkdirAll(filepath.Dir(strmFilePath), 0755); err != nil {
+		return false, fmt.Sprintf("创建目标目录失败: %v", err)
 	}
 
 	// 写入 STRM 文件
@@ -367,11 +399,16 @@ func (s *StrmGeneratorService) downloadFile(file *AListFile, sourcePath, targetP
 		return false, "文件已存在"
 	}
 
-	// 这里应该实现实际的文件下载逻辑
-	// 由于 AList 通常提供直接的文件访问 URL，我们可以通过 HTTP 下载
+	// 确保目标目录存在
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+		return false, fmt.Sprintf("创建目标目录失败: %v", err)
+	}
+
+	// 直接使用 AListFile 中的信息构建文件 URL，不需要额外的 API 调用
+	// 注意：GetFileURL 方法不会发起额外的 API 请求，仅使用配置和参数构建 URL
 	fileURL := s.alistService.GetFileURL(filepath.Dir(sourcePath), file.Name, file.Sign)
 	if fileURL == "" {
-		return false, "无法生成文件下载URL"
+		return false, "无法生成文件下载URL，请检查 AList 配置是否完整"
 	}
 
 	// 实现 HTTP 下载逻辑
@@ -381,9 +418,24 @@ func (s *StrmGeneratorService) downloadFile(file *AListFile, sourcePath, targetP
 
 	s.logger.Info("下载文件成功",
 		zap.String("sourceFile", file.Name),
-		zap.String("targetPath", targetPath))
+		zap.String("targetPath", targetPath),
+		zap.String("size", humanizeSize(file.Size)))
 
 	return true, ""
+}
+
+// humanizeSize 将字节大小转换为友好的字符串表示
+func humanizeSize(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
 // downloadFileFromURL 从 URL 下载文件

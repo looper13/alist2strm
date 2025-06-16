@@ -9,20 +9,20 @@ type Task struct {
 	ID                 uint       `json:"id" gorm:"primaryKey"`
 	CreatedAt          time.Time  `json:"createdAt"`
 	UpdatedAt          time.Time  `json:"updatedAt"`
-	Name               string     `json:"name" gorm:"not null" validate:"required"`
-	MediaType          string     `json:"mediaType" gorm:"not null;default:movie"`
-	SourcePath         string     `json:"sourcePath" gorm:"not null" validate:"required"`
-	TargetPath         string     `json:"targetPath" gorm:"not null" validate:"required"`
-	FileSuffix         string     `json:"fileSuffix" gorm:"not null" validate:"required"`
-	Overwrite          bool       `json:"overwrite" gorm:"not null;default:false"`
-	Enabled            bool       `json:"enabled" gorm:"not null;default:true"`
-	Cron               string     `json:"cron"`
-	Running            bool       `json:"running" gorm:"not null;default:false"`
+	Name               string     `json:"name" gorm:"type:VARCHAR(255);not null" validate:"required"`
+	MediaType          string     `json:"mediaType" gorm:"type:VARCHAR(50);not null;default:movie"` // 媒体类型：movie/tv
+	SourcePath         string     `json:"sourcePath" gorm:"type:VARCHAR(255);not null" validate:"required"`
+	TargetPath         string     `json:"targetPath" gorm:"type:VARCHAR(255);not null" validate:"required"`
+	FileSuffix         string     `json:"fileSuffix" gorm:"type:VARCHAR(255);not null" validate:"required"`
+	Overwrite          bool       `json:"overwrite" gorm:"type:TINYINT(1);not null;default:0"`
+	Enabled            bool       `json:"enabled" gorm:"type:TINYINT(1);not null;default:1"`
+	Cron               string     `json:"cron" gorm:"type:VARCHAR(255)"`
+	Running            bool       `json:"running" gorm:"type:TINYINT(1);not null;default:0"`
 	LastRunAt          *time.Time `json:"lastRunAt"`
-	DownloadMetadata   bool       `json:"downloadMetadata" gorm:"not null;default:false"`
-	DownloadSubtitle   bool       `json:"downloadSubtitle" gorm:"not null;default:false"`
-	MetadataExtensions string     `json:"metadataExtensions" gorm:"default:.nfo,.jpg,.png"`
-	SubtitleExtensions string     `json:"subtitleExtensions" gorm:"default:.srt,.ass,.ssa"`
+	DownloadMetadata   bool       `json:"downloadMetadata" gorm:"type:TINYINT(1);not null;default:0"`      // 是否下载刮削数据
+	DownloadSubtitle   bool       `json:"downloadSubtitle" gorm:"type:TINYINT(1);not null;default:0"`      // 是否下载字幕
+	MetadataExtensions string     `json:"metadataExtensions" gorm:"type:VARCHAR(255);default:nfo,jpg,png"` // 刮削数据文件扩展名
+	SubtitleExtensions string     `json:"subtitleExtensions" gorm:"type:VARCHAR(255);default:srt,ass,ssa"` // 字幕文件扩展名
 }
 
 // TableName 表名

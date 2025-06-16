@@ -71,16 +71,21 @@ func (r *TaskLogRepository) DeleteByTaskID(taskID uint) error {
 }
 
 // GetLatestByTaskID 获取任务的最新日志
-func (r *TaskLogRepository) GetLatestByTaskID(taskID uint) (*tasklog.TaskLog, error) {
-	var tl tasklog.TaskLog
-	err := database.DB.Where("task_id = ?", taskID).Order("created_at DESC").First(&tl).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
+func (r *TaskLogRepository) GetLatestByTaskID(taskID uint, limit int) ([]tasklog.TaskLog, int64, error) {
+	var logs []tasklog.TaskLog
+	var total int64
+
+	// 获取总数
+	if err := database.DB.Model(&tasklog.TaskLog{}).Where("task_id = ?", taskID).Count(&total).Error; err != nil {
+		return nil, 0, err
 	}
-	return &tl, nil
+
+	// 获取最新的日志记录
+	if err := database.DB.Where("task_id = ?", taskID).Order("created_at DESC").Limit(limit).Find(&logs).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return logs, total, nil
 }
 
 // UpdateEndTime 更新任务日志结束时间和持续时间

@@ -89,7 +89,11 @@ func InitializeAListService(logger *zap.Logger) *AListService {
 		alistServiceInstance = &AListService{
 			logger: logger,
 		}
-		alistServiceInstance.loadConfig()
+
+		// 加载配置，但不阻断启动
+		if err := alistServiceInstance.loadConfig(); err != nil {
+			logger.Warn("AList 服务初始化时加载配置失败，部分功能可能不可用", zap.Error(err))
+		}
 
 		// 注册配置更新监听器
 		GetConfigListenerService().Register("ALIST", alistServiceInstance)
@@ -105,15 +109,43 @@ func GetAListService() *AListService {
 // loadConfig 从数据库加载配置
 func (s *AListService) loadConfig() error {
 	config, err := repository.Config.GetByCode("ALIST")
-	if err != nil {
-		s.logger.Error("加载 AList 配置失败", zap.Error(err))
-		return err
+	if err != nil || config == nil {
+		// 配置不存在或为空，记录日志但不返回错误，允许程序继续运行
+		s.logger.Warn("未找到 AList 配置或配置为空，AList 功能将不可用", zap.Error(err))
+
+		// 初始化空配置
+		s.mu.Lock()
+		s.config = nil
+		s.client = nil
+		s.mu.Unlock()
+
+		return nil
+	}
+
+	// 确保配置值不为空
+	if config.Value == "" {
+		s.logger.Warn("AList 配置为空字符串，AList 功能将不可用")
+
+		// 初始化空配置
+		s.mu.Lock()
+		s.config = nil
+		s.client = nil
+		s.mu.Unlock()
+
+		return nil
 	}
 
 	var alistConfig AListConfig
 	if err := json.Unmarshal([]byte(config.Value), &alistConfig); err != nil {
 		s.logger.Error("解析 AList 配置失败", zap.Error(err))
-		return err
+
+		// 初始化空配置
+		s.mu.Lock()
+		s.config = nil
+		s.client = nil
+		s.mu.Unlock()
+
+		return nil // 错误时不返回错误，允许程序继续运行
 	}
 
 	s.mu.Lock()
@@ -138,7 +170,7 @@ func (s *AListService) TestConnection() error {
 	s.mu.RUnlock()
 
 	if client == nil {
-		return fmt.Errorf("AList 客户端未初始化")
+		return fmt.Errorf("未配置 AList，请先完成配置")
 	}
 
 	// 尝试获取根目录列表来测试连接
@@ -166,18 +198,51 @@ func (s *AListService) ListFiles(dirPath string) ([]AListFile, error) {
 // GetFileURL 获取文件的完整访问 URL
 func (s *AListService) GetFileURL(sourcePath, filename, sign string) string {
 	s.mu.RLock()
-	domain := s.config.Domain
-	s.mu.RUnlock()
-
-	if domain == "" {
+	if s.config == nil {
+		s.mu.RUnlock()
+		s.logger.Warn("获取文件 URL 失败：AList 配置未初始化")
 		return ""
 	}
 
-	// 构建文件URL
-	cleanPath := strings.TrimPrefix(sourcePath, "/")
-	fileURL := fmt.Sprintf("%s/d/%s/%s", domain, cleanPath, filename)
+	// 优先使用 Domain，如果为空则尝试使用 Host
+	var baseURL string
+	if s.config.Domain != "" {
+		baseURL = s.config.Domain
+	} else if s.config.Host != "" {
+		// 确保 Host 有正确的 http:// 或 https:// 前缀
+		baseURL = s.config.Host
+		if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+			baseURL = "http://" + baseURL
+		}
+		s.logger.Info("Domain 为空，使用 Host 作为基础 URL", zap.String("host", baseURL))
+	}
+	s.mu.RUnlock()
 
-	// 如果有sign参数，添加到URL
+	if baseURL == "" {
+		s.logger.Warn("获取文件 URL 失败：AList Domain 和 Host 均为空")
+		return ""
+	}
+	// 确保域名格式正确 (去除末尾的斜杠)
+	baseURL = strings.TrimSuffix(baseURL, "/")
+
+	// 标准化路径处理
+	cleanPath := strings.TrimPrefix(sourcePath, "/")
+	cleanPath = strings.Trim(cleanPath, "/")
+
+	// 如果路径为空，直接使用文件名
+	if cleanPath == "" {
+		fileURL := fmt.Sprintf("%s/d/%s", baseURL, filename)
+		// 添加签名参数（如果有）
+		if sign != "" {
+			fileURL += "?sign=" + sign
+		}
+		return fileURL
+	}
+
+	// 构建完整文件 URL
+	fileURL := fmt.Sprintf("%s/d/%s/%s", baseURL, cleanPath, filename)
+
+	// 添加签名参数（如果有）
 	if sign != "" {
 		fileURL += "?sign=" + sign
 	}

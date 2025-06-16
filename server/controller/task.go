@@ -204,56 +204,54 @@ func (tc *TaskController) ExecuteTask(c *gin.Context) {
 		return
 	}
 
+	// 获取是否异步执行参数（兼容两种方式）
+	var async bool
+
+	// 先尝试从 JSON 请求体获取
 	var req taskRequest.TaskExecuteReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.Error("执行任务参数绑定失败", "error", err.Error(), "request_id", c.GetString("request_id"))
-		response.FailWithMessage("参数错误: "+err.Error(), c)
-		return
+	if err := c.ShouldBindJSON(&req); err == nil {
+		async = !req.Sync // JSON 中是 sync 字段，需要取反
+	} else {
+		// 如果 JSON 解析失败，尝试从查询参数获取
+		async = c.DefaultQuery("async", "false") == "true"
 	}
-
-	result, err := service.Task.ExecuteTask(uint(id), &req)
-	if err != nil {
-		utils.Error("执行任务失败", "task_id", id, "error", err.Error(), "request_id", c.GetString("request_id"))
-		response.FailWithMessage(err.Error(), c)
-		return
-	}
-
-	utils.Info("执行任务成功", "task_id", id, "sync", req.Sync, "request_id", c.GetString("request_id"))
-	response.SuccessWithData(result, c)
-}
-
-// ExecuteStrmGeneration 执行 STRM 文件生成
-func (tc *TaskController) ExecuteStrmGeneration(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		utils.Error("执行 STRM 生成任务ID参数错误", "id", idStr, "error", err.Error(), "request_id", c.GetString("request_id"))
-		response.FailWithMessage("任务ID参数错误", c)
-		return
-	}
-
-	// 获取是否异步执行参数
-	async := c.DefaultQuery("async", "false") == "true"
 
 	var err2 error
 	if async {
 		// 异步执行
 		err2 = service.Task.ExecuteStrmGenerationAsync(uint(id))
 		if err2 == nil {
-			utils.Info("异步执行 STRM 生成任务已启动", "task_id", id, "request_id", c.GetString("request_id"))
-			response.SuccessWithMessage("STRM 生成任务已启动", c)
+			utils.Info("异步执行任务已启动", "task_id", id, "request_id", c.GetString("request_id"))
+			response.SuccessWithMessage("任务已启动", c)
 		}
 	} else {
 		// 同步执行
-		err2 = service.Task.ExecuteStrmGeneration(uint(id))
-		if err2 == nil {
-			utils.Info("同步执行 STRM 生成任务成功", "task_id", id, "request_id", c.GetString("request_id"))
-			response.SuccessWithMessage("STRM 生成任务执行成功", c)
+		execResult, err2 := service.Task.ExecuteStrmGeneration(uint(id))
+		if err2 != nil {
+			utils.Error("同步执行任务失败", "task_id", id, "error", err2.Error(), "request_id", c.GetString("request_id"))
+
+			// 即使发生错误，也返回执行结果（如果有）
+			if execResult != nil {
+				execResult.Status = "failed"
+				execResult.ErrorMessage = err2.Error()
+				response.FailWithDetailed(execResult, err2.Error(), c)
+			} else {
+				response.FailWithMessage(err2.Error(), c)
+			}
+		} else {
+			utils.Info("同步执行任务成功", "task_id", id,
+				"成功", execResult.SuccessCount,
+				"失败", execResult.FailedCount,
+				"跳过", execResult.SkippedCount,
+				"耗时", execResult.Duration,
+				"request_id", c.GetString("request_id"))
+			response.SuccessWithData(execResult, c)
 		}
 	}
 
-	if err2 != nil {
-		utils.Error("执行 STRM 生成任务失败", "task_id", id, "error", err2.Error(), "request_id", c.GetString("request_id"))
+	// 只需要处理异步执行的错误情况，因为同步执行已经在上面处理了
+	if async && err2 != nil {
+		utils.Error("启动异步任务失败", "task_id", id, "error", err2.Error(), "request_id", c.GetString("request_id"))
 		response.FailWithMessage(err2.Error(), c)
 		return
 	}

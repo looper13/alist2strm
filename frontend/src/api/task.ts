@@ -35,7 +35,7 @@ export class TaskAPI {
    * 执行任务
    */
   async execute(id: number) {
-    return http.post(`${this.baseUrl}/${id}/strm-generate`)
+    return http.post(`${this.baseUrl}/${id}/execute?async=true`)
   }
 
   /**

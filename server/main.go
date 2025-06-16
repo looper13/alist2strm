@@ -34,10 +34,36 @@ func main() {
 	// 获取 logger 实例
 	logger := utils.InfoLogger.Desugar()
 	// 初始化 AList 服务
-	service.InitializeAListService(logger)
+	alistService := service.InitializeAListService(logger)
+	if alistService == nil {
+		utils.Warn("AList 服务初始化失败，部分功能可能不可用")
+	} else {
+		utils.Info("AList 服务初始化完成")
+	}
+
 	// 初始化 STRM 生成服务
 	strmService := service.GetStrmGeneratorService()
 	strmService.Initialize(logger)
+
+	// 初始化任务队列
+	service.GetTaskQueue()
+	utils.Info("任务队列初始化完成")
+
+	// 初始化任务调度器
+	taskScheduler := service.GetTaskScheduler()
+
+	// 启动任务队列执行器
+	service.StartTaskQueue()
+	utils.Info("任务队列执行器已启动")
+
+	// 启动任务调度器
+	taskCount := taskScheduler.Start()
+	if taskCount > 0 {
+		utils.Info("任务调度器启动完成", "定时任务数量", taskCount)
+	} else {
+		utils.Info("任务调度器启动完成，没有启用的定时任务")
+	}
+
 	utils.Info("服务初始化完成")
 
 	// 设置路由

@@ -64,7 +64,7 @@ const { isMobile } = useMobile()
               <template #icon>
                 <div :class="item.downloadMetadata ? 'i-ri:information-line' : 'i-ri:forbid-line'" />
               </template>
-              <span class="flex items-center gap-1">
+              <span class="flex gap-1 items-center">
                 元数据
                 <div v-if="item.downloadMetadata" class="i-ri:check-line text-green-500" />
                 <div v-else class="i-ri:close-line text-red-500" />
@@ -74,7 +74,7 @@ const { isMobile } = useMobile()
           <div class="text-center">
             {{ item.downloadMetadata ? '已开启元数据下载' : '已关闭元数据下载' }}
             <template v-if="item.downloadMetadata">
-              <br />支持格式：{{ item.metadataExtensions || '.nfo,.jpg,.png' }}
+              <br>支持格式：{{ item.metadataExtensions || 'nfo,jpg,png' }}
             </template>
           </div>
         </NTooltip>
@@ -89,7 +89,7 @@ const { isMobile } = useMobile()
               <template #icon>
                 <div :class="item.downloadSubtitle ? 'i-ri:subtitle-line' : 'i-ri:forbid-line'" />
               </template>
-              <span class="flex items-center gap-1">
+              <span class="flex gap-1 items-center">
                 字幕
                 <div v-if="item.downloadSubtitle" class="i-ri:check-line text-green-500" />
                 <div v-else class="i-ri:close-line text-red-500" />
@@ -99,7 +99,7 @@ const { isMobile } = useMobile()
           <div class="text-center">
             {{ item.downloadSubtitle ? '已开启字幕下载' : '已关闭字幕下载' }}
             <template v-if="item.downloadSubtitle">
-              <br />支持格式：{{ item.subtitleExtensions || '.srt,.ass,.ssa' }}
+              <br>支持格式：{{ item.subtitleExtensions || 'srt,ass,ssa' }}
             </template>
           </div>
         </NTooltip>
