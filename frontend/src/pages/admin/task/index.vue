@@ -2,6 +2,7 @@
 import type { DataTableColumns, FormRules } from 'naive-ui'
 import cronValidate from 'cron-validate'
 import { taskAPI } from '~/api/task'
+import { taskLogAPI } from '~/api/task-log'
 
 const { isMobile } = useMobile()
 // 状态定义
@@ -294,7 +295,7 @@ async function loadTaskLogs() {
     return
   try {
     logLoading.value = true
-    const { data } = await taskAPI.findLogs({
+    const { data } = await taskLogAPI.findLogs({
       taskId: currentId.value,
       page: logPagination.page,
       pageSize: logPagination.pageSize,
@@ -345,7 +346,16 @@ const logColumns: DataTableColumns<Api.Task.Log> = [
       : h(NText, { depth: 3 }, { default: () => '-' }),
   },
   {
-    title: '总文件数',
+    title: '耗时(秒)',
+    key: 'duration',
+    width: isMobile ? 70 : 100,
+    align: 'right',
+    render: (row) => {
+      return h(NText, { depth: 2 }, { default: () => row.duration || '-' })
+    },
+  },
+  {
+    title: '总数',
     key: 'totalFile',
     width: isMobile ? 70 : 100,
     align: 'right',
@@ -372,9 +382,64 @@ const logColumns: DataTableColumns<Api.Task.Log> = [
     },
   },
   {
+    title: '元数据',
+    key: 'metadataCount',
+    width: isMobile ? 70 : 100,
+    align: 'right',
+    render: (row) => {
+      return h(NTag, { type: 'info', size: 'small', style: isMobile ? 'padding: 0 4px;' : '' }, { default: () => row.metadataCount || 0 })
+    },
+  },
+  {
+    title: '字幕',
+    key: 'subtitleCount',
+    width: isMobile ? 70 : 100,
+    align: 'right',
+    render: (row) => {
+      return h(NTag, { type: 'info', size: 'small', style: isMobile ? 'padding: 0 4px;' : '' }, { default: () => row.subtitleCount || 0 })
+    },
+  },
+  {
+    title: () => {
+      return h(
+        'div',
+        {
+          style: 'display: flex; align-items: center; justify-content: end; width: 100%;',
+        },
+        [
+          '失败',
+          h(
+            NTooltip,
+            { trigger: 'hover' },
+            {
+              trigger: () => h('div', { class: 'i-ri:question-line ml-1', style: 'cursor: pointer; font-size: 14px;' }),
+              default: () => '失败文件数仅供参考，特别是在任务执行中途失败时可能不准确',
+            },
+          ),
+        ],
+      )
+    },
+    key: 'failedCount',
+    width: isMobile ? 70 : 100,
+    align: 'right',
+    render: (row) => {
+      return h(NTag, { type: 'error', size: 'small', style: isMobile ? 'padding: 0 4px;' : '' }, { default: () => row.failedCount || 0 })
+    },
+  },
+  {
     title: '消息',
     key: 'message',
-    render: row => h(NText, { type: row.status === 'failed' ? 'error' : undefined }, { default: () => row.message || '-' }),
+    width: isMobile ? 200 : 300,
+    ellipsis: {
+      tooltip: true,
+    },
+    render: (row) => {
+      const msgText = row.message || '-'
+      return h(NText, {
+        type: row.status === 'failed' ? 'error' : undefined,
+        depth: msgText === '-' ? 3 : undefined,
+      }, { default: () => msgText })
+    },
   },
 ]
 

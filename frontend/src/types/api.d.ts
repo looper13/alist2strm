@@ -116,13 +116,20 @@ declare namespace Api {
 
     type Log = Common.CommonRecord<{
       taskId: number
-      status: string
+      createdAt: string
+      updatedAt: string
       message: string
       startTime: string
       endTime: string | null
+      duration: number
+      status: string
       totalFile: number
       generatedFile: number
       skipFile: number
+      overwriteFile: number
+      metadataCount: number
+      subtitleCount: number
+      failedCount: number
     }>
 
     type LogQuery = Common.PaginationQuery<{
