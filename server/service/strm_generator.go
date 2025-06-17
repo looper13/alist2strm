@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -346,11 +347,33 @@ func getFileTypeString(fileType FileType) string {
 
 // generateStrmFile 生成 STRM 文件
 func (s *StrmGeneratorService) generateStrmFile(file *AListFile, strmConfig *StrmConfig, taskConfig *task.Task, sourcePath, targetPath string) (bool, string) {
-	// TODO 处理URLEncode
+	// 处理路径和文件名的 URL 编码
+	dirPath := filepath.Dir(sourcePath)
+	fileName := file.Name
+
+	// 根据 URLEncode 配置决定是否需要对路径进行编码
+	if strmConfig.URLEncode {
+		// 将路径分割为各个部分，对每部分进行单独编码，然后重新连接
+		// 这与 Node.js 版本的处理方式相同: path.split('/').map(encodeURIComponent).join('/')
+		pathParts := strings.Split(dirPath, "/")
+		for i, part := range pathParts {
+			pathParts[i] = url.PathEscape(part)
+		}
+		dirPath = strings.Join(pathParts, "/")
+
+		// 同样处理文件名
+		fileName = url.PathEscape(fileName)
+
+		s.logger.Debug("进行了URL编码",
+			zap.String("原路径", filepath.Dir(sourcePath)),
+			zap.String("编码后路径", dirPath),
+			zap.String("原文件名", file.Name),
+			zap.String("编码后文件名", fileName))
+	}
 
 	// 构建 STRM 文件内容 - 直接使用 AListFile 中的信息，避免多余的 API 调用
 	// 注意：GetFileURL 方法不会发起额外的 API 请求，仅使用配置和参数构建 URL
-	fileURL := s.alistService.GetFileURL(filepath.Dir(sourcePath), file.Name, file.Sign)
+	fileURL := s.alistService.GetFileURL(dirPath, fileName, file.Sign)
 	if fileURL == "" {
 		return false, "无法生成文件URL，请检查 AList 配置是否完整"
 	}
@@ -404,9 +427,32 @@ func (s *StrmGeneratorService) downloadFile(file *AListFile, sourcePath, targetP
 		return false, fmt.Sprintf("创建目标目录失败: %v", err)
 	}
 
+	// 获取 STRM 配置以检查是否需要 URL 编码
+	strmConfig, err := s.loadStrmConfig()
+	if err != nil {
+		return false, fmt.Sprintf("加载 STRM 配置失败: %v", err)
+	}
+
+	// 处理路径和文件名
+	dirPath := filepath.Dir(sourcePath)
+	fileName := file.Name
+
+	// 根据 URLEncode 配置决定是否需要对路径进行编码
+	if strmConfig.URLEncode {
+		// 对路径各部分单独编码
+		pathParts := strings.Split(dirPath, "/")
+		for i, part := range pathParts {
+			pathParts[i] = url.PathEscape(part)
+		}
+		dirPath = strings.Join(pathParts, "/")
+
+		// 对文件名编码
+		fileName = url.PathEscape(fileName)
+	}
+
 	// 直接使用 AListFile 中的信息构建文件 URL，不需要额外的 API 调用
 	// 注意：GetFileURL 方法不会发起额外的 API 请求，仅使用配置和参数构建 URL
-	fileURL := s.alistService.GetFileURL(filepath.Dir(sourcePath), file.Name, file.Sign)
+	fileURL := s.alistService.GetFileURL(dirPath, fileName, file.Sign)
 	if fileURL == "" {
 		return false, "无法生成文件下载URL，请检查 AList 配置是否完整"
 	}
