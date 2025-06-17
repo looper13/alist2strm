@@ -13,14 +13,15 @@ type FileHistory struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 
 	// 文件基本信息
-	FileName       string     `json:"fileName" gorm:"not null;index"`
-	SourcePath     string     `json:"sourcePath" gorm:"not null;index"`
-	TargetFilePath string     `json:"targetFilePath" gorm:"not null"`
+	FileName       string     `json:"fileName" gorm:"not null;index;type:varchar(200)"`
+	SourcePath     string     `json:"sourcePath" gorm:"not null;index;type:varchar(200)"`
+	TargetFilePath string     `json:"targetFilePath" gorm:"not null;type:varchar(200)"`
 	FileSize       int64      `json:"fileSize" gorm:"not null"`
-	FileType       string     `json:"fileType" gorm:"not null"`
-	FileSuffix     string     `json:"fileSuffix" gorm:"not null"`
+	FileType       string     `json:"fileType" gorm:"not null;type:varchar(20)"`
+	FileSuffix     string     `json:"fileSuffix" gorm:"not null;type:varchar(20)"`
+	IsStrm         bool       `json:"isStrm" gorm:"not null;index;default:false"`
 	ModifiedAt     *time.Time `json:"modifiedAt" gorm:"index"`
-	Hash           string     `json:"hash" gorm:"size:64"`
+	Hash           string     `json:"hash" gorm:"not null;type:varchar(20);uniqueIndex"`
 }
 
 // TableName 表名

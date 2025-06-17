@@ -65,3 +65,28 @@ func (r *FileHistoryRepository) GetByID(id uint) (*filehistory.FileHistory, erro
 func (r *FileHistoryRepository) Create(fileHistory *filehistory.FileHistory) error {
 	return database.DB.Create(fileHistory).Error
 }
+
+// GetByHash 根据Hash获取文件历史记录
+func (r *FileHistoryRepository) GetByHash(hash string) (*filehistory.FileHistory, error) {
+	if hash == "" {
+		return nil, nil
+	}
+
+	db := database.DB
+	var fileHistory filehistory.FileHistory
+
+	if err := db.Where("hash = ?", hash).First(&fileHistory).Error; err != nil {
+		return nil, err
+	}
+
+	return &fileHistory, nil
+}
+
+// UpdateByID 根据ID更新文件历史记录
+func (r *FileHistoryRepository) UpdateByID(id uint, updateFields map[string]interface{}) error {
+	if id == 0 {
+		return nil
+	}
+
+	return database.DB.Model(&filehistory.FileHistory{}).Where("id = ?", id).Updates(updateFields).Error
+}

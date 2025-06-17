@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MccRay-s/alist2strm/repository"
 	"github.com/MccRay-s/alist2strm/utils"
 )
 
@@ -110,17 +111,41 @@ func (tq *TaskQueue) executor() {
 			go func(id uint) {
 				// 执行任务（不在锁内执行，避免阻塞其他操作）
 				utils.Info("开始执行任务", "task_id", id)
+                
+				// 记录开始时间
+				startTime := time.Now()
 
 				// 执行任务
 				_, err := Task.ExecuteStrmGeneration(id)
+
+				// 计算持续时间（秒）
+				endTime := time.Now()
+				durationSeconds := int64(endTime.Sub(startTime).Seconds())
+                
+				// 获取最新的任务日志，更新持续时间
+				taskLogs, total, logErr := repository.TaskLog.GetLatestByTaskID(id, 1)
+				if logErr == nil && total > 0 && len(taskLogs) > 0 {
+					latestLog := taskLogs[0]
+					
+					// 更新持续时间
+					updateData := map[string]interface{}{
+						"duration": durationSeconds,
+					}
+					
+					if updateErr := repository.TaskLog.UpdatePartial(latestLog.ID, updateData); updateErr != nil {
+						utils.Error("更新任务日志持续时间失败", "task_id", id, "log_id", latestLog.ID, "error", updateErr.Error())
+					} else {
+						utils.Info("更新任务日志持续时间", "task_id", id, "duration", durationSeconds)
+					}
+				}
 
 				// 任务已经在ExecuteStrmGeneration方法中设置和重置了运行状态
 
 				// 记录执行结果
 				if err != nil {
-					utils.Error("任务执行失败", "task_id", id, "error", err.Error())
+					utils.Error("任务执行失败", "task_id", id, "error", err.Error(), "duration", durationSeconds)
 				} else {
-					utils.Info("任务执行成功", "task_id", id)
+					utils.Info("任务执行成功", "task_id", id, "duration", durationSeconds)
 				}
 
 				// 更新状态
