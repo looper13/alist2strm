@@ -297,6 +297,12 @@ func (s *StrmGeneratorService) GenerateStrmFiles(taskID uint) error {
 		s.logger.Error("更新任务日志失败", zap.Error(updateErr))
 	}
 
+	// 发送Telegram通知
+	notifyErr := s.sendTelegramNotification(taskInfo, taskLogID, status, durationSeconds, updateData)
+	if notifyErr != nil {
+		s.logger.Error("发送Telegram通知失败", zap.Error(notifyErr))
+	}
+
 	return err
 }
 
@@ -878,6 +884,148 @@ func (s *StrmGeneratorService) updateTaskLogWithError(taskLogID uint, errorMessa
 			zap.Uint("taskLogID", taskLogID),
 			zap.Int64("duration", durationSeconds))
 	}
+}
+
+// sendTelegramNotification 发送Telegram通知
+func (s *StrmGeneratorService) sendTelegramNotification(taskInfo *task.Task, taskLogID uint, status string, duration int64, stats map[string]interface{}) error {
+	// Telegram Bot配置（实际应用中应从配置文件或环境变量中读取）
+	const (
+		enableNotification = true                                                 // 是否启用Telegram通知
+		botToken           = "467857328346:AAGwEGenWJYec1irqG26wJMoWxQHs6HArC0eE" // 替换为你的Telegram Bot Token
+		chatID             = "5486452678413"                                      // 替换为你的Chat ID (可以是数字或者字符串，如"@channelname")
+	)
+
+	// 如果未启用通知或未配置Token/ChatID，则跳过发送
+	if !enableNotification || botToken == "YOUR_BOT_TOKEN_HERE" || chatID == "YOUR_CHAT_ID_HERE" {
+		s.logger.Info("Telegram通知未启用或未配置完成，跳过发送")
+		return nil
+	}
+	// 构建消息文本
+	statusEmoji := "✅"
+	errorInfo := ""
+
+	if status != tasklog.TaskLogStatusCompleted {
+		statusEmoji = "❌"
+		// 如果是失败状态，尝试获取错误消息
+		if strings.Contains(status, "失败") {
+			errorInfo = strings.TrimPrefix(status, "STRM 文件生成失败: ")
+			errorInfo = strings.TrimPrefix(errorInfo, "下载文件处理失败: ")
+		}
+	}
+
+	// 格式化时间
+	durationStr := ""
+	if duration > 0 {
+		hours := duration / 3600
+		minutes := (duration % 3600) / 60
+		seconds := duration % 60
+
+		if hours > 0 {
+			durationStr = fmt.Sprintf("%d小时%d分钟%d秒", hours, minutes, seconds)
+		} else if minutes > 0 {
+			durationStr = fmt.Sprintf("%d分钟%d秒", minutes, seconds)
+		} else {
+			durationStr = fmt.Sprintf("%d秒", seconds)
+		}
+	}
+
+	// 提取统计数据，确保安全转换
+	var (
+		totalFiles     int
+		generatedFiles int
+		skippedFiles   int
+		metadataFiles  int
+		subtitleFiles  int
+	)
+
+	// 类型安全的转换
+	if v, ok := stats["total_file"].(int); ok {
+		totalFiles = v
+	}
+	if v, ok := stats["generated_file"].(int); ok {
+		generatedFiles = v
+	}
+	if v, ok := stats["skip_file"].(int); ok {
+		skippedFiles = v
+	}
+	if v, ok := stats["metadata_count"].(int); ok {
+		metadataFiles = v
+	}
+	if v, ok := stats["subtitle_count"].(int); ok {
+		subtitleFiles = v
+	}
+
+	// 构建消息
+	// 为状态文本设置更友好的显示
+	statusDisplay := "成功"
+	if status != tasklog.TaskLogStatusCompleted {
+		statusDisplay = "失败"
+	}
+
+	// 添加错误信息部分(如果有)
+	errorPart := ""
+	if errorInfo != "" {
+		errorPart = fmt.Sprintf("\n\n⚠️ *错误信息*\n`%s`", errorInfo)
+	}
+
+	message := fmt.Sprintf("🎬 *AList2Strm 任务通知* %s\n\n"+
+		"📋 *任务详情*\n"+
+		"├ 名称: `%s`\n"+
+		"├ 状态: %s *%s*\n"+
+		"└ 用时: `%s`\n\n"+
+		"📊 *文件统计*\n"+
+		"├ 总文件: `%d` 个\n"+
+		"├ 已生成: `%d` 个\n"+
+		"├ 已跳过: `%d` 个\n"+
+		"├ 元数据: `%d` 个\n"+
+		"└ 字幕: `%d` 个\n\n"+
+		"📁 *路径信息*\n"+
+		"├ 源路径: `%s`\n"+
+		"└ 目标路径: `%s`%s",
+		statusEmoji,
+		taskInfo.Name,
+		statusEmoji,
+		statusDisplay,
+		durationStr,
+		totalFiles,
+		generatedFiles,
+		skippedFiles,
+		metadataFiles,
+		subtitleFiles,
+		taskInfo.SourcePath,
+		taskInfo.TargetPath,
+		errorPart)
+
+	// URL编码消息
+	encodedMessage := url.QueryEscape(message)
+
+	// 构建API URL (使用Markdown解析模式)
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage?chat_id=%s&text=%s&parse_mode=Markdown",
+		botToken, chatID, encodedMessage)
+
+	// 发送HTTP请求
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(apiURL)
+	if err != nil {
+		s.logger.Error("发送Telegram通知失败", zap.Error(err))
+		return err
+	}
+	defer resp.Body.Close()
+
+	// 检查响应状态
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		s.logger.Error("Telegram API返回错误",
+			zap.Int("status", resp.StatusCode),
+			zap.String("response", string(body)))
+		return fmt.Errorf("telegram API返回错误: %d", resp.StatusCode)
+	}
+
+	s.logger.Info("Telegram通知发送成功",
+		zap.String("taskName", taskInfo.Name),
+		zap.String("status", status))
+
+	return nil
 }
 
 // processStrmFileQueue 处理 STRM 文件生成队列（并发处理）
