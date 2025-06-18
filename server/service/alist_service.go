@@ -214,7 +214,6 @@ func (s *AListService) GetFileURL(sourcePath, filename, sign string) string {
 		if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
 			baseURL = "http://" + baseURL
 		}
-		s.logger.Info("Domain 为空，使用 Host 作为基础 URL", zap.String("host", baseURL))
 	}
 	s.mu.RUnlock()
 

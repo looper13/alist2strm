@@ -55,11 +55,33 @@ type FileProcessResult struct {
 	IsMetadata bool
 }
 
+// FileProcessQueue 文件处理队列类型
+type FileProcessQueue struct {
+	StrmFiles     []FileEntry  // 用于生成 STRM 的媒体文件队列
+	DownloadFiles []FileEntry  // 需要下载的文件队列 (字幕、元数据)
+	FilesMutex    sync.RWMutex // 用于安全访问队列的互斥锁
+}
+
+// ProcessingStats 文件处理统计信息
+type ProcessingStats struct {
+	TotalFiles             int          // 扫描到的总文件数
+	GeneratedFiles         int          // 成功生成的 STRM 文件
+	SkippedFiles           int          // 跳过的文件
+	MetadataProcessed      int          // 处理的元数据文件
+	SubtitleProcessed      int          // 处理的字幕文件
+	ScanFinished           bool         // 目录扫描是否已完成
+	StrmProcessingDone     bool         // STRM 文件处理是否已完成
+	DownloadProcessingDone bool         // 下载文件处理是否已完成
+	Mutex                  sync.RWMutex // 用于安全访问统计的互斥锁
+}
+
 // StrmGeneratorService STRM 文件生成服务
 type StrmGeneratorService struct {
 	alistService *AListService
 	logger       *zap.Logger
 	mu           sync.RWMutex
+	queue        *FileProcessQueue // 文件处理队列
+	stats        *ProcessingStats  // 处理统计
 }
 
 var (
@@ -70,7 +92,13 @@ var (
 // GetStrmGeneratorService 获取 STRM 生成服务实例
 func GetStrmGeneratorService() *StrmGeneratorService {
 	strmGeneratorOnce.Do(func() {
-		strmGeneratorInstance = &StrmGeneratorService{}
+		strmGeneratorInstance = &StrmGeneratorService{
+			queue: &FileProcessQueue{
+				StrmFiles:     make([]FileEntry, 0),
+				DownloadFiles: make([]FileEntry, 0),
+			},
+			stats: &ProcessingStats{},
+		}
 	})
 	return strmGeneratorInstance
 }
@@ -81,6 +109,14 @@ func (s *StrmGeneratorService) Initialize(logger *zap.Logger) {
 	defer s.mu.Unlock()
 	s.logger = logger
 	s.alistService = GetAListService()
+
+	// 初始化队列和统计信息
+	s.queue = &FileProcessQueue{
+		StrmFiles:     make([]FileEntry, 0),
+		DownloadFiles: make([]FileEntry, 0),
+	}
+	s.stats = &ProcessingStats{}
+
 	logger.Info("STRM 生成服务初始化完成")
 }
 
@@ -103,6 +139,13 @@ func (s *StrmGeneratorService) GenerateStrmFiles(taskID uint) error {
 	if err != nil {
 		return fmt.Errorf("获取任务信息失败: %w", err)
 	}
+
+	// 重置处理队列和统计信息
+	s.queue = &FileProcessQueue{
+		StrmFiles:     make([]FileEntry, 0),
+		DownloadFiles: make([]FileEntry, 0),
+	}
+	s.stats = &ProcessingStats{}
 
 	// 创建任务日志
 	taskLog := &tasklog.TaskLog{
@@ -135,17 +178,90 @@ func (s *StrmGeneratorService) GenerateStrmFiles(taskID uint) error {
 		zap.String("sourcePath", taskInfo.SourcePath),
 		zap.String("targetPath", taskInfo.TargetPath))
 
-	totalFiles, generatedFiles, skippedFiles, metadataFiles, subtitleFiles, err := s.processDirectory(
-		taskInfo, strmConfig, taskLogID, taskInfo.SourcePath, taskInfo.TargetPath)
+	// 先启动STRM文件处理协程（并发），让它等待队列中的项目
+	var strmProcessingErr error
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	// 创建信号通道，用于向STRM处理协程通知扫描完成
+	strmScanDoneChan := make(chan bool)
+
+	// 1. 先启动STRM文件生成协程（并发），它会立即开始处理媒体文件
+	go func() {
+		defer wg.Done()
+		strmProcessingErr = s.processStrmFileQueueAsync(taskInfo, strmConfig, taskLogID, strmScanDoneChan)
+	}()
+
+	// 现在开始递归扫描，边扫描边将媒体文件加入队列（立即处理）
+	startTime := time.Now()
+	err = s.scanDirectoryRecursive(taskInfo, strmConfig, taskLogID, taskInfo.SourcePath, taskInfo.TargetPath)
+	if err != nil {
+		// 通知STRM协程扫描已结束（失败）
+		close(strmScanDoneChan)
+
+		// 等待STRM协程结束
+		wg.Wait()
+
+		s.updateTaskLogWithError(taskLogID, "扫描目录失败: "+err.Error())
+		return err
+	}
+	scanDuration := time.Since(startTime)
+
+	// 目录扫描完成后，标记扫描结束，并更新任务日志中的总文件数
+	s.stats.Mutex.Lock()
+	s.stats.ScanFinished = true
+	totalFiles := s.stats.TotalFiles
+	s.stats.Mutex.Unlock()
+
+	s.logger.Info("目录扫描完成",
+		zap.Int("总文件数", totalFiles),
+		zap.Duration("扫描用时", scanDuration),
+		zap.Int("STRM队列长度", len(s.queue.StrmFiles)),
+		zap.Int("下载队列长度", len(s.queue.DownloadFiles)))
+
+	// 更新任务日志中的总文件数
+	updateTotalData := map[string]interface{}{
+		"total_file": totalFiles,
+	}
+	if updateErr := repository.TaskLog.UpdatePartial(taskLogID, updateTotalData); updateErr != nil {
+		s.logger.Error("更新任务日志总文件数失败", zap.Error(updateErr))
+	}
+
+	// 通知STRM协程扫描已结束
+	close(strmScanDoneChan)
+
+	// 启动下载文件处理协程（串行）
+	var downloadProcessingErr error
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		downloadProcessingErr = s.processDownloadFileQueue(taskInfo, strmConfig, taskLogID)
+	}()
+
+	// 等待所有处理都完成
+	wg.Wait()
 
 	// 更新任务日志
+	s.stats.Mutex.RLock()
+	generatedFiles := s.stats.GeneratedFiles
+	skippedFiles := s.stats.SkippedFiles
+	metadataFiles := s.stats.MetadataProcessed
+	subtitleFiles := s.stats.SubtitleProcessed
+	s.stats.Mutex.RUnlock()
+
 	endTime := time.Now()
 	status := tasklog.TaskLogStatusCompleted
 	message := "STRM 文件生成完成"
 
-	if err != nil {
+	// 如果任一处理出错，标记任务失败
+	if strmProcessingErr != nil {
 		status = tasklog.TaskLogStatusFailed
-		message = "STRM 文件生成失败: " + err.Error()
+		message = "STRM 文件生成失败: " + strmProcessingErr.Error()
+		err = strmProcessingErr
+	} else if downloadProcessingErr != nil {
+		status = tasklog.TaskLogStatusFailed
+		message = "下载文件处理失败: " + downloadProcessingErr.Error()
+		err = downloadProcessingErr
 	}
 
 	// 获取当前任务日志记录以获取开始时间
@@ -208,41 +324,52 @@ type FileEntry struct {
 	NameWithoutExt string // 不含扩展名的文件名
 }
 
-// processDirectory 处理目录（递归）
-func (s *StrmGeneratorService) processDirectory(taskInfo *task.Task, strmConfig *StrmConfig, taskLogID uint, sourcePath, targetPath string) (int, int, int, int, int, error) {
-	totalFiles := 0
-	generatedFiles := 0
-	skippedFiles := 0
-	metadataProcessedCount := 0
-	subtitleProcessedCount := 0
+// processDirectory 方法已被重构，使用了新的任务队列设计
+
+// scanDirectoryRecursive 递归扫描目录，只收集文件信息，不进行处理
+func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmConfig *StrmConfig,
+	taskLogID uint, sourcePath, targetPath string) error {
 
 	// 获取当前目录的文件列表
 	files, err := s.alistService.ListFiles(sourcePath)
 	if err != nil {
-		return 0, 0, 0, 0, 0, fmt.Errorf("获取目录文件列表失败 [%s]: %w", sourcePath, err)
+		return fmt.Errorf("获取目录文件列表失败 [%s]: %w", sourcePath, err)
 	}
 
-	s.logger.Info("处理目录",
+	s.logger.Info("扫描目录",
 		zap.String("sourcePath", sourcePath),
 		zap.String("targetPath", targetPath),
 		zap.Int("fileCount", len(files)))
 
 	// 创建目标目录
 	if err := os.MkdirAll(targetPath, 0755); err != nil {
-		return 0, 0, 0, 0, 0, fmt.Errorf("创建目标目录失败 [%s]: %w", targetPath, err)
+		return fmt.Errorf("创建目标目录失败 [%s]: %w", targetPath, err)
 	}
 
-	// 第一阶段：收集和分类所有文件
+	// 收集各种文件信息
 	var mediaFileEntries []FileEntry
 	var subtitleFileEntries []FileEntry
 	var metadataFileEntries []FileEntry
-	var otherFileEntries []FileEntry
 	var directoryFiles []*AListFile
+
+	// 增加总文件计数
+	s.stats.Mutex.Lock()
+	s.stats.TotalFiles += len(files)
+	totalFiles := s.stats.TotalFiles
+	s.stats.Mutex.Unlock()
+
+	// 定期更新任务日志中的总文件数
+	if totalFiles%100 == 0 {
+		updateData := map[string]interface{}{
+			"total_file": totalFiles,
+		}
+		if updateErr := repository.TaskLog.UpdatePartial(taskLogID, updateData); updateErr != nil {
+			s.logger.Error("更新任务日志总文件数失败", zap.Error(updateErr))
+		}
+	}
 
 	// 先对文件进行分类
 	for _, file := range files {
-		totalFiles++
-
 		if file.IsDir {
 			directoryFiles = append(directoryFiles, &file)
 			continue
@@ -275,10 +402,14 @@ func (s *StrmGeneratorService) processDirectory(taskInfo *task.Task, strmConfig 
 		case FileTypeMetadata:
 			metadataFileEntries = append(metadataFileEntries, entry)
 		default:
-			otherFileEntries = append(otherFileEntries, entry)
+			// 其他文件类型不处理，但计入跳过文件
+			s.stats.Mutex.Lock()
+			s.stats.SkippedFiles++
+			s.stats.Mutex.Unlock()
 		}
 	}
-	// 第二阶段：筛选需要处理的字幕文件（需要与媒体文件匹配）
+
+	// 筛选需要处理的字幕文件（需要与媒体文件匹配）
 	var matchedSubtitleEntries []FileEntry
 	for _, subEntry := range subtitleFileEntries {
 		matched := false
@@ -298,147 +429,43 @@ func (s *StrmGeneratorService) processDirectory(taskInfo *task.Task, strmConfig 
 			s.logger.Info("跳过未匹配的字幕文件",
 				zap.String("fileName", subEntry.File.Name),
 				zap.String("path", subEntry.SourcePath))
-			skippedFiles++
+
+			s.stats.Mutex.Lock()
+			s.stats.SkippedFiles++
+			s.stats.Mutex.Unlock()
 		}
 	}
 
-	// 第三阶段：只对STRM文件（媒体文件）使用并发生成
+	// 将收集到的文件添加到相应的处理队列
+	// 媒体文件立即添加到STRM生成队列，这样边扫描边处理
 	if len(mediaFileEntries) > 0 {
-		// 计算需要处理的STRM文件数
-		totalStrmFiles := len(mediaFileEntries)
-		s.logger.Info("准备并发生成STRM文件",
-			zap.Int("媒体文件数", totalStrmFiles))
-
-		// 设置并发数
-		concurrency := 100 // 可以根据需要调整，或从配置中读取
-		if concurrency <= 0 {
-			concurrency = 100
-		}
-		if concurrency > totalStrmFiles {
-			concurrency = totalStrmFiles
-		}
-
-		// 创建任务和结果通道
-		jobChan := make(chan FileEntry, totalStrmFiles)
-		resultChan := make(chan FileProcessResult, totalStrmFiles)
-
-		// 启动工作协程池
-		var wg sync.WaitGroup
-		wg.Add(concurrency)
-
-		for i := 0; i < concurrency; i++ {
-			go func() {
-				defer wg.Done()
-				for entry := range jobChan {
-					// 只处理媒体文件，生成STRM文件
-					processed := s.processFile(entry.File, entry.FileType, taskInfo, strmConfig, taskLogID, entry.SourcePath, entry.TargetPath)
-
-					// 发送结果
-					resultChan <- FileProcessResult{
-						Entry:     entry,
-						Processed: processed,
-						FileType:  entry.FileType,
-						Success:   processed.Success,
-					}
-				}
-			}()
-		}
-
-		// 提交任务
-		go func() {
-			// 提交媒体文件
-			for _, entry := range mediaFileEntries {
-				jobChan <- entry
-			}
-
-			// 关闭任务通道，表示没有更多任务
-			close(jobChan)
-
-			// 等待所有工作协程完成
-			wg.Wait()
-
-			// 关闭结果通道
-			close(resultChan)
-		}()
-
-		// 收集处理结果
-		for result := range resultChan {
-			// 确定使用的目标路径
-			targetPath := result.Processed.TargetPath
-
-			// 记录文件历史
-			s.recordFileHistory(
-				taskInfo.ID,
-				taskLogID,
-				result.Entry.File,
-				result.Entry.SourcePath,
-				targetPath,
-				result.FileType,
-				result.Success,
-			)
-
-			// 统计结果
-			if result.Success {
-				generatedFiles++
-			} else {
-				skippedFiles++
-			}
-		}
+		s.queue.FilesMutex.Lock()
+		// 添加媒体文件到 STRM 生成队列
+		s.queue.StrmFiles = append(s.queue.StrmFiles, mediaFileEntries...)
+		s.queue.FilesMutex.Unlock()
 	}
 
-	// 第四阶段：串行处理字幕和元数据文件（下载任务）
-	s.logger.Info("开始串行处理下载任务",
-		zap.Int("匹配字幕", len(matchedSubtitleEntries)),
-		zap.Int("元数据文件", len(metadataFileEntries)))
-
-	// 处理字幕文件
-	for _, entry := range matchedSubtitleEntries {
-		processed := s.processFile(entry.File, entry.FileType, taskInfo, strmConfig, taskLogID, entry.SourcePath, entry.TargetPath)
-		s.recordFileHistory(taskInfo.ID, taskLogID, entry.File, entry.SourcePath, processed.TargetPath, entry.FileType, processed.Success)
-
-		if processed.Success {
-			subtitleProcessedCount++
-		} else {
-			skippedFiles++
-		}
+	// 下载文件先收集，等扫描结束后再处理
+	if len(matchedSubtitleEntries) > 0 || len(metadataFileEntries) > 0 {
+		s.queue.FilesMutex.Lock()
+		// 添加匹配的字幕和元数据文件到下载队列
+		s.queue.DownloadFiles = append(s.queue.DownloadFiles, matchedSubtitleEntries...)
+		s.queue.DownloadFiles = append(s.queue.DownloadFiles, metadataFileEntries...)
+		s.queue.FilesMutex.Unlock()
 	}
 
-	// 处理元数据文件
-	for _, entry := range metadataFileEntries {
-		processed := s.processFile(entry.File, entry.FileType, taskInfo, strmConfig, taskLogID, entry.SourcePath, entry.TargetPath)
-		s.recordFileHistory(taskInfo.ID, taskLogID, entry.File, entry.SourcePath, processed.TargetPath, entry.FileType, processed.Success)
-
-		if processed.Success {
-			metadataProcessedCount++
-		} else {
-			skippedFiles++
-		}
-	}
-
-	// 第五阶段：处理其他文件
-	for range otherFileEntries {
-		skippedFiles++
-	}
-
-	// 最后递归处理目录
+	// 递归处理子目录
 	for _, dirFile := range directoryFiles {
 		currentSourcePath := filepath.Join(sourcePath, dirFile.Name)
 		currentTargetPath := filepath.Join(targetPath, dirFile.Name)
 
-		subTotal, subGenerated, subSkipped, subMetadata, subSubtitle, err := s.processDirectory(
-			taskInfo, strmConfig, taskLogID, currentSourcePath, currentTargetPath)
-		if err != nil {
-			return totalFiles, generatedFiles, skippedFiles, metadataProcessedCount, subtitleProcessedCount, err
+		// 递归处理子目录
+		if err := s.scanDirectoryRecursive(taskInfo, strmConfig, taskLogID, currentSourcePath, currentTargetPath); err != nil {
+			return err
 		}
-
-		totalFiles += subTotal
-		generatedFiles += subGenerated
-		skippedFiles += subSkipped
-		metadataProcessedCount += subMetadata
-		subtitleProcessedCount += subSubtitle
 	}
 
-	return totalFiles, generatedFiles, skippedFiles, metadataProcessedCount, subtitleProcessedCount, nil
+	return nil
 }
 
 // determineFileType 确定文件类型
@@ -610,12 +637,9 @@ func (s *StrmGeneratorService) generateStrmFile(file *AListFile, strmConfig *Str
 
 // downloadFile 下载文件（元数据和字幕）
 func (s *StrmGeneratorService) downloadFile(file *AListFile, sourcePath, targetPath string, taskConfig *task.Task) (bool, string) {
-	// 添加下载前延迟，避免网盘风控
-	time.Sleep(300 * time.Millisecond)
 
-	// 检查目标文件是否已存在
-	if !s.shouldOverwrite(targetPath, taskConfig) {
-		return false, "文件已存在且不允许覆盖"
+	if _, err := os.Stat(targetPath); err == nil {
+		return false, "文件已存在"
 	}
 
 	// 确保目标目录存在
@@ -854,4 +878,392 @@ func (s *StrmGeneratorService) updateTaskLogWithError(taskLogID uint, errorMessa
 			zap.Uint("taskLogID", taskLogID),
 			zap.Int64("duration", durationSeconds))
 	}
+}
+
+// processStrmFileQueue 处理 STRM 文件生成队列（并发处理）
+// 已弃用，请使用 processStrmFileQueueAsync
+// nolint:unused
+// 保留此方法是为了兼容性
+func (s *StrmGeneratorService) processStrmFileQueue(taskInfo *task.Task, strmConfig *StrmConfig, taskLogID uint) error {
+	s.queue.FilesMutex.RLock()
+	totalStrmFiles := len(s.queue.StrmFiles)
+	s.queue.FilesMutex.RUnlock()
+
+	if totalStrmFiles == 0 {
+		s.logger.Info("没有媒体文件需要生成 STRM")
+		s.stats.Mutex.Lock()
+		s.stats.StrmProcessingDone = true
+		s.stats.Mutex.Unlock()
+		return nil
+	}
+
+	s.logger.Info("开始并发生成STRM文件",
+		zap.Int("媒体文件数", totalStrmFiles))
+
+	// 设置并发数
+	concurrency := 100 // 可以根据需要调整，或从配置中读取
+	if concurrency <= 0 {
+		concurrency = 100
+	}
+	if concurrency > totalStrmFiles {
+		concurrency = totalStrmFiles
+	}
+
+	// 创建任务和结果通道
+	jobChan := make(chan FileEntry, totalStrmFiles)
+	resultChan := make(chan FileProcessResult, totalStrmFiles)
+
+	// 启动工作协程池
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+
+	for i := 0; i < concurrency; i++ {
+		go func() {
+			defer wg.Done()
+			for entry := range jobChan {
+				// 只处理媒体文件，生成STRM文件
+				processed := s.processFile(entry.File, entry.FileType, taskInfo, strmConfig, taskLogID, entry.SourcePath, entry.TargetPath)
+
+				// 发送结果
+				resultChan <- FileProcessResult{
+					Entry:     entry,
+					Processed: processed,
+					FileType:  entry.FileType,
+					Success:   processed.Success,
+				}
+			}
+		}()
+	}
+
+	// 复制 STRM 文件队列以避免锁冲突
+	s.queue.FilesMutex.RLock()
+	strmFiles := make([]FileEntry, len(s.queue.StrmFiles))
+	copy(strmFiles, s.queue.StrmFiles)
+	s.queue.FilesMutex.RUnlock()
+
+	// 提交任务
+	go func() {
+		// 提交媒体文件
+		for _, entry := range strmFiles {
+			jobChan <- entry
+		}
+
+		// 关闭任务通道，表示没有更多任务
+		close(jobChan)
+
+		// 等待所有工作协程完成
+		wg.Wait()
+
+		// 关闭结果通道
+		close(resultChan)
+	}()
+
+	// 收集处理结果
+	for result := range resultChan {
+		// 确定使用的目标路径
+		targetPath := result.Processed.TargetPath
+
+		// 记录文件历史
+		s.recordFileHistory(
+			taskInfo.ID,
+			taskLogID,
+			result.Entry.File,
+			result.Entry.SourcePath,
+			targetPath,
+			result.FileType,
+			result.Success,
+		)
+
+		// 统计结果
+		s.stats.Mutex.Lock()
+		if result.Success {
+			s.stats.GeneratedFiles++
+		} else {
+			s.stats.SkippedFiles++
+		}
+		s.stats.Mutex.Unlock()
+
+		// 定期更新任务日志
+		if s.stats.GeneratedFiles%100 == 0 || s.stats.SkippedFiles%100 == 0 {
+			s.stats.Mutex.RLock()
+			updateData := map[string]interface{}{
+				"generated_file": s.stats.GeneratedFiles,
+				"skip_file":      s.stats.SkippedFiles,
+			}
+			s.stats.Mutex.RUnlock()
+
+			if updateErr := repository.TaskLog.UpdatePartial(taskLogID, updateData); updateErr != nil {
+				s.logger.Error("更新任务日志进度失败", zap.Error(updateErr))
+			}
+		}
+	}
+
+	// 标记 STRM 处理完成
+	s.stats.Mutex.Lock()
+	s.stats.StrmProcessingDone = true
+	s.stats.Mutex.Unlock()
+
+	s.logger.Info("STRM 文件生成队列处理完成",
+		zap.Int("生成文件数", s.stats.GeneratedFiles))
+
+	return nil
+}
+
+// processDownloadFileQueue 处理下载文件队列（串行处理，带延迟）
+func (s *StrmGeneratorService) processDownloadFileQueue(taskInfo *task.Task, strmConfig *StrmConfig, taskLogID uint) error {
+	s.queue.FilesMutex.RLock()
+	totalDownloadFiles := len(s.queue.DownloadFiles)
+	s.queue.FilesMutex.RUnlock()
+
+	if totalDownloadFiles == 0 {
+		s.logger.Info("没有文件需要下载")
+		s.stats.Mutex.Lock()
+		s.stats.DownloadProcessingDone = true
+		s.stats.Mutex.Unlock()
+		return nil
+	}
+
+	s.logger.Info("开始串行处理下载任务",
+		zap.Int("下载文件总数", totalDownloadFiles))
+
+	// 复制下载队列以避免锁冲突
+	s.queue.FilesMutex.RLock()
+	downloadFiles := make([]FileEntry, len(s.queue.DownloadFiles))
+	copy(downloadFiles, s.queue.DownloadFiles)
+	s.queue.FilesMutex.RUnlock()
+
+	// 串行处理每个下载项，带间隔延迟
+	for i, entry := range downloadFiles {
+		// 添加随机延迟(1-3秒)，防止网盘风控
+		if i > 0 {
+			// 设置随机延迟，更好地模拟人工操作
+			randomDelay := time.Duration(1000+(time.Now().UnixNano()%2000)) * time.Millisecond
+			s.logger.Info("等待随机延迟", zap.Duration("delay", randomDelay))
+			time.Sleep(randomDelay)
+		}
+
+		// 处理文件
+		processed := s.processFile(entry.File, entry.FileType, taskInfo, strmConfig, taskLogID, entry.SourcePath, entry.TargetPath)
+
+		// 记录文件历史
+		s.recordFileHistory(taskInfo.ID, taskLogID, entry.File, entry.SourcePath, processed.TargetPath, entry.FileType, processed.Success)
+
+		// 更新统计信息
+		s.stats.Mutex.Lock()
+		if processed.Success {
+			if entry.FileType == FileTypeSubtitle {
+				s.stats.SubtitleProcessed++
+			} else if entry.FileType == FileTypeMetadata {
+				s.stats.MetadataProcessed++
+			}
+		} else {
+			s.stats.SkippedFiles++
+		}
+		s.stats.Mutex.Unlock()
+
+		// 每处理 10 个文件更新一次数据库
+		if (i+1)%10 == 0 {
+			s.stats.Mutex.RLock()
+			updateData := map[string]interface{}{
+				"subtitle_count": s.stats.SubtitleProcessed,
+				"metadata_count": s.stats.MetadataProcessed,
+				"skip_file":      s.stats.SkippedFiles,
+			}
+			s.stats.Mutex.RUnlock()
+
+			if updateErr := repository.TaskLog.UpdatePartial(taskLogID, updateData); updateErr != nil {
+				s.logger.Error("更新任务日志进度失败", zap.Error(updateErr))
+			}
+
+			s.logger.Info("下载队列处理进度",
+				zap.Int("已处理", i+1),
+				zap.Int("总数", totalDownloadFiles),
+				zap.Int("字幕文件", s.stats.SubtitleProcessed),
+				zap.Int("元数据文件", s.stats.MetadataProcessed))
+		}
+	}
+
+	// 标记下载处理完成
+	s.stats.Mutex.Lock()
+	s.stats.DownloadProcessingDone = true
+	s.stats.Mutex.Unlock()
+
+	s.logger.Info("下载文件队列处理完成",
+		zap.Int("字幕文件", s.stats.SubtitleProcessed),
+		zap.Int("元数据文件", s.stats.MetadataProcessed))
+
+	return nil
+}
+
+// processStrmFileQueueAsync 异步处理STRM文件队列（并发处理），可以在目录扫描时就开始处理
+func (s *StrmGeneratorService) processStrmFileQueueAsync(taskInfo *task.Task, strmConfig *StrmConfig, taskLogID uint, scanDoneChan chan bool) error {
+	// 设置并发数
+	const defaultConcurrency = 50
+	// TODO: 未来可考虑从任务配置或全局配置中读取并发参数
+	concurrency := defaultConcurrency
+
+	s.logger.Info("启动STRM文件异步处理协程",
+		zap.Int("并发数", concurrency))
+
+	// 创建任务和结果通道
+	// TODO: 未来可考虑将通道大小设置为可配置参数，避免超大目录处理时内存占用过多
+	const channelSize = 1000
+	jobChan := make(chan FileEntry, channelSize)            // 缓冲队列，用于接收扫描到的文件
+	resultChan := make(chan FileProcessResult, channelSize) // 结果队列
+
+	// 启动工作协程池
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+
+	for i := 0; i < concurrency; i++ {
+		go func() {
+			defer wg.Done()
+			for entry := range jobChan {
+				// 处理媒体文件，生成STRM文件
+				processed := s.processFile(entry.File, entry.FileType, taskInfo, strmConfig, taskLogID, entry.SourcePath, entry.TargetPath)
+
+				// 发送结果
+				resultChan <- FileProcessResult{
+					Entry:     entry,
+					Processed: processed,
+					FileType:  entry.FileType,
+					Success:   processed.Success,
+				}
+			}
+		}()
+	}
+
+	// 启动结果收集协程
+	var resultWg sync.WaitGroup
+	resultWg.Add(1)
+	go func() {
+		defer resultWg.Done()
+		for result := range resultChan {
+			// 确定使用的目标路径
+			targetPath := result.Processed.TargetPath
+
+			// 记录文件历史
+			s.recordFileHistory(
+				taskInfo.ID,
+				taskLogID,
+				result.Entry.File,
+				result.Entry.SourcePath,
+				targetPath,
+				result.FileType,
+				result.Success,
+			)
+
+			// 统计结果
+			s.stats.Mutex.Lock()
+			if result.Success {
+				s.stats.GeneratedFiles++
+			} else {
+				s.stats.SkippedFiles++
+			}
+			s.stats.Mutex.Unlock()
+
+			// 定期更新任务日志
+			if s.stats.GeneratedFiles%100 == 0 || s.stats.SkippedFiles%100 == 0 {
+				s.stats.Mutex.RLock()
+				updateData := map[string]interface{}{
+					"generated_file": s.stats.GeneratedFiles,
+					"skip_file":      s.stats.SkippedFiles,
+				}
+				s.stats.Mutex.RUnlock()
+
+				if updateErr := repository.TaskLog.UpdatePartial(taskLogID, updateData); updateErr != nil {
+					s.logger.Error("更新任务日志进度失败", zap.Error(updateErr))
+				}
+			}
+		}
+	}()
+
+	// 启动队列监听协程，将文件发送到工作协程
+	go func() {
+		scanDone := false
+
+		// 持续监听直到扫描结束且队列为空
+		for !scanDone || s.queue.hasStrmFiles() {
+			// 先检查是否有文件可处理
+			if s.queue.hasStrmFiles() {
+				// 获取并删除队列中的一批文件
+				batch := s.queue.getAndRemoveStrmFileBatch(100)
+				if len(batch) > 0 {
+					s.logger.Debug("提交一批STRM文件进行处理", zap.Int("数量", len(batch)))
+					for _, entry := range batch {
+						jobChan <- entry
+					}
+				}
+			}
+
+			// 检查扫描是否结束
+			select {
+			case _, ok := <-scanDoneChan:
+				if !ok {
+					// 通道关闭，扫描结束
+					scanDone = true
+				}
+			default:
+				// 通道未关闭，休息一下再检查
+				time.Sleep(50 * time.Millisecond)
+			}
+		}
+
+		// 关闭任务通道，表示没有更多任务
+		close(jobChan)
+
+		// 等待所有工作协程完成
+		wg.Wait()
+
+		// 关闭结果通道
+		close(resultChan)
+
+		// 等待结果收集完成
+		resultWg.Wait()
+	}()
+
+	// 等待所有处理完成
+	resultWg.Wait()
+
+	// 标记 STRM 处理完成
+	s.stats.Mutex.Lock()
+	s.stats.StrmProcessingDone = true
+	s.stats.Mutex.Unlock()
+
+	s.logger.Info("STRM 文件生成队列处理完成",
+		zap.Int("生成文件数", s.stats.GeneratedFiles))
+
+	return nil
+}
+
+// hasStrmFiles 检查队列中是否有STRM文件
+func (q *FileProcessQueue) hasStrmFiles() bool {
+	q.FilesMutex.RLock()
+	defer q.FilesMutex.RUnlock()
+	return len(q.StrmFiles) > 0
+}
+
+// getAndRemoveStrmFileBatch 获取并移除一批STRM文件
+func (q *FileProcessQueue) getAndRemoveStrmFileBatch(batchSize int) []FileEntry {
+	q.FilesMutex.Lock()
+	defer q.FilesMutex.Unlock()
+
+	if len(q.StrmFiles) == 0 {
+		return []FileEntry{}
+	}
+
+	// 确定批次大小
+	size := batchSize
+	if size > len(q.StrmFiles) {
+		size = len(q.StrmFiles)
+	}
+
+	// 获取批次
+	batch := make([]FileEntry, size)
+	copy(batch, q.StrmFiles[:size])
+
+	// 移除已获取的文件
+	q.StrmFiles = q.StrmFiles[size:]
+
+	return batch
 }
