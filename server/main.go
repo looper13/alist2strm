@@ -31,9 +31,8 @@ func main() {
 	}
 
 	// 初始化服务
-	// 获取 logger 实例
-	logger := utils.InfoLogger.Desugar()
 	// 初始化 AList 服务
+	logger := utils.InfoLogger.Desugar()
 	alistService := service.InitializeAListService(logger)
 	if alistService == nil {
 		utils.Warn("AList 服务初始化失败，部分功能可能不可用")
@@ -48,6 +47,14 @@ func main() {
 	// 初始化任务队列
 	service.GetTaskQueue()
 	utils.Info("任务队列初始化完成")
+	
+	// 初始化通知服务
+	notificationService := service.GetNotificationService()
+	if err := notificationService.Initialize(); err != nil {
+		utils.Warn("通知服务初始化异常:", err)
+	} else {
+		utils.Info("通知服务初始化完成")
+	}
 
 	// 初始化任务调度器
 	taskScheduler := service.GetTaskScheduler()

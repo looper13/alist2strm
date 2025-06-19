@@ -1,3 +1,6 @@
+import type { AlistConfig, StrmConfig } from '~/types/config'
+import type { NotificationConfig } from '~/types/notification'
+
 export interface ConfigField<T> {
   key: keyof T
   label: string
@@ -15,21 +18,6 @@ export interface ConfigItem<T> {
   fields: ConfigField<T>[]
 }
 
-export interface AlistConfig {
-  token: string
-  host: string
-  domain: string
-  reqInterval: number
-  reqRetryCount: number
-  reqRetryInterval: number
-}
-
-export interface StrmConfig {
-  defaultSuffix: string
-  replaceSuffix: boolean
-  urlEncode: boolean
-}
-
 // 配置默认值
 export const defaultConfigs = {
   ALIST: {
@@ -45,6 +33,46 @@ export const defaultConfigs = {
     replaceSuffix: true,
     urlEncode: true,
   } as StrmConfig,
+  NOTIFICATION_SETTINGS: {
+    enabled: true,
+    defaultChannel: 'telegram',
+    channels: {
+      telegram: {
+        enabled: false,
+        type: 'telegram',
+        config: {
+          botToken: '',
+          chatId: '',
+          parseMode: 'Markdown',
+        },
+      },
+      wework: {
+        enabled: false,
+        type: 'wework',
+        config: {
+          corpId: '',
+          agentId: '',
+          corpSecret: '',
+          toUser: '@all',
+        },
+      },
+    },
+    templates: {
+      taskComplete: {
+        telegram: '✅ *任务完成通知*\n\n📂 任务：`{{.TaskName}}`\n⏱️ 耗时：{{.Duration}}秒\n📊 处理结果：\n - 总文件：{{.TotalFiles}}个\n - 已生成：{{.GeneratedFiles}}个\n - 已跳过：{{.SkippedFiles}}个\n - 元数据：{{.MetadataFiles}}个\n - 字幕：{{.SubtitleFiles}}个',
+        wework: '【任务完成通知】\n\n任务：{{.TaskName}}\n耗时：{{.Duration}}秒\n处理结果：\n- 总文件：{{.TotalFiles}}个\n- 已生成：{{.GeneratedFiles}}个\n- 已跳过：{{.SkippedFiles}}个\n- 元数据：{{.MetadataFiles}}个\n- 字幕：{{.SubtitleFiles}}个',
+      },
+      taskFailed: {
+        telegram: '❌ *任务失败通知*\n\n📂 任务：`{{.TaskName}}`\n⏱️ 耗时：{{.Duration}}秒\n❗ 错误信息：\n`{{.ErrorMessage}}`',
+        wework: '【任务失败通知】\n\n任务：{{.TaskName}}\n耗时：{{.Duration}}秒\n错误信息：\n{{.ErrorMessage}}',
+      },
+    },
+    queueSettings: {
+      maxRetries: 3,
+      retryInterval: 60,
+      concurrency: 1,
+    },
+  } as NotificationConfig,
 }
 
 // 配置项定义
@@ -104,7 +132,7 @@ export const CONFIG_ITEMS = [
       },
     ] as ConfigField<AlistConfig>[],
   } as ConfigItem<AlistConfig>,
-{
+  {
     name: 'strm 配置',
     code: 'STRM',
     fields: [
@@ -130,4 +158,9 @@ export const CONFIG_ITEMS = [
       },
     ] as ConfigField<StrmConfig>[],
   } as ConfigItem<StrmConfig>,
+  {
+    name: '消息通知',
+    code: 'NOTIFICATION_SETTINGS',
+    fields: [] as ConfigField<NotificationConfig>[],
+  } as ConfigItem<NotificationConfig>,
 ]

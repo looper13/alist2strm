@@ -9,6 +9,7 @@ import (
 	"github.com/MccRay-s/alist2strm/config"
 	"github.com/MccRay-s/alist2strm/model/configs"
 	"github.com/MccRay-s/alist2strm/model/filehistory"
+	"github.com/MccRay-s/alist2strm/model/notification"
 	"github.com/MccRay-s/alist2strm/model/task"
 	"github.com/MccRay-s/alist2strm/model/tasklog"
 	"github.com/MccRay-s/alist2strm/model/user"
@@ -47,6 +48,7 @@ func InitDatabase(cfg *config.AppConfig) error {
 		&task.Task{},
 		&tasklog.TaskLog{},
 		&filehistory.FileHistory{},
+		&notification.Queue{},
 	); err != nil {
 		return fmt.Errorf("数据库表迁移失败: %v", err)
 	}

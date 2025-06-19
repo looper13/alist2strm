@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import type { AlistConfig, ConfigItem, StrmConfig } from './config'
+import type { ConfigItem } from './config'
+import type { AlistConfig, StrmConfig } from '~/types/config'
+import type { NotificationConfig } from '~/types/notification'
 import { configAPI } from '~/api/config'
 import { useMobile } from '~/composables'
 import { CONFIG_ITEMS, defaultConfigs } from './config'
 import ConfigPanel from './ConfigPanel.vue'
+import NotificationPanel from './NotificationPanel.vue'
 
 // 响应式状态
 const { isMobile } = useMobile()
 const activeTab = ref('ALIST')
 const alistConfig = ref<AlistConfig>({ ...defaultConfigs.ALIST })
 const strmConfig = ref<StrmConfig>({ ...defaultConfigs.STRM })
+const notificationConfig = ref<NotificationConfig>({ ...defaultConfigs.NOTIFICATION_SETTINGS })
 const loading = ref(false)
 const saving = ref(false)
 const notification = useNotification()
@@ -25,11 +29,16 @@ onMounted(async () => {
     if (data) {
       const alistConfigItem = data.find(item => item.code === 'ALIST')
       const strmConfigItem = data.find(item => item.code === 'STRM')
+      const notificationConfigItem = data.find(item => item.code === 'NOTIFICATION_SETTINGS')
+
       if (alistConfigItem?.value) {
         alistConfig.value = JSON.parse(alistConfigItem.value) as AlistConfig
       }
       if (strmConfigItem?.value) {
         strmConfig.value = JSON.parse(strmConfigItem.value) as StrmConfig
+      }
+      if (notificationConfigItem?.value) {
+        notificationConfig.value = JSON.parse(notificationConfigItem.value) as NotificationConfig
       }
     }
   }
@@ -45,11 +54,22 @@ async function handleSave() {
     const { data } = await configAPI.configs()
     const currentConfig = data?.find(item => item.code === activeTab.value)
 
+    let configValue = ''
+    if (activeTab.value === 'ALIST') {
+      configValue = JSON.stringify(alistConfig.value)
+    }
+    else if (activeTab.value === 'STRM') {
+      configValue = JSON.stringify(strmConfig.value)
+    }
+    else if (activeTab.value === 'NOTIFICATION_SETTINGS') {
+      configValue = JSON.stringify(notificationConfig.value)
+    }
+
     if (currentConfig) {
       // 更新现有配置
       await configAPI.update(currentConfig.id, {
         ...currentConfig,
-        value: activeTab.value === 'ALIST' ? JSON.stringify(alistConfig.value) : JSON.stringify(strmConfig.value),
+        value: configValue,
       })
     }
     else {
@@ -63,7 +83,7 @@ async function handleSave() {
       await configAPI.create({
         name,
         code,
-        value: JSON.stringify(activeTab.value === 'ALIST' ? alistConfig.value : strmConfig.value),
+        value: configValue,
       })
     }
     notification.success({
@@ -97,6 +117,11 @@ async function handleSave() {
             v-if="item.code === 'STRM'"
             v-model="strmConfig"
             :config-item="item as ConfigItem<StrmConfig>"
+          />
+          <NotificationPanel
+            v-if="item.code === 'NOTIFICATION_SETTINGS'"
+            :config="notificationConfig"
+            @update:config="(val) => notificationConfig = val"
           />
         </NTabPane>
       </NTabs>
