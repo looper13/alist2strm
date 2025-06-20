@@ -3,8 +3,8 @@ import type { DataTableColumns } from 'naive-ui'
 import { fileHistoryAPI } from '~/api/file-history'
 import { useMobile } from '~/composables'
 
-const dialog = useDialog()
-const message = useMessage()
+// const dialog = useDialog()
+// const message = useMessage()
 
 const { isMobile } = useMobile()
 
@@ -103,51 +103,51 @@ function handleReset() {
 }
 
 // 处理批量删除
-async function handleBulkDelete() {
-  if (checkedRowKeys.value.length === 0) {
-    message.warning('请选择要删除的记录')
-    return
-  }
+// async function handleBulkDelete() {
+//   if (checkedRowKeys.value.length === 0) {
+//     message.warning('请选择要删除的记录')
+//     return
+//   }
 
-  dialog.warning({
-    title: '确认删除',
-    content: `确定要删除选中的 ${checkedRowKeys.value.length} 条记录吗？`,
-    positiveText: '确定',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      try {
-        await fileHistoryAPI.bulkDelete(checkedRowKeys.value as number[])
-        message.success('删除成功')
-        checkedRowKeys.value = []
-        handleSearch()
-      }
-      catch (error: any) {
-        message.error(error.message || '删除失败')
-      }
-    },
-  })
-}
+//   dialog.warning({
+//     title: '确认删除',
+//     content: `确定要删除选中的 ${checkedRowKeys.value.length} 条记录吗？`,
+//     positiveText: '确定',
+//     negativeText: '取消',
+//     onPositiveClick: async () => {
+//       try {
+//         await fileHistoryAPI.bulkDelete(checkedRowKeys.value as number[])
+//         message.success('删除成功')
+//         checkedRowKeys.value = []
+//         handleSearch()
+//       }
+//       catch (error: any) {
+//         message.error(error.message || '删除失败')
+//       }
+//     },
+//   })
+// }
 
-// 处理清空
-async function handleClearAll() {
-  dialog.warning({
-    title: '确认清空',
-    content: '确定要清空所有记录吗？此操作不可恢复！',
-    positiveText: '确定',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      try {
-        await fileHistoryAPI.clearAll()
-        message.success('清空成功')
-        checkedRowKeys.value = []
-        handleSearch()
-      }
-      catch (error: any) {
-        message.error(error.message || '清空失败')
-      }
-    },
-  })
-}
+// // 处理清空
+// async function handleClearAll() {
+//   dialog.warning({
+//     title: '确认清空',
+//     content: '确定要清空所有记录吗？此操作不可恢复！',
+//     positiveText: '确定',
+//     negativeText: '取消',
+//     onPositiveClick: async () => {
+//       try {
+//         await fileHistoryAPI.clearAll()
+//         message.success('清空成功')
+//         checkedRowKeys.value = []
+//         handleSearch()
+//       }
+//       catch (error: any) {
+//         message.error(error.message || '清空失败')
+//       }
+//     },
+//   })
+// }
 
 // 表格列定义
 const columns = computed<DataTableColumns<Api.FileHistory.Record>>(() => [
@@ -256,7 +256,7 @@ loadData()
               <div class="i-ri:refresh-line" />
             </template>
           </NButton>
-          <NButton
+          <!-- <NButton
             size="small"
             type="error"
             :disabled="!checkedRowKeys.length"
@@ -276,7 +276,7 @@ loadData()
               <div class="i-ri:delete-bin-line" />
             </template>
             清空全部
-          </NButton>
+          </NButton> -->
         </NSpace>
       </div>
 

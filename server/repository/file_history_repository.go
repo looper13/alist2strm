@@ -18,7 +18,7 @@ func (r *FileHistoryRepository) GetFileList(req *fileHistoryRequest.FileHistoryL
 	var total int64
 
 	// 构建查询
-	query := db.Model(&filehistory.FileHistory{}).Where("is_main_file = ?", true)
+	query := db.Model(&filehistory.FileHistory{})
 
 	// 任务ID过滤
 	if req.TaskID != nil {
