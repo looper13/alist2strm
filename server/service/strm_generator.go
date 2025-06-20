@@ -230,13 +230,25 @@ func (s *StrmGeneratorService) GenerateStrmFiles(taskID uint) error {
 	// 通知STRM协程扫描已结束
 	close(strmScanDoneChan)
 
-	// 启动下载文件处理协程（串行）
+	// 启动下载文件处理协程（串行）- 仅在队列有数据时启动
 	var downloadProcessingErr error
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		downloadProcessingErr = s.processDownloadFileQueue(taskInfo, strmConfig, taskLogID)
-	}()
+	s.queue.FilesMutex.RLock()
+	hasDownloadFiles := len(s.queue.DownloadFiles) > 0
+	s.queue.FilesMutex.RUnlock()
+
+	if hasDownloadFiles {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			downloadProcessingErr = s.processDownloadFileQueue(taskInfo, strmConfig, taskLogID)
+		}()
+	} else {
+		// 无需下载，直接标记下载处理完成
+		s.stats.Mutex.Lock()
+		s.stats.DownloadProcessingDone = true
+		s.stats.Mutex.Unlock()
+		s.logger.Info("下载队列为空，跳过下载处理")
+	}
 
 	// 等待所有处理都完成
 	wg.Wait()
@@ -452,12 +464,64 @@ func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmC
 	}
 
 	// 下载文件先收集，等扫描结束后再处理
-	if len(matchedSubtitleEntries) > 0 || len(metadataFileEntries) > 0 {
+	// 先筛选出需要下载的文件（本地不存在的文件）
+	var needDownloadEntries []FileEntry
+
+	// 检查匹配的字幕文件是否已存在于本地
+	for _, entry := range matchedSubtitleEntries {
+		if !s.fileExistsLocally(entry.TargetPath) {
+			needDownloadEntries = append(needDownloadEntries, entry)
+		} else {
+			s.logger.Info("字幕文件已存在，跳过下载",
+				zap.String("fileName", entry.File.Name),
+				zap.String("targetPath", entry.TargetPath))
+
+			// 记录文件历史（已存在的文件）
+			s.recordFileHistory(taskInfo.ID, taskLogID, entry.File, entry.SourcePath, entry.TargetPath, entry.FileType, true)
+
+			// 更新统计信息
+			s.stats.Mutex.Lock()
+			s.stats.SubtitleProcessed++
+			s.stats.SkippedFiles++ // 将已存在的文件计入跳过文件数
+			s.stats.Mutex.Unlock()
+		}
+	}
+
+	// 检查元数据文件是否已存在于本地
+	for _, entry := range metadataFileEntries {
+		if !s.fileExistsLocally(entry.TargetPath) {
+			needDownloadEntries = append(needDownloadEntries, entry)
+		} else {
+			s.logger.Info("元数据文件已存在，跳过下载",
+				zap.String("fileName", entry.File.Name),
+				zap.String("targetPath", entry.TargetPath))
+
+			// 记录文件历史（已存在的文件）
+			s.recordFileHistory(taskInfo.ID, taskLogID, entry.File, entry.SourcePath, entry.TargetPath, entry.FileType, true)
+
+			// 更新统计信息
+			s.stats.Mutex.Lock()
+			s.stats.MetadataProcessed++
+			s.stats.SkippedFiles++ // 将已存在的文件计入跳过文件数
+			s.stats.Mutex.Unlock()
+		}
+	}
+
+	// 只将需要下载的文件添加到下载队列
+	if len(needDownloadEntries) > 0 {
 		s.queue.FilesMutex.Lock()
-		// 添加匹配的字幕和元数据文件到下载队列
-		s.queue.DownloadFiles = append(s.queue.DownloadFiles, matchedSubtitleEntries...)
-		s.queue.DownloadFiles = append(s.queue.DownloadFiles, metadataFileEntries...)
+		s.queue.DownloadFiles = append(s.queue.DownloadFiles, needDownloadEntries...)
 		s.queue.FilesMutex.Unlock()
+
+		// 获取已跳过的文件数（已包含在总跳过文件数中）
+		skippedExistingFiles := len(matchedSubtitleEntries)+len(metadataFileEntries)-len(needDownloadEntries)
+		
+		s.logger.Info("添加文件到下载队列",
+			zap.Int("需下载文件数", len(needDownloadEntries)),
+			zap.Int("跳过已存在文件数", skippedExistingFiles),
+			zap.Int("已处理字幕文件", s.stats.SubtitleProcessed),
+			zap.Int("已处理元数据文件", s.stats.MetadataProcessed),
+			zap.Int("总跳过文件数", s.stats.SkippedFiles))
 	}
 
 	// 递归处理子目录
@@ -643,10 +707,6 @@ func (s *StrmGeneratorService) generateStrmFile(file *AListFile, strmConfig *Str
 
 // downloadFile 下载文件（元数据和字幕）
 func (s *StrmGeneratorService) downloadFile(file *AListFile, sourcePath, targetPath string, taskConfig *task.Task) (bool, string) {
-
-	if _, err := os.Stat(targetPath); err == nil {
-		return false, "文件已存在"
-	}
 
 	// 确保目标目录存在
 	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
@@ -901,7 +961,7 @@ func (s *StrmGeneratorService) processDownloadFileQueue(taskInfo *task.Task, str
 	}
 
 	s.logger.Info("开始串行处理下载任务",
-		zap.Int("下载文件总数", totalDownloadFiles))
+		zap.Int("需下载文件总数", totalDownloadFiles))
 
 	// 复制下载队列以避免锁冲突
 	s.queue.FilesMutex.RLock()
@@ -1143,4 +1203,11 @@ func (q *FileProcessQueue) getAndRemoveStrmFileBatch(batchSize int) []FileEntry 
 	q.StrmFiles = q.StrmFiles[size:]
 
 	return batch
+}
+
+// fileExistsLocally 检查文件是否已存在于本地
+func (s *StrmGeneratorService) fileExistsLocally(filePath string) bool {
+	// 使用 os.Stat 检查文件是否存在
+	_, err := os.Stat(filePath)
+	return err == nil
 }
