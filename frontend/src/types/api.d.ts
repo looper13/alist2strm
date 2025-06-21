@@ -202,6 +202,19 @@ declare namespace Api {
 
   }
 
+  // 任务日志相关类型
+  namespace TaskLog {
+    // 文件处理统计数据接口
+    interface FileProcessingStats {
+      totalFiles: number // 扫描的文件总数
+      processedFiles: number // 已处理的文件数
+      skippedFiles: number // 跳过处理的文件数
+      strmGenerated: number // 生成的STRM文件数
+      metadataDownloaded: number // 下载的元数据文件数
+      subtitleDownloaded: number // 下载的字幕文件数
+    }
+  }
+
   // 文件历史
   namespace FileHistory {
     type Record = Common.CommonRecord<{

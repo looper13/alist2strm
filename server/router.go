@@ -78,8 +78,9 @@ func SetupRoutes() *gin.Engine {
 			// 任务日志相关路由
 			taskLog := auth.Group("/task-log")
 			{
-				taskLog.GET("/:id", controller.TaskLogControllerInstance.GetTaskLogInfo) // 获取指定任务日志信息
-				taskLog.GET("/", controller.TaskLogControllerInstance.GetTaskLogList)    // 获取任务日志列表（分页）
+				taskLog.GET("/:id", controller.TaskLogControllerInstance.GetTaskLogInfo)                      // 获取指定任务日志信息
+				taskLog.GET("/", controller.TaskLogControllerInstance.GetTaskLogList)                         // 获取任务日志列表（分页）
+				taskLog.GET("/stats/processing", controller.TaskLogControllerInstance.GetFileProcessingStats) // 获取文件处理统计数据
 			}
 
 			// 文件历史相关路由

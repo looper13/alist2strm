@@ -54,3 +54,23 @@ func (c *TaskLogController) GetTaskLogList(ctx *gin.Context) {
 
 	response.SuccessWithData(resp, ctx)
 }
+
+// GetFileProcessingStats 获取文件处理统计数据
+func (c *TaskLogController) GetFileProcessingStats(ctx *gin.Context) {
+	// 获取时间范围参数，默认为day
+	timeRange := ctx.DefaultQuery("timeRange", "day")
+
+	// 参数验证
+	if timeRange != "day" && timeRange != "month" && timeRange != "year" {
+		response.FailWithMessage("无效的时间范围参数，支持的值为：day、month、year", ctx)
+		return
+	}
+
+	stats, err := service.TaskLogServiceInstance.GetFileProcessingStats(timeRange)
+	if err != nil {
+		response.FailWithMessage(err.Error(), ctx)
+		return
+	}
+
+	response.SuccessWithData(stats, ctx)
+}

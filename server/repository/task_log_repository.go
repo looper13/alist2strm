@@ -143,6 +143,48 @@ func (r *TaskLogRepository) GetRunningLogByTaskID(taskID uint) (*tasklog.TaskLog
 	return &tl, nil
 }
 
+// GetFileProcessingStats 获取文件处理统计数据
+func (r *TaskLogRepository) GetFileProcessingStats(timeRange string) (totalFiles, processedFiles, skippedFiles, strmGenerated, metadataDownloaded, subtitleDownloaded int64, err error) {
+	// 创建基础查询，根据时间范围过滤
+	query := database.DB.Model(&tasklog.TaskLog{}).Where("status = ?", tasklog.TaskLogStatusCompleted)
+	query = r.addTimeRangeFilter(query, timeRange)
+
+	// 查询已处理文件总数（总文件数）
+	err = query.Select("IFNULL(SUM(total_file), 0)").Row().Scan(&totalFiles)
+	if err != nil {
+		return 0, 0, 0, 0, 0, 0, err
+	}
+
+	// 查询成功处理文件数
+	err = query.Select("IFNULL(SUM(generated_file), 0)").Row().Scan(&processedFiles)
+	if err != nil {
+		return 0, 0, 0, 0, 0, 0, err
+	}
+
+	// 查询跳过处理文件数
+	err = query.Select("IFNULL(SUM(skip_file), 0)").Row().Scan(&skippedFiles)
+	if err != nil {
+		return 0, 0, 0, 0, 0, 0, err
+	}
+
+	// 生成的STRM文件数就是成功处理的文件数
+	strmGenerated = processedFiles
+
+	// 查询元数据文件数
+	err = query.Select("IFNULL(SUM(metadata_count), 0)").Row().Scan(&metadataDownloaded)
+	if err != nil {
+		return 0, 0, 0, 0, 0, 0, err
+	}
+
+	// 查询字幕文件数
+	err = query.Select("IFNULL(SUM(subtitle_count), 0)").Row().Scan(&subtitleDownloaded)
+	if err != nil {
+		return 0, 0, 0, 0, 0, 0, err
+	}
+
+	return totalFiles, processedFiles, skippedFiles, strmGenerated, metadataDownloaded, subtitleDownloaded, nil
+}
+
 // addTimeRangeFilter 根据时间范围添加筛选条件
 func (r *TaskLogRepository) addTimeRangeFilter(query *gorm.DB, timeRange string) *gorm.DB {
 	now := time.Now()

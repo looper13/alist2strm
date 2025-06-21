@@ -41,3 +41,8 @@ type TaskLogListReq struct {
 	request.PageInfo
 	TaskID uint `json:"taskId" form:"taskId" binding:"required" validate:"required" example:"任务ID"`
 }
+
+// FileProcessingStatsReq 文件处理统计数据请求
+type FileProcessingStatsReq struct {
+	TimeRange string `json:"timeRange" form:"timeRange" binding:"omitempty,oneof=day month year" example:"day"` // 时间范围: day, month, year
+}

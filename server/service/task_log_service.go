@@ -167,3 +167,32 @@ func (s *TaskLogService) GetTaskLogList(req *taskLogRequest.TaskLogListReq) (*ta
 		PageSize: req.PageSize,
 	}, nil
 }
+
+// GetFileProcessingStats 获取文件处理统计数据
+func (s *TaskLogService) GetFileProcessingStats(timeRange string) (*taskLogResponse.FileProcessingStatsResp, error) {
+	// 默认为天
+	if timeRange == "" {
+		timeRange = "day"
+	}
+
+	// 校验时间范围参数
+	if timeRange != "day" && timeRange != "month" && timeRange != "year" {
+		return nil, fmt.Errorf("无效的时间范围参数，支持的值为：day、month、year")
+	}
+
+	// 获取文件处理统计数据
+	totalFiles, processedFiles, skippedFiles, strmGenerated, metadataDownloaded, subtitleDownloaded, err := repository.TaskLog.GetFileProcessingStats(timeRange)
+	if err != nil {
+		return nil, fmt.Errorf("获取文件处理统计数据失败: %w", err)
+	}
+
+	// 组装响应数据
+	return &taskLogResponse.FileProcessingStatsResp{
+		TotalFiles:         totalFiles,
+		ProcessedFiles:     processedFiles,
+		SkippedFiles:       skippedFiles,
+		StrmGenerated:      strmGenerated,
+		MetadataDownloaded: metadataDownloaded,
+		SubtitleDownloaded: subtitleDownloaded,
+	}, nil
+}
