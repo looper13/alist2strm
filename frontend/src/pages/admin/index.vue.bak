@@ -1,0 +1,175 @@
+<![CDATA[<script setup lang="ts" generic="T extends any, O extends any">
+import { embyAPI } from '~/api/emby'
+
+defineOptions({
+  name: 'IndexPage',
+})
+
+// 图片测试相关数据
+const currentImageType = ref('Primary')
+const itemId = '5623'
+
+// 获取当前图片 URL
+const currentImageUrl = computed(() => {
+  return embyAPI.getImageUrl(itemId, currentImageType.value, {
+    maxWidth: 300,
+    quality: 90,
+  })
+})
+
+// 切换图片类型
+function refreshImage(imageType: string) {
+  currentImageType.value = imageType
+}
+
+onMounted(async () => {
+  try {
+    const { code } = await embyAPI.getLibraries()
+    if (code === 0) {
+      // 调试信息记录到控制台警告，避免使用 console.log
+      console.warn('Emby 服务器信息已加载')
+    }
+    else {
+      console.error('获取 Emby 服务器信息失败:', code)
+    }
+  }
+  catch (error) {
+    console.error('请求 Emby API 时发生错误:', error)
+  }
+})
+</script>
+
+<template>
+  <div class="mx-auto px-4 py-8 container">
+    <!-- Emby 图片测试区域 -->
+    <div class="mb-8 text-center">
+      <h3 class="text-lg font-medium mb-3 dark:text-white">
+        测试 Emby 图片 API
+      </h3>
+      <img
+        :src="currentImageUrl"
+        :alt="`Emby ${currentImageType} 图片`"
+        class="mx-auto rounded h-40 shadow object-contain"
+      >
+      <p class="text-sm text-gray-500 mt-2 dark:text-gray-400">
+        ID: {{ itemId }}, 类型: {{ currentImageType }}
+      </p>
+
+      <!-- 图片设置控制 -->
+      <div class="mt-4 flex flex-wrap gap-2 justify-center">
+        <NButton size="small" @click="refreshImage('Primary')">
+          主图
+        </NButton>
+        <NButton size="small" @click="refreshImage('Backdrop')">
+          背景图
+        </NButton>
+        <NButton size="small" @click="refreshImage('Logo')">
+          Logo
+        </NButton>
+      </div>
+
+      <!-- 图片 URL 说明 -->
+      <div class="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+        <p class="text-sm text-gray-600 dark:text-gray-300">
+          当前图片 URL:
+        </p>
+        <code class="text-xs mt-1 p-2 rounded bg-gray-100 block overflow-auto dark:bg-gray-800">
+          {{ currentImageUrl }}
+        </code>
+        <p class="text-sm text-gray-600 mt-2 dark:text-gray-300">
+          <NTag :bordered="false" type="info" class="mr-1">
+            开发环境
+          </NTag>
+          使用完整服务器地址，如: http://localhost:3210/api/emby/items/...
+        </p>
+        <p class="text-sm text-gray-600 mt-1 dark:text-gray-300">
+          <NTag :bordered="false" type="success" class="mr-1">
+            生产环境
+          </NTag>
+          使用相对路径，如: /api/emby/items/...
+        </p>
+      </div>
+    </div>
+
+    <!-- 标题区域 -->
+    <div class="mb-12 text-center">
+      <h1 class="text-4xl font-bold mb-4 dark:text-white">
+        AList2Strm
+      </h1>
+      <p class="text-lg text-gray-600 dark:text-gray-300">
+        将 AList 媒体库转换为 Strm 格式的流媒体服务
+      </p>
+    </div>
+
+    <!-- 功能特点 -->
+    <div class="mb-12 gap-8 grid grid-cols-1 md:grid-cols-3">
+      <NCard class="p-6">
+        <div class="i-carbon-media-library text-2xl mb-4 dark:text-white" />
+        <h3 class="text-xl font-semibold mb-2 dark:text-white">
+          AList 集成
+        </h3>
+        <p class="text-gray-600 dark:text-gray-300">
+          无缝对接 AList 媒体库，支持多种存储源，支持Alist sign
+        </p>
+      </NCard>
+      <NCard class="p-6">
+        <div class="i-carbon-video text-2xl mb-4 dark:text-white" />
+        <h3 class="text-xl font-semibold mb-2 dark:text-white">
+          Strm 转换
+        </h3>
+        <p class="text-gray-600 dark:text-gray-300">
+          自动将媒体文件转换为 Strm 格式，支持主流播放器
+        </p>
+      </NCard>
+      <NCard class="p-6">
+        <div class="i-carbon-settings text-2xl mb-4 dark:text-white" />
+        <h3 class="text-xl font-semibold mb-2 dark:text-white">
+          简单配置
+        </h3>
+        <p class="text-gray-600 dark:text-gray-300">
+          直观的配置界面，轻松管理媒体库和转换规则
+        </p>
+      </NCard>
+    </div>
+
+    <!-- 快速开始 -->
+    <NCard class="p-8">
+      <h2 class="text-2xl font-bold mb-4 dark:text-white">
+        快速开始
+      </h2>
+      <div class="space-y-4">
+        <p class="text-gray-600 dark:text-gray-300">
+          1. 配置 AList 服务器地址和认证信息
+        </p>
+        <p class="text-gray-600 dark:text-gray-300">
+          2. 选择需要转换的媒体库目录
+        </p>
+        <p class="text-gray-600 dark:text-gray-300">
+          3. 设置转换规则和输出目录
+        </p>
+        <p class="text-gray-600 dark:text-gray-300">
+          4. 开始转换，享受流媒体服务
+        </p>
+      </div>
+    </NCard>
+
+    <!-- 项目信息 -->
+    <div class="text-sm text-gray-500 mt-4 text-center dark:text-gray-400">
+      <p class="mb-2">
+        <a href="https://github.com/MccRay-s/alist2strm" target="_blank" class="hover:text-gray-700 dark:hover:text-gray-300">
+          GitHub 仓库
+        </a>
+      </p>
+      <p>基于 Vue 3 + TypeScript + Vite 构建</p>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+</style>
+
+<route lang="yaml">
+name: home
+layout: default
+path: "/admin"
+</route>]]>

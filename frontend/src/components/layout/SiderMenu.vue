@@ -10,7 +10,7 @@ const route = useRoute()
 const isCollapsed = ref(false)
 const menuOptions = ref<MenuOption[]>([
   {
-    label: '介绍',
+    label: '仪表盘',
     key: '/admin/',
     icon: renderIcon(IconDashboard),
   },

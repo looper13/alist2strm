@@ -1,0 +1,271 @@
+<![CDATA[<script setup lang="ts">
+import { embyAPI } from '~/api/emby'
+import { dashboardAPI, type DashboardStats } from '~/api/dashboard'
+
+defineOptions({
+  name: 'DashboardPage',
+})
+
+// 仪表盘数据
+const loading = ref(true)
+const stats = ref<DashboardStats | null>(null)
+
+// Emby 相关数据
+const currentImageType = ref('Primary')
+const itemId = ref('5623')
+const embyLibraries = ref<any[]>([])
+const latestEmbyMedia = ref<any[]>([])
+const loadingEmby = ref(false)
+
+// 获取当前图片 URL
+const currentImageUrl = computed(() => {
+  return embyAPI.getImageUrl(itemId.value, currentImageType.value, {
+    maxWidth: 300,
+    quality: 90,
+  })
+})
+
+// 切换图片类型
+function refreshImage(type: string) {
+  currentImageType.value = type
+}
+
+// 加载仪表盘统计数据
+async function loadDashboardStats() {
+  loading.value = true
+  try {
+    const { code, data } = await dashboardAPI.getStats()
+    if (code === 0 && data) {
+      stats.value = data
+    }
+  }
+  catch (error) {
+    console.error('加载仪表盘统计数据失败:', error)
+  }
+  finally {
+    loading.value = false
+  }
+}
+
+// 加载 Emby 数据
+async function loadEmbyData() {
+  loadingEmby.value = true
+  try {
+    // 获取媒体库列表
+    const librariesRes = await embyAPI.getLibraries()
+    if (librariesRes.code === 0 && librariesRes.data) {
+      embyLibraries.value = librariesRes.data
+    }
+
+    // 获取最新入库媒体
+    const latestRes = await embyAPI.getLatestMedia(5) // 只获取5条
+    if (latestRes.code === 0 && latestRes.data) {
+      latestEmbyMedia.value = latestRes.data
+    }
+
+    // 如果有最新入库媒体，使用第一个作为示例图片
+    if (latestEmbyMedia.value.length > 0) {
+      itemId.value = latestEmbyMedia.value[0].Id
+    }
+  }
+  catch (error) {
+    console.error('加载 Emby 数据失败:', error)
+  }
+  finally {
+    loadingEmby.value = false
+  }
+}
+
+// 页面加载时获取数据
+onMounted(async () => {
+  await Promise.all([
+    loadDashboardStats(),
+    loadEmbyData(),
+  ])
+})
+</script>
+
+<template>
+  <div class="container mx-auto py-6 px-4">
+    <h1 class="text-2xl font-bold mb-6 dark:text-white">
+      AList2Strm 仪表盘
+    </h1>
+
+    <!-- 数据加载中状态显示 -->
+    <NSpin v-if="loading" :show="true" class="flex h-60 w-full items-center justify-center">
+      <template #description>
+        <div class="text-base dark:text-gray-300">加载仪表盘数据中...</div>
+      </template>
+    </NSpin>
+
+    <template v-else>
+      <!-- 概览统计卡片 -->
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-3 mb-6">
+        <!-- 任务概览卡片 -->
+        <NCard class="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30">
+          <div class="flex items-center">
+            <div class="flex-shrink-0 p-3 bg-blue-500/20 rounded-full">
+              <div class="i-carbon-task text-2xl text-blue-600 dark:text-blue-400" />
+            </div>
+            <div class="ml-4">
+              <h3 class="text-lg font-medium text-gray-800 dark:text-gray-200">任务概览</h3>
+              <div class="grid grid-cols-2 gap-2 mt-2">
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                  总任务数：<span class="font-bold text-gray-800 dark:text-gray-200">{{ stats?.taskStats.total || 0 }}</span>
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                  今日执行：<span class="font-bold text-gray-800 dark:text-gray-200">{{ stats?.taskStats.todayExecutions || 0 }}</span>
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                  已启用：<span class="font-bold text-green-600">{{ stats?.taskStats.enabled || 0 }}</span>
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                  已禁用：<span class="font-bold text-red-600">{{ stats?.taskStats.disabled || 0 }}</span>
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                  今日成功：<span class="font-bold text-green-600">{{ stats?.taskStats.todaySuccess || 0 }}</span>
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                  今日失败：<span class="font-bold text-red-600">{{ stats?.taskStats.todayFailed || 0 }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </NCard>
+
+        <!-- 生成数据概览 -->
+        <NCard class="bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/30">
+          <div class="flex items-center">
+            <div class="flex-shrink-0 p-3 bg-green-500/20 rounded-full">
+              <div class="i-carbon-document text-2xl text-green-600 dark:text-green-400" />
+            </div>
+            <div class="ml-4">
+              <h3 class="text-lg font-medium text-gray-800 dark:text-gray-200">生成数据概览</h3>
+              <div class="grid grid-cols-1 gap-2 mt-2">
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                  总生成数：<span class="font-bold text-gray-800 dark:text-gray-200">{{ stats?.strmStats.totalGenerated || 0 }}</span> 个 STRM 文件
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                  今日生成：<span class="font-bold text-green-600">{{ stats?.strmStats.todayGenerated || 0 }}</span> 个 STRM 文件
+                </div>
+              </div>
+            </div>
+          </div>
+        </NCard>
+
+        <!-- Emby 概览 -->
+        <NCard class="bg-gradient-to-r from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/30">
+          <div class="flex items-center">
+            <div class="flex-shrink-0 p-3 bg-purple-500/20 rounded-full">
+              <div class="i-carbon-media-library text-2xl text-purple-600 dark:text-purple-400" />
+            </div>
+            <div class="ml-4">
+              <h3 class="text-lg font-medium text-gray-800 dark:text-gray-200">Emby 概览</h3>
+              <div class="grid grid-cols-1 gap-2 mt-2">
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                  媒体库数量：<span class="font-bold text-gray-800 dark:text-gray-200">{{ embyLibraries.length || stats?.embyStats.libraryCount || 0 }}</span>
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                  最近入库：<span class="font-bold text-purple-600">{{ latestEmbyMedia.length || stats?.embyStats.recentItemsCount || 0 }}</span> 个媒体文件
+                </div>
+              </div>
+            </div>
+          </div>
+        </NCard>
+      </div>
+
+      <!-- Emby 媒体库和图片展示 -->
+      <div class="grid grid-cols-1 gap-6 lg:grid-cols-3 mb-6">
+        <!-- 左侧：Emby 媒体库列表 -->
+        <NCard title="Emby 媒体库列表" class="lg:col-span-2">
+          <template #header-extra>
+            <NSpin size="small" :show="loadingEmby" />
+          </template>
+
+          <NEmpty v-if="!loadingEmby && (!embyLibraries || embyLibraries.length === 0)" description="暂无媒体库数据" />
+
+          <div v-else class="grid grid-cols-1 gap-2 md:grid-cols-2">
+            <NCard v-for="lib in embyLibraries" :key="lib.Id" size="small" class="bg-gray-50 dark:bg-gray-800/50">
+              <div class="flex items-center">
+                <div class="flex-1">
+                  <div class="font-medium text-gray-900 dark:text-gray-100">{{ lib.Name }}</div>
+                  <div class="text-sm text-gray-500 dark:text-gray-400">
+                    类型: {{ lib.CollectionType || '未知' }}
+                  </div>
+                  <div class="text-sm text-gray-500 dark:text-gray-400">
+                    项目数: {{ lib.ItemCount || 0 }}
+                  </div>
+                </div>
+              </div>
+            </NCard>
+          </div>
+        </NCard>
+
+        <!-- 右侧：Emby 图片预览 -->
+        <NCard title="Emby 图片预览" class="lg:col-span-1">
+          <div class="text-center">
+            <img
+              :src="currentImageUrl"
+              :alt="`Emby ${currentImageType} 图片`"
+              class="mx-auto h-40 rounded shadow object-contain"
+            >
+            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              ID: {{ itemId }}, 类型: {{ currentImageType }}
+            </p>
+
+            <!-- 图片类型切换 -->
+            <div class="mt-3 flex flex-wrap gap-2 justify-center">
+              <NButton size="small" @click="refreshImage('Primary')">
+                主图
+              </NButton>
+              <NButton size="small" @click="refreshImage('Backdrop')">
+                背景图
+              </NButton>
+              <NButton size="small" @click="refreshImage('Logo')">
+                Logo
+              </NButton>
+            </div>
+          </div>
+        </NCard>
+      </div>
+
+      <!-- 最近 Emby 入库媒体 -->
+      <NCard title="Emby 最近入库媒体" class="mb-6">
+        <template #header-extra>
+          <NSpin size="small" :show="loadingEmby" />
+        </template>
+
+        <NEmpty v-if="!loadingEmby && (!latestEmbyMedia || latestEmbyMedia.length === 0)" description="暂无最近入库媒体" />
+
+        <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+          <div
+            v-for="media in latestEmbyMedia"
+            :key="media.Id"
+            class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800/50"
+            @click="itemId = media.Id"
+          >
+            <div class="cursor-pointer hover:opacity-80">
+              <img
+                :src="embyAPI.getImageUrl(media.Id, 'Primary', { maxWidth: 200, quality: 85 })"
+                :alt="media.Name"
+                class="h-32 w-full rounded object-cover object-center"
+              >
+              <div class="mt-2">
+                <p class="font-medium line-clamp-1 text-gray-900 dark:text-gray-100">{{ media.Name }}</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ media.Type }}</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ new Date(media.DateCreated).toLocaleDateString() }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </NCard>
+    </template>
+  </div>
+</template>
+
+<route lang="yaml">
+name: home
+layout: default
+path: "/admin"
+</route>
+]]>

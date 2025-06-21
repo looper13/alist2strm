@@ -33,6 +33,9 @@ func SetupRoutes() *gin.Engine {
 			public.POST("/register", controller.User.Register) // 用户注册
 		}
 
+		// Emby 图片公开路由（不需要认证）
+		api.GET("/emby/items/:item_id/images/:image_type", controller.Emby.GetImage) // 获取Emby图片
+
 		// 需要认证的路由
 		auth := api.Group("")
 		auth.Use(middleware.JWTAuth()) // 应用JWT认证中间件
@@ -90,6 +93,16 @@ func SetupRoutes() *gin.Engine {
 			alist := auth.Group("/alist")
 			{
 				alist.POST("/test", controller.AList.TestConnection) // 测试AList连接
+			}
+
+			// Emby 相关需认证路由
+			emby := auth.Group("/emby")
+			{
+				emby.GET("/test", controller.Emby.TestConnection)                    // 测试Emby服务可用性
+				emby.GET("/libraries", controller.Emby.GetLibraries)                 // 获取Emby媒体库列表
+				emby.GET("/latest", controller.Emby.GetLatestMedia)                  // 获取Emby最新入库列表
+				emby.POST("/libraries/:id/refresh", controller.Emby.RefreshLibrary)  // 刷新指定媒体库
+				emby.POST("/libraries/refresh", controller.Emby.RefreshAllLibraries) // 刷新所有媒体库
 			}
 		}
 

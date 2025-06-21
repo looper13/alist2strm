@@ -8,7 +8,7 @@ import IconSettings from '../icons/IconSettings.vue'
 const router = useRouter()
 const menuOptions = ref<MenuOption[]>([
   {
-    label: '介绍',
+    label: '仪表盘',
     key: '/admin/',
     icon: renderIcon(IconDashboard),
   },
