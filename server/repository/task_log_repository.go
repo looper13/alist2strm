@@ -55,23 +55,29 @@ func (r *TaskLogRepository) GetTotalExecutionsCount() (int64, error) {
 	return count, err
 }
 
-// GetTodaySuccessCount 获取今日成功执行次数
-func (r *TaskLogRepository) GetTodaySuccessCount() (int64, error) {
+// 已使用新的 GetSuccessCount 和 GetFailedCount 方法替代
+
+// GetSuccessCount 获取成功执行总次数，可指定时间范围
+func (r *TaskLogRepository) GetSuccessCount(timeRange string) (int64, error) {
 	var count int64
-	today := time.Now().Format("2006-01-02")
-	err := database.DB.Model(&tasklog.TaskLog{}).
-		Where("DATE(created_at) = ? AND status = ?", today, tasklog.TaskLogStatusCompleted).
-		Count(&count).Error
+	query := database.DB.Model(&tasklog.TaskLog{}).Where("status = ?", tasklog.TaskLogStatusCompleted)
+
+	// 根据时间范围添加筛选条件
+	query = r.addTimeRangeFilter(query, timeRange)
+
+	err := query.Count(&count).Error
 	return count, err
 }
 
-// GetTodayFailedCount 获取今日失败执行次数
-func (r *TaskLogRepository) GetTodayFailedCount() (int64, error) {
+// GetFailedCount 获取失败执行总次数，可指定时间范围
+func (r *TaskLogRepository) GetFailedCount(timeRange string) (int64, error) {
 	var count int64
-	today := time.Now().Format("2006-01-02")
-	err := database.DB.Model(&tasklog.TaskLog{}).
-		Where("DATE(created_at) = ? AND status = ?", today, tasklog.TaskLogStatusFailed).
-		Count(&count).Error
+	query := database.DB.Model(&tasklog.TaskLog{}).Where("status = ?", tasklog.TaskLogStatusFailed)
+
+	// 根据时间范围添加筛选条件
+	query = r.addTimeRangeFilter(query, timeRange)
+
+	err := query.Count(&count).Error
 	return count, err
 }
 
@@ -135,4 +141,26 @@ func (r *TaskLogRepository) GetRunningLogByTaskID(taskID uint) (*tasklog.TaskLog
 		return nil, err
 	}
 	return &tl, nil
+}
+
+// addTimeRangeFilter 根据时间范围添加筛选条件
+func (r *TaskLogRepository) addTimeRangeFilter(query *gorm.DB, timeRange string) *gorm.DB {
+	now := time.Now()
+
+	switch timeRange {
+	case "day":
+		// 当日数据
+		today := now.Format("2006-01-02")
+		query = query.Where("DATE(created_at) = ?", today)
+	case "month":
+		// 当月数据（从当月1号到当前时间）
+		firstDayOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		query = query.Where("created_at >= ? AND created_at <= ?", firstDayOfMonth, now)
+	case "year":
+		// 当年数据（从1月1号到当前时间）
+		firstDayOfYear := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
+		query = query.Where("created_at >= ? AND created_at <= ?", firstDayOfYear, now)
+	}
+
+	return query
 }

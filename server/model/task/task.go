@@ -10,8 +10,8 @@ type TaskStats struct {
 	Enabled         int64 // 已启用任务数
 	Disabled        int64 // 已禁用任务数
 	TotalExecutions int64 // 总执行次数
-	TodaySuccess    int64 // 今日成功执行次数
-	TodayFailed     int64 // 今日失败执行次数
+	SuccessCount    int64 // 成功执行次数
+	FailedCount     int64 // 失败执行次数
 }
 
 // Task 任务模型

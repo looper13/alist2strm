@@ -17,14 +17,23 @@ type TaskController struct{}
 
 // GetTaskStats 获取任务统计数据
 func (tc *TaskController) GetTaskStats(c *gin.Context) {
-	stats, err := service.Task.GetTaskStats()
+	// 获取时间范围参数，默认为day
+	timeRange := c.DefaultQuery("timeRange", "day")
+
+	// 参数验证
+	if timeRange != "day" && timeRange != "month" && timeRange != "year" {
+		response.FailWithMessage("无效的时间范围参数，支持的值为：day、month、year", c)
+		return
+	}
+
+	stats, err := service.Task.GetTaskStats(timeRange)
 	if err != nil {
 		utils.Error("获取任务统计数据失败", "error", err.Error(), "request_id", c.GetString("request_id"))
 		response.FailWithMessage(err.Error(), c)
 		return
 	}
 
-	utils.Info("获取任务统计数据成功", "request_id", c.GetString("request_id"))
+	utils.Info("获取任务统计数据成功", "timeRange", timeRange, "request_id", c.GetString("request_id"))
 	response.SuccessWithData(stats, c)
 }
 

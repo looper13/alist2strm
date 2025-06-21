@@ -18,7 +18,7 @@ type TaskService struct{}
 var Task = &TaskService{}
 
 // GetTaskStats 获取任务统计数据
-func (s *TaskService) GetTaskStats() (*taskResponse.TaskStatsResp, error) {
+func (s *TaskService) GetTaskStats(timeRange string) (*taskResponse.TaskStatsResp, error) {
 	// 获取任务基本统计（总数、启用数、禁用数）
 	taskStats, err := repository.Task.GetStats()
 	if err != nil {
@@ -33,18 +33,18 @@ func (s *TaskService) GetTaskStats() (*taskResponse.TaskStatsResp, error) {
 		return nil, fmt.Errorf("获取任务总执行次数失败: %w", err)
 	}
 
-	// 获取今日成功执行次数
-	todaySuccess, err := repository.TaskLog.GetTodaySuccessCount()
+	// 获取成功执行次数
+	successCount, err := repository.TaskLog.GetSuccessCount(timeRange)
 	if err != nil {
-		utils.Error("获取今日成功执行次数失败", "error", err.Error())
-		return nil, fmt.Errorf("获取今日成功执行次数失败: %w", err)
+		utils.Error("获取成功执行次数失败", "error", err.Error())
+		return nil, fmt.Errorf("获取成功执行次数失败: %w", err)
 	}
 
-	// 获取今日失败执行次数
-	todayFailed, err := repository.TaskLog.GetTodayFailedCount()
+	// 获取失败执行次数
+	failedCount, err := repository.TaskLog.GetFailedCount(timeRange)
 	if err != nil {
-		utils.Error("获取今日失败执行次数失败", "error", err.Error())
-		return nil, fmt.Errorf("获取今日失败执行次数失败: %w", err)
+		utils.Error("获取失败执行次数失败", "error", err.Error())
+		return nil, fmt.Errorf("获取失败执行次数失败: %w", err)
 	}
 
 	// 组装返回数据
@@ -53,8 +53,8 @@ func (s *TaskService) GetTaskStats() (*taskResponse.TaskStatsResp, error) {
 		Enabled:         taskStats.Enabled,
 		Disabled:        taskStats.Disabled,
 		TotalExecutions: totalExecutions,
-		TodaySuccess:    todaySuccess,
-		TodayFailed:     todayFailed,
+		SuccessCount:    successCount,
+		FailedCount:     failedCount,
 	}, nil
 }
 

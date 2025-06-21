@@ -174,8 +174,8 @@ declare namespace Api {
       enabled: number // 启用任务数
       disabled: number // 禁用任务数
       totalExecutions: number // 总执行次数
-      todaySuccess: number // 今日成功次数
-      todayFailed: number // 今日失败次数
+      successCount: number // 成功次数
+      failedCount: number // 失败次数
     }
 
     type Log = Common.CommonRecord<{

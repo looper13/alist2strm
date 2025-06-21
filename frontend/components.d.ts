@@ -14,8 +14,11 @@ declare module 'vue' {
     ConfigForm: typeof import('./src/components/config/ConfigForm.vue')['default']
     ConfigPanel: typeof import('./src/components/config/ConfigPanel.vue')['default']
     copy: typeof import('./src/components/icons/IconCollapseLeft copy.vue')['default']
+    EmbyLatestMedia: typeof import('./src/components/dashboard/EmbyLatestMedia.vue')['default']
+    EmbyLibraries: typeof import('./src/components/dashboard/EmbyLibraries.vue')['default']
     EmbyPanel: typeof import('./src/components/config/EmbyPanel.vue')['default']
     Footer: typeof import('./src/components/layout/Footer.vue')['default']
+    GenerationOverview: typeof import('./src/components/dashboard/GenerationOverview.vue')['default']
     IconCollapseLeft: typeof import('./src/components/icons/IconCollapseLeft.vue')['default']
     IconCollapseRight: typeof import('./src/components/icons/IconCollapseRight.vue')['default']
     IconDashboard: typeof import('./src/components/icons/IconDashboard.vue')['default']
@@ -27,6 +30,7 @@ declare module 'vue' {
     Item: typeof import('./src/components/Task/Item.vue')['default']
     MobileMenu: typeof import('./src/components/layout/MobileMenu.vue')['default']
     NButton: typeof import('naive-ui')['NButton']
+    NButtonGroup: typeof import('naive-ui')['NButtonGroup']
     NCard: typeof import('naive-ui')['NCard']
     NConfigProvider: typeof import('naive-ui')['NConfigProvider']
     NDataTable: typeof import('naive-ui')['NDataTable']
@@ -75,6 +79,7 @@ declare module 'vue' {
     SiderMenu: typeof import('./src/components/layout/SiderMenu.vue')['default']
     StrmConfig: typeof import('./src/components/config/StrmConfig.vue')['default']
     TaskItem: typeof import('./src/components/task/TaskItem.vue')['default']
+    TaskOverview: typeof import('./src/components/dashboard/TaskOverview.vue')['default']
     UserInfoModal: typeof import('./src/components/user/UserInfoModal.vue')['default']
   }
 }

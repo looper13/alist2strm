@@ -71,6 +71,6 @@ type TaskStatsResp struct {
 	Enabled         int64 `json:"enabled"`         // 已启用任务数
 	Disabled        int64 `json:"disabled"`        // 已禁用任务数
 	TotalExecutions int64 `json:"totalExecutions"` // 总执行次数
-	TodaySuccess    int64 `json:"todaySuccess"`    // 今日成功执行次数
-	TodayFailed     int64 `json:"todayFailed"`     // 今日失败执行次数
+	SuccessCount    int64 `json:"successCount"`    // 成功执行次数
+	FailedCount     int64 `json:"failedCount"`     // 失败执行次数
 }

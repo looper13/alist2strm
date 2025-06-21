@@ -5,9 +5,12 @@ export class TaskAPI {
 
   /**
    * 获取任务统计信息
+   * @param timeRange 时间范围：day-日, month-月, year-年
    */
-  async getStats() {
-    return http.get<Api.Task.Stats>(`${this.baseUrl}/stats`)
+  async getStats(timeRange: string = 'day') {
+    return http.get<Api.Task.Stats>(`${this.baseUrl}/stats`, {
+      params: { timeRange },
+    })
   }
 
   /**
