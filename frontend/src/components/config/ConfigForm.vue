@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import type { ConfigItem } from './config'
-import type { AlistConfig, StrmConfig } from '~/types/config'
-import type { NotificationConfig } from '~/types/notification'
 import { configAPI } from '~/api/config'
 import { useMobile } from '~/composables'
 import { CONFIG_ITEMS, defaultConfigs } from './config'
@@ -11,9 +9,9 @@ import NotificationPanel from './NotificationPanel.vue'
 // 响应式状态
 const { isMobile } = useMobile()
 const activeTab = ref('ALIST')
-const alistConfig = ref<AlistConfig>({ ...defaultConfigs.ALIST })
-const strmConfig = ref<StrmConfig>({ ...defaultConfigs.STRM })
-const notificationConfig = ref<NotificationConfig>({ ...defaultConfigs.NOTIFICATION_SETTINGS })
+const alistConfig = ref<Api.Config.AlistConfig>({ ...defaultConfigs.ALIST })
+const strmConfig = ref<Api.Config.StrmConfig>({ ...defaultConfigs.STRM })
+const notificationConfig = ref<Api.Config.NotificationConfig>({ ...defaultConfigs.NOTIFICATION_SETTINGS })
 const loading = ref(false)
 const saving = ref(false)
 const notification = useNotification()
@@ -32,13 +30,13 @@ onMounted(async () => {
       const notificationConfigItem = data.find(item => item.code === 'NOTIFICATION_SETTINGS')
 
       if (alistConfigItem?.value) {
-        alistConfig.value = JSON.parse(alistConfigItem.value) as AlistConfig
+        alistConfig.value = JSON.parse(alistConfigItem.value) as Api.Config.AlistConfig
       }
       if (strmConfigItem?.value) {
-        strmConfig.value = JSON.parse(strmConfigItem.value) as StrmConfig
+        strmConfig.value = JSON.parse(strmConfigItem.value) as Api.Config.StrmConfig
       }
       if (notificationConfigItem?.value) {
-        notificationConfig.value = JSON.parse(notificationConfigItem.value) as NotificationConfig
+        notificationConfig.value = JSON.parse(notificationConfigItem.value) as Api.Config.NotificationConfig
       }
     }
   }
@@ -111,12 +109,12 @@ async function handleSave() {
           <ConfigPanel
             v-if="item.code === 'ALIST'"
             v-model="alistConfig"
-            :config-item="item as ConfigItem<AlistConfig>"
+            :config-item="item as ConfigItem<Api.Config.AlistConfig>"
           />
           <ConfigPanel
             v-if="item.code === 'STRM'"
             v-model="strmConfig"
-            :config-item="item as ConfigItem<StrmConfig>"
+            :config-item="item as ConfigItem<Api.Config.StrmConfig>"
           />
           <NotificationPanel
             v-if="item.code === 'NOTIFICATION_SETTINGS'"

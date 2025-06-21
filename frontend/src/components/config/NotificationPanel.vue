@@ -1,18 +1,17 @@
 <script setup lang="ts">
-import type { NotificationConfig } from '~/types/notification'
 import { ref, watch } from 'vue'
 import { useMobile } from '~/composables'
 
 const props = defineProps<{
-  config: NotificationConfig
+  config: Api.Config.NotificationConfig
 }>()
 
 const emit = defineEmits<{
-  (e: 'update:config', value: NotificationConfig): void
+  (e: 'update:config', value: Api.Config.NotificationConfig): void
 }>()
 
 // 深拷贝配置，避免直接修改props
-const notificationConfig = ref<NotificationConfig>(JSON.parse(JSON.stringify(props.config)))
+const notificationConfig = ref<Api.Config.NotificationConfig>(JSON.parse(JSON.stringify(props.config)))
 
 // 监听外部配置变化
 watch(() => props.config, (newVal) => {
@@ -114,7 +113,7 @@ function getChannelConfigFields(type: string) {
         <NTabPane
           v-for="(_, channelKey) in notificationConfig.channels"
           :key="channelKey"
-          :tab="channelTypes.find(item => item.value === channelKey)?.label || channelKey"
+          :tab="channelTypes.find(item => item.value === String(channelKey))?.label || channelKey"
           :name="channelKey"
         >
           <NForm
@@ -126,7 +125,7 @@ function getChannelConfigFields(type: string) {
               <NSwitch v-model:value="notificationConfig.channels[channelKey].enabled" />
             </NFormItem>
 
-            <div v-for="field in getChannelConfigFields(channelKey)" :key="field.key">
+            <div v-for="field in getChannelConfigFields(String(channelKey))" :key="field.key">
               <NFormItem :label="field.label">
                 <NInput
                   v-model:value="notificationConfig.channels[channelKey].config[field.key]"
@@ -144,7 +143,7 @@ function getChannelConfigFields(type: string) {
         <NTabPane
           v-for="(_, templateKey) in notificationConfig.templates"
           :key="templateKey"
-          :tab="templateTypes.find(item => item.value === templateKey)?.label || templateKey"
+          :tab="templateTypes.find(item => item.value === String(templateKey))?.label || templateKey"
           :name="templateKey"
         >
           <NForm

@@ -1,6 +1,3 @@
-import type { AlistConfig, StrmConfig } from '~/types/config'
-import type { NotificationConfig } from '~/types/notification'
-
 export interface ConfigField<T> {
   key: keyof T
   label: string
@@ -27,12 +24,12 @@ export const defaultConfigs = {
     reqInterval: 1000,
     reqRetryCount: 3,
     reqRetryInterval: 10000,
-  } as AlistConfig,
+  } as Api.Config.AlistConfig,
   STRM: {
     defaultSuffix: 'mp4,mkv,avi,mov,rmvb,webm,flv,m3u8',
     replaceSuffix: true,
     urlEncode: true,
-  } as StrmConfig,
+  } as Api.Config.StrmConfig,
   NOTIFICATION_SETTINGS: {
     enabled: true,
     defaultChannel: 'telegram',
@@ -72,7 +69,7 @@ export const defaultConfigs = {
       retryInterval: 60,
       concurrency: 1,
     },
-  } as NotificationConfig,
+  } as Api.Config.NotificationConfig,
 }
 
 // 配置项定义
@@ -130,8 +127,8 @@ export const CONFIG_ITEMS = [
         step: 100,
         describe: '重试间隔时间，默认10000',
       },
-    ] as ConfigField<AlistConfig>[],
-  } as ConfigItem<AlistConfig>,
+    ] as ConfigField<Api.Config.AlistConfig>[],
+  } as ConfigItem<Api.Config.AlistConfig>,
   {
     name: 'strm 配置',
     code: 'STRM',
@@ -156,11 +153,11 @@ export const CONFIG_ITEMS = [
         type: 'boolean',
         describe: '对 strm 内容进行URL编码，建议开启',
       },
-    ] as ConfigField<StrmConfig>[],
-  } as ConfigItem<StrmConfig>,
+    ] as ConfigField<Api.Config.StrmConfig>[],
+  } as ConfigItem<Api.Config.StrmConfig>,
   {
     name: '消息通知',
     code: 'NOTIFICATION_SETTINGS',
-    fields: [] as ConfigField<NotificationConfig>[],
-  } as ConfigItem<NotificationConfig>,
+    fields: [] as ConfigField<Api.Config.NotificationConfig>[],
+  } as ConfigItem<Api.Config.NotificationConfig>,
 ]

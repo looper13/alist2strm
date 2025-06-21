@@ -30,6 +30,14 @@ export class ConfigAPI {
   async configs() {
     return http.get<Api.Config.Record[]>(`${this.baseUrl}/list`)
   }
+
+  /**
+   * 通过配置代码查询配置项
+   * @param code 配置项的代码
+   */
+  async getByCode(code: string) {
+    return http.get<Api.Config.Record>(`${this.baseUrl}/code/${code}`)
+  }
 }
 
 export const configAPI = new ConfigAPI()

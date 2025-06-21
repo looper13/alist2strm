@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { DataTableColumns, FormRules } from 'naive-ui'
 import cronValidate from 'cron-validate'
+import { configAPI } from '~/api/config'
 import { taskAPI } from '~/api/task'
 import { taskLogAPI } from '~/api/task-log'
 
@@ -14,6 +15,20 @@ const currentId = ref<number | null>(null)
 const tasks = ref<Api.Task.Record[]>([])
 const taskLogs = ref<Api.Task.Log[]>([])
 const logLoading = ref(false)
+const strmConfig = ref<Api.Config.StrmConfig | null>(null)
+
+// 加载 STRM 配置
+async function loadStrmConfig() {
+  try {
+    const { data } = await configAPI.getByCode('STRM')
+    if (data && data.value) {
+      strmConfig.value = JSON.parse(data.value) as Api.Config.StrmConfig
+    }
+  }
+  catch (error: any) {
+    console.error('加载 STRM 配置失败', error)
+  }
+}
 
 // 日志分页
 const logPagination = reactive({
@@ -125,15 +140,22 @@ async function loadTasks() {
 }
 
 // 打开创建对话框
-function handleCreate() {
+async function handleCreate() {
   isEdit.value = false
   currentId.value = null
+  
+  // 如果还没有加载 STRM 配置，先加载一次
+  if (!strmConfig.value) {
+    await loadStrmConfig()
+  }
+  
   formModel.value = {
     name: '',
     mediaType: 'movie',
     sourcePath: '',
     targetPath: '',
-    fileSuffix: '',
+    // 如果有 STRM 配置，自动填充默认后缀
+    fileSuffix: strmConfig.value?.defaultSuffix || '',
     overwrite: false,
     enabled: true,
     cron: '',
@@ -446,6 +468,7 @@ const logColumns: DataTableColumns<Api.Task.Log> = [
 // 初始化加载
 onMounted(() => {
   loadTasks()
+  loadStrmConfig()
 })
 </script>
 

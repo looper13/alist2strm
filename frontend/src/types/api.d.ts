@@ -85,9 +85,51 @@ declare namespace Api {
       value: string
     }>
 
-    type Create = Pick<Config, 'name' | 'code' | 'value'>
-    type Update = Pick<Config, 'name' | 'code' | 'value'>
+    type Create = Pick<Record, 'name' | 'code' | 'value'>
+    type Update = Pick<Record, 'name' | 'code' | 'value'>
 
+    // STRM 特定配置类型
+    interface StrmConfig {
+      defaultSuffix: string
+      replaceSuffix: boolean
+      urlEncode: boolean
+    }
+
+    // Alist 特定配置类型
+    export interface AlistConfig {
+      token: string
+      host: string
+      domain: string
+      reqInterval: number
+      reqRetryCount: number
+      reqRetryInterval: number
+    }
+
+    // 通知配置类型
+    export interface ChannelConfig {
+      enabled: boolean
+      type: string
+      config: Record<string, string>
+    }
+
+    export interface TemplateConfig {
+      telegram: string
+      wework: string
+    }
+
+    export interface QueueSettings {
+      maxRetries: number
+      retryInterval: number
+      concurrency: number
+    }
+
+    export interface NotificationConfig {
+      enabled: boolean
+      defaultChannel: string
+      channels: Record<string, ChannelConfig>
+      templates: Record<string, TemplateConfig>
+      queueSettings: QueueSettings
+    }
   }
 
   // 任务
