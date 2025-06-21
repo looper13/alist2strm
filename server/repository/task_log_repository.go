@@ -48,6 +48,33 @@ func (r *TaskLogRepository) Delete(id uint) error {
 	return database.DB.Delete(&tasklog.TaskLog{}, id).Error
 }
 
+// GetTotalExecutionsCount 获取总执行次数
+func (r *TaskLogRepository) GetTotalExecutionsCount() (int64, error) {
+	var count int64
+	err := database.DB.Model(&tasklog.TaskLog{}).Count(&count).Error
+	return count, err
+}
+
+// GetTodaySuccessCount 获取今日成功执行次数
+func (r *TaskLogRepository) GetTodaySuccessCount() (int64, error) {
+	var count int64
+	today := time.Now().Format("2006-01-02")
+	err := database.DB.Model(&tasklog.TaskLog{}).
+		Where("DATE(created_at) = ? AND status = ?", today, tasklog.TaskLogStatusCompleted).
+		Count(&count).Error
+	return count, err
+}
+
+// GetTodayFailedCount 获取今日失败执行次数
+func (r *TaskLogRepository) GetTodayFailedCount() (int64, error) {
+	var count int64
+	today := time.Now().Format("2006-01-02")
+	err := database.DB.Model(&tasklog.TaskLog{}).
+		Where("DATE(created_at) = ? AND status = ?", today, tasklog.TaskLogStatusFailed).
+		Count(&count).Error
+	return count, err
+}
+
 // ListByTaskID 根据任务ID获取任务日志列表（分页）
 func (r *TaskLogRepository) ListByTaskID(req *taskLogRequest.TaskLogListReq) ([]tasklog.TaskLog, int64, error) {
 	var taskLogs []tasklog.TaskLog

@@ -168,6 +168,16 @@ declare namespace Api {
     type Update = Pick<Record, 'id' | 'name' | 'sourcePath' | 'targetPath' | 'fileSuffix' | 'overwrite' | 'enabled' | 'cron' | 'mediaType' | 'downloadMetadata' | 'metadataExtensions' | 'downloadSubtitle' | 'subtitleExtensions'>
     type Create = Pick<Record, 'name' | 'sourcePath' | 'targetPath' | 'fileSuffix' | 'overwrite' | 'enabled' | 'cron' | 'mediaType' | 'downloadMetadata' | 'metadataExtensions' | 'downloadSubtitle' | 'subtitleExtensions'>
 
+    // 任务统计数据接口
+    interface Stats {
+      total: number // 任务总数
+      enabled: number // 启用任务数
+      disabled: number // 禁用任务数
+      totalExecutions: number // 总执行次数
+      todaySuccess: number // 今日成功次数
+      todayFailed: number // 今日失败次数
+    }
+
     type Log = Common.CommonRecord<{
       taskId: number
       createdAt: string

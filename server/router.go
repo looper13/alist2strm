@@ -69,6 +69,7 @@ func SetupRoutes() *gin.Engine {
 				task.DELETE("/:id", controller.Task.DeleteTask)            // 删除任务
 				task.GET("/list", controller.Task.GetTaskList)             // 获取任务列表（分页）
 				task.GET("/all", controller.Task.GetAllTasks)              // 获取所有任务（不分页）
+				task.GET("/stats", controller.Task.GetTaskStats)           // 获取任务统计数据
 				task.PUT("/:id/toggle", controller.Task.ToggleTaskEnabled) // 切换任务启用状态
 				task.PUT("/:id/reset", controller.Task.ResetTaskStatus)    // 重置任务运行状态
 				task.POST("/:id/execute", controller.Task.ExecuteTask)     // 执行任务（支持同步/异步）

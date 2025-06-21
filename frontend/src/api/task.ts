@@ -4,6 +4,13 @@ export class TaskAPI {
   private baseUrl = '/task'
 
   /**
+   * 获取任务统计信息
+   */
+  async getStats() {
+    return http.get<Api.Task.Stats>(`${this.baseUrl}/stats`)
+  }
+
+  /**
    * 创建任务
    */
   async create(data: Api.Task.Create) {

@@ -17,6 +17,47 @@ type TaskService struct{}
 // 包级别的全局实例
 var Task = &TaskService{}
 
+// GetTaskStats 获取任务统计数据
+func (s *TaskService) GetTaskStats() (*taskResponse.TaskStatsResp, error) {
+	// 获取任务基本统计（总数、启用数、禁用数）
+	taskStats, err := repository.Task.GetStats()
+	if err != nil {
+		utils.Error("获取任务统计数据失败", "error", err.Error())
+		return nil, fmt.Errorf("获取任务统计数据失败: %w", err)
+	}
+
+	// 获取任务执行次数统计
+	totalExecutions, err := repository.TaskLog.GetTotalExecutionsCount()
+	if err != nil {
+		utils.Error("获取任务总执行次数失败", "error", err.Error())
+		return nil, fmt.Errorf("获取任务总执行次数失败: %w", err)
+	}
+
+	// 获取今日成功执行次数
+	todaySuccess, err := repository.TaskLog.GetTodaySuccessCount()
+	if err != nil {
+		utils.Error("获取今日成功执行次数失败", "error", err.Error())
+		return nil, fmt.Errorf("获取今日成功执行次数失败: %w", err)
+	}
+
+	// 获取今日失败执行次数
+	todayFailed, err := repository.TaskLog.GetTodayFailedCount()
+	if err != nil {
+		utils.Error("获取今日失败执行次数失败", "error", err.Error())
+		return nil, fmt.Errorf("获取今日失败执行次数失败: %w", err)
+	}
+
+	// 组装返回数据
+	return &taskResponse.TaskStatsResp{
+		Total:           taskStats.Total,
+		Enabled:         taskStats.Enabled,
+		Disabled:        taskStats.Disabled,
+		TotalExecutions: totalExecutions,
+		TodaySuccess:    todaySuccess,
+		TodayFailed:     todayFailed,
+	}, nil
+}
+
 // Create 创建任务
 func (s *TaskService) Create(req *taskRequest.TaskCreateReq) error {
 	// 创建任务

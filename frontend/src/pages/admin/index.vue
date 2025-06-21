@@ -1,15 +1,14 @@
 <script setup lang="ts">
-import type { DashboardStats } from '~/api/dashboard'
-import { dashboardAPI } from '~/api/dashboard'
 import { embyAPI } from '~/api/emby'
+import { taskAPI } from '~/api/task'
 
 defineOptions({
   name: 'DashboardPage',
 })
 
-// 仪表盘数据
+// 任务数据
 const loading = ref(true)
-const stats = ref<DashboardStats | null>(null)
+const taskStats = ref<Api.Task.Stats | null>(null)
 
 // Emby 媒体库相关数据和状态
 const embyLibraries = ref<any[]>([])
@@ -28,17 +27,17 @@ const pageSizeOptions = [
   { label: '50条/页', value: 50 },
 ]
 
-// 加载仪表盘统计数据
-async function loadDashboardStats() {
+// 加载任务统计数据
+async function loadTaskStats() {
   loading.value = true
   try {
-    const { code, data } = await dashboardAPI.getStats()
+    const { code, data } = await taskAPI.getStats()
     if (code === 0 && data) {
-      stats.value = data
+      taskStats.value = data
     }
   }
   catch (error) {
-    console.error('加载仪表盘统计数据失败:', error)
+    console.error('加载任务统计数据失败:', error)
   }
   finally {
     loading.value = false
@@ -115,7 +114,7 @@ function refreshLatestEmbyMedia() {
 // 页面加载时获取数据，各个模块并行加载
 onMounted(async () => {
   await Promise.all([
-    loadDashboardStats(),
+    loadTaskStats(),
     loadEmbyLibraries(),
     loadLatestEmbyMedia(),
   ])
@@ -148,7 +147,7 @@ onMounted(async () => {
             </div>
             <div>
               <div class="text-3xl text-gray-900 font-bold dark:text-white">
-                {{ stats?.taskStats.total || 0 }}
+                {{ taskStats?.total || 0 }}
               </div>
               <div class="text-sm text-gray-500 dark:text-gray-400">
                 总任务数
@@ -159,7 +158,7 @@ onMounted(async () => {
           <div class="mb-2 gap-4 grid grid-cols-2">
             <div class="p-2 rounded-md bg-green-50 dark:bg-green-900/20">
               <div class="text-lg text-green-600 font-bold dark:text-green-400">
-                {{ stats?.taskStats.enabled || 0 }}
+                {{ taskStats?.enabled || 0 }}
               </div>
               <div class="text-xs text-gray-600 dark:text-gray-400">
                 已启用
@@ -167,7 +166,7 @@ onMounted(async () => {
             </div>
             <div class="p-2 rounded-md bg-red-50 dark:bg-red-900/20">
               <div class="text-lg text-red-600 font-bold dark:text-red-400">
-                {{ stats?.taskStats.disabled || 0 }}
+                {{ taskStats?.disabled || 0 }}
               </div>
               <div class="text-xs text-gray-600 dark:text-gray-400">
                 已禁用
@@ -178,7 +177,7 @@ onMounted(async () => {
           <div class="gap-4 grid grid-cols-3">
             <div class="p-2 rounded-md bg-gray-50 dark:bg-gray-800/50">
               <div class="text-sm text-gray-700 font-bold dark:text-gray-300">
-                {{ stats?.taskStats.totalExecutions || 0 }}
+                {{ taskStats?.totalExecutions || 0 }}
               </div>
               <div class="text-xs text-gray-600 dark:text-gray-400">
                 总执行次数
@@ -186,7 +185,7 @@ onMounted(async () => {
             </div>
             <div class="p-2 rounded-md bg-gray-50 dark:bg-gray-800/50">
               <div class="text-sm text-green-600 font-bold dark:text-green-400">
-                {{ stats?.taskStats.todaySuccess || 0 }}
+                {{ taskStats?.todaySuccess || 0 }}
               </div>
               <div class="text-xs text-gray-600 dark:text-gray-400">
                 今日成功
@@ -194,7 +193,7 @@ onMounted(async () => {
             </div>
             <div class="p-2 rounded-md bg-gray-50 dark:bg-gray-800/50">
               <div class="text-sm text-red-600 font-bold dark:text-red-400">
-                {{ stats?.taskStats.todayFailed || 0 }}
+                {{ taskStats?.todayFailed || 0 }}
               </div>
               <div class="text-xs text-gray-600 dark:text-gray-400">
                 今日失败
@@ -211,7 +210,7 @@ onMounted(async () => {
             </div>
             <div>
               <div class="text-3xl text-gray-900 font-bold dark:text-white">
-                {{ stats?.strmStats.totalGenerated || 0 }}
+                0
               </div>
               <div class="text-sm text-gray-500 dark:text-gray-400">
                 STRM 总生成数
@@ -222,7 +221,7 @@ onMounted(async () => {
           <div class="gap-4 grid grid-cols-2">
             <div class="p-3 rounded-md bg-green-50 dark:bg-green-900/20">
               <div class="text-lg text-green-600 font-bold dark:text-green-400">
-                {{ stats?.strmStats.todayGenerated || 0 }}
+                0
               </div>
               <div class="text-xs text-gray-600 dark:text-gray-400">
                 今日生成数
@@ -230,7 +229,7 @@ onMounted(async () => {
             </div>
             <div class="p-3 rounded-md bg-blue-50 dark:bg-blue-900/20">
               <div class="text-lg text-blue-600 font-bold dark:text-blue-400">
-                {{ Math.floor((stats?.strmStats.downloadSize || 0) / 1024) }} GB
+                0 GB
               </div>
               <div class="text-xs text-gray-600 dark:text-gray-400">
                 原数据下载量
@@ -250,12 +249,12 @@ onMounted(async () => {
                 <div class="text-lg text-gray-900 font-bold mr-2 dark:text-white">
                   Emby 服务器
                 </div>
-                <NTag :type="stats?.embyStats.serverStatus === 'online' ? 'success' : 'error'" size="small">
-                  {{ stats?.embyStats.serverStatus === 'online' ? '在线' : '离线' }}
+                <NTag type="success" size="small">
+                  在线
                 </NTag>
               </div>
               <div class="text-sm text-gray-500 dark:text-gray-400">
-                用户数: <span class="text-purple-600 font-medium dark:text-purple-400">{{ stats?.embyStats.userCount || 0 }}</span>
+                用户数: <span class="text-purple-600 font-medium dark:text-purple-400">0</span>
               </div>
             </div>
           </div>

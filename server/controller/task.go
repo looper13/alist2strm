@@ -15,6 +15,19 @@ var Task = &TaskController{}
 
 type TaskController struct{}
 
+// GetTaskStats 获取任务统计数据
+func (tc *TaskController) GetTaskStats(c *gin.Context) {
+	stats, err := service.Task.GetTaskStats()
+	if err != nil {
+		utils.Error("获取任务统计数据失败", "error", err.Error(), "request_id", c.GetString("request_id"))
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+
+	utils.Info("获取任务统计数据成功", "request_id", c.GetString("request_id"))
+	response.SuccessWithData(stats, c)
+}
+
 // Create 创建任务
 func (tc *TaskController) Create(c *gin.Context) {
 	var req taskRequest.TaskCreateReq

@@ -43,6 +43,32 @@ func (r *TaskRepository) Delete(id uint) error {
 	return database.DB.Delete(&task.Task{}, id).Error
 }
 
+// GetStats 获取任务统计数据
+func (r *TaskRepository) GetStats() (*task.TaskStats, error) {
+	var totalTasks int64
+	var enabledTasks int64
+	var disabledTasks int64
+
+	// 查询总任务数
+	if err := database.DB.Model(&task.Task{}).Count(&totalTasks).Error; err != nil {
+		return nil, err
+	}
+
+	// 查询已启用任务数
+	if err := database.DB.Model(&task.Task{}).Where("enabled = ?", true).Count(&enabledTasks).Error; err != nil {
+		return nil, err
+	}
+
+	// 计算已禁用任务数
+	disabledTasks = totalTasks - enabledTasks
+
+	return &task.TaskStats{
+		Total:    totalTasks,
+		Enabled:  enabledTasks,
+		Disabled: disabledTasks,
+	}, nil
+}
+
 // List 获取任务列表（分页）
 func (r *TaskRepository) List(req *taskRequest.TaskListReq) ([]task.Task, int64, error) {
 	var tasks []task.Task
