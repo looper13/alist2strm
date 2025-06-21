@@ -30,6 +30,16 @@ export const defaultConfigs = {
     replaceSuffix: true,
     urlEncode: true,
   } as Api.Config.StrmConfig,
+  EMBY: {
+    embyServer: 'http://emby:8096',
+    embyToken: '',
+    pathMappings: [
+      {
+        path: '',
+        embyPath: '',
+      },
+    ],
+  } as Api.Config.EmbyConfig,
   NOTIFICATION_SETTINGS: {
     enabled: true,
     defaultChannel: 'telegram',
@@ -155,6 +165,11 @@ export const CONFIG_ITEMS = [
       },
     ] as ConfigField<Api.Config.StrmConfig>[],
   } as ConfigItem<Api.Config.StrmConfig>,
+  {
+    name: 'Emby 配置',
+    code: 'EMBY',
+    fields: [] as ConfigField<Api.Config.EmbyConfig>[],
+  } as ConfigItem<Api.Config.EmbyConfig>,
   {
     name: '消息通知',
     code: 'NOTIFICATION_SETTINGS',

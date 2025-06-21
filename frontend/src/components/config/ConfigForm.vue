@@ -4,6 +4,7 @@ import { configAPI } from '~/api/config'
 import { useMobile } from '~/composables'
 import { CONFIG_ITEMS, defaultConfigs } from './config'
 import ConfigPanel from './ConfigPanel.vue'
+import EmbyPanel from './EmbyPanel.vue'
 import NotificationPanel from './NotificationPanel.vue'
 
 // 响应式状态
@@ -11,6 +12,7 @@ const { isMobile } = useMobile()
 const activeTab = ref('ALIST')
 const alistConfig = ref<Api.Config.AlistConfig>({ ...defaultConfigs.ALIST })
 const strmConfig = ref<Api.Config.StrmConfig>({ ...defaultConfigs.STRM })
+const embyConfig = ref<Api.Config.EmbyConfig>({ ...defaultConfigs.EMBY })
 const notificationConfig = ref<Api.Config.NotificationConfig>({ ...defaultConfigs.NOTIFICATION_SETTINGS })
 const loading = ref(false)
 const saving = ref(false)
@@ -27,6 +29,7 @@ onMounted(async () => {
     if (data) {
       const alistConfigItem = data.find(item => item.code === 'ALIST')
       const strmConfigItem = data.find(item => item.code === 'STRM')
+      const embyConfigItem = data.find(item => item.code === 'EMBY')
       const notificationConfigItem = data.find(item => item.code === 'NOTIFICATION_SETTINGS')
 
       if (alistConfigItem?.value) {
@@ -34,6 +37,9 @@ onMounted(async () => {
       }
       if (strmConfigItem?.value) {
         strmConfig.value = JSON.parse(strmConfigItem.value) as Api.Config.StrmConfig
+      }
+      if (embyConfigItem?.value) {
+        embyConfig.value = JSON.parse(embyConfigItem.value) as Api.Config.EmbyConfig
       }
       if (notificationConfigItem?.value) {
         notificationConfig.value = JSON.parse(notificationConfigItem.value) as Api.Config.NotificationConfig
@@ -58,6 +64,9 @@ async function handleSave() {
     }
     else if (activeTab.value === 'STRM') {
       configValue = JSON.stringify(strmConfig.value)
+    }
+    else if (activeTab.value === 'EMBY') {
+      configValue = JSON.stringify(embyConfig.value)
     }
     else if (activeTab.value === 'NOTIFICATION_SETTINGS') {
       configValue = JSON.stringify(notificationConfig.value)
@@ -115,6 +124,12 @@ async function handleSave() {
             v-if="item.code === 'STRM'"
             v-model="strmConfig"
             :config-item="item as ConfigItem<Api.Config.StrmConfig>"
+          />
+          <EmbyPanel
+            v-if="item.code === 'EMBY'"
+            :config="embyConfig"
+            :config-item="item as ConfigItem<Api.Config.EmbyConfig>"
+            @update:config="(val) => embyConfig = val"
           />
           <NotificationPanel
             v-if="item.code === 'NOTIFICATION_SETTINGS'"

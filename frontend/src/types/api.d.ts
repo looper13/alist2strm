@@ -105,6 +105,18 @@ declare namespace Api {
       reqRetryInterval: number
     }
 
+    // Emby 特定配置类型
+    export interface PathMapping {
+      path: string
+      embyPath: string
+    }
+
+    export interface EmbyConfig {
+      embyServer: string
+      embyToken: string
+      pathMappings: PathMapping[]
+    }
+
     // 通知配置类型
     export interface ChannelConfig {
       enabled: boolean
