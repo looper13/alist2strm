@@ -84,7 +84,12 @@ defineExpose({
         </div>
         <div>
           <div class="text-2xl text-gray-900 font-bold sm:text-3xl dark:text-white">
-            {{ taskStats?.total || 0 }}
+            <NNumberAnimation
+              :from="0"
+              :to="taskStats?.total || 0"
+              :duration="1500"
+              show-separator
+            />
           </div>
           <div class="text-xs text-gray-500 sm:text-sm dark:text-gray-400">
             总任务数
@@ -95,7 +100,11 @@ defineExpose({
       <div class="mb-3 gap-2 grid grid-cols-2 sm:gap-4">
         <div class="p-2 rounded-md bg-green-50 flex flex-col items-center dark:bg-green-900/20 sm:items-start">
           <div class="text-base text-green-600 font-bold sm:text-lg dark:text-green-400">
-            {{ taskStats?.enabled || 0 }}
+            <NNumberAnimation
+              :from="0"
+              :to="taskStats?.enabled || 0"
+              :duration="1500"
+            />
           </div>
           <div class="text-xs text-gray-600 mt-1 dark:text-gray-400">
             开启
@@ -103,7 +112,11 @@ defineExpose({
         </div>
         <div class="p-2 rounded-md bg-red-50 flex flex-col items-center dark:bg-red-900/20 sm:items-start">
           <div class="text-base text-red-600 font-bold sm:text-lg dark:text-red-400">
-            {{ taskStats?.disabled || 0 }}
+            <NNumberAnimation
+              :from="0"
+              :to="taskStats?.disabled || 0"
+              :duration="1500"
+            />
           </div>
           <div class="text-xs text-gray-600 mt-1 dark:text-gray-400">
             关闭
@@ -117,7 +130,12 @@ defineExpose({
             总执行次数
           </div>
           <div class="text-sm text-gray-700 font-bold dark:text-gray-300">
-            {{ taskStats?.totalExecutions || 0 }}
+            <NNumberAnimation
+              :from="0"
+              :to="taskStats?.totalExecutions || 0"
+              :duration="1500"
+              show-separator
+            />
           </div>
         </div>
         <div class="p-2 rounded-md bg-gray-50 flex flex-row items-center justify-between dark:bg-gray-800/50 sm:flex-col sm:items-start sm:justify-start">
@@ -125,7 +143,12 @@ defineExpose({
             {{ selectedTimeRange === 'day' ? '今日成功' : selectedTimeRange === 'month' ? '本月成功' : '今年成功' }}
           </div>
           <div class="text-sm text-green-600 font-bold dark:text-green-400">
-            {{ taskStats?.successCount || 0 }}
+            <NNumberAnimation
+              :from="0"
+              :to="taskStats?.successCount || 0"
+              :duration="1500"
+              show-separator
+            />
           </div>
         </div>
         <div class="p-2 rounded-md bg-gray-50 flex flex-row items-center justify-between dark:bg-gray-800/50 sm:flex-col sm:items-start sm:justify-start">
@@ -133,7 +156,12 @@ defineExpose({
             {{ selectedTimeRange === 'day' ? '今日失败' : selectedTimeRange === 'month' ? '本月失败' : '今年失败' }}
           </div>
           <div class="text-sm text-red-600 font-bold dark:text-red-400">
-            {{ taskStats?.failedCount || 0 }}
+            <NNumberAnimation
+              :from="0"
+              :to="taskStats?.failedCount || 0"
+              :duration="1500"
+              show-separator
+            />
           </div>
         </div>
       </div>

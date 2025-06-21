@@ -96,7 +96,12 @@ defineExpose({
         </div>
         <div>
           <div class="text-2xl text-gray-900 font-bold sm:text-3xl dark:text-white">
-            {{ generationStats.totalFiles }}
+            <NNumberAnimation
+              :from="0"
+              :to="generationStats.totalFiles || 0"
+              :duration="1500"
+              show-separator
+            />
           </div>
           <div class="text-xs text-gray-500 sm:text-sm dark:text-gray-400">
             文件扫描
@@ -107,7 +112,12 @@ defineExpose({
       <div class="mb-3 gap-2 grid grid-cols-2 sm:gap-4">
         <div class="p-2 rounded-md bg-green-50 flex flex-col items-center dark:bg-green-900/20 sm:items-start">
           <div class="text-base text-green-600 font-bold sm:text-lg dark:text-green-400">
-            {{ generationStats.processedFiles }}
+            <NNumberAnimation
+              :from="0"
+              :to="generationStats.processedFiles || 0"
+              :duration="1500"
+              show-separator
+            />
           </div>
           <div class="text-xs text-gray-600 mt-1 dark:text-gray-400">
             已处理
@@ -115,7 +125,12 @@ defineExpose({
         </div>
         <div class="p-2 rounded-md bg-yellow-50 flex flex-col items-center dark:bg-yellow-900/20 sm:items-start">
           <div class="text-base text-yellow-600 font-bold sm:text-lg dark:text-yellow-400">
-            {{ generationStats.skippedFiles }}
+            <NNumberAnimation
+              :from="0"
+              :to="generationStats.skippedFiles || 0"
+              :duration="1500"
+              show-separator
+            />
           </div>
           <div class="text-xs text-gray-600 mt-1 dark:text-gray-400">
             跳过处理
@@ -129,7 +144,12 @@ defineExpose({
             STRM 文件生成
           </div>
           <div class="text-sm text-blue-600 font-bold dark:text-blue-400">
-            {{ generationStats.strmGenerated }}
+            <NNumberAnimation
+              :from="0"
+              :to="generationStats.strmGenerated || 0"
+              :duration="1500"
+              show-separator
+            />
           </div>
         </div>
         <div class="p-2 rounded-md bg-purple-50 flex flex-row items-center justify-between dark:bg-purple-900/20 sm:flex-col sm:items-start sm:justify-start">
@@ -137,7 +157,12 @@ defineExpose({
             元数据下载
           </div>
           <div class="text-sm text-purple-600 font-bold dark:text-purple-400">
-            {{ generationStats.metadataDownloaded }}
+            <NNumberAnimation
+              :from="0"
+              :to="generationStats.metadataDownloaded || 0"
+              :duration="1500"
+              show-separator
+            />
           </div>
         </div>
         <div class="p-2 rounded-md bg-indigo-50 flex flex-row items-center justify-between dark:bg-indigo-900/20 sm:flex-col sm:items-start sm:justify-start">
@@ -145,7 +170,12 @@ defineExpose({
             字幕下载
           </div>
           <div class="text-sm text-indigo-600 font-bold dark:text-indigo-400">
-            {{ generationStats.subtitleDownloaded }}
+            <NNumberAnimation
+              :from="0"
+              :to="generationStats.subtitleDownloaded || 0"
+              :duration="1500"
+              show-separator
+            />
           </div>
         </div>
       </div>

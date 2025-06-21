@@ -66,6 +66,7 @@ export default defineConfig({
             'NFloatButton',
             'NTabs',
             'NTabPane',
+            'NNumberAnimation',
           ],
         },
       ],

@@ -21,12 +21,14 @@ onMounted(() => {
 
 <template>
   <div class="mx-auto p-4 container">
-    <!-- 任务概览卡片 -->
-    <TaskOverview ref="taskOverviewRef" class="mb-6" />
+    <!-- 概览统计卡片区域：PC端并排，移动端堆叠 -->
+    <div class="mb-6 gap-6 grid grid-cols-1 lg:grid-cols-2">
+      <!-- 任务概览卡片 -->
+      <TaskOverview ref="taskOverviewRef" />
 
-    <!-- 概览统计卡片区域 -->
-    <!-- 生成数据概览 -->
-    <GenerationOverview class="mb-6" />
+      <!-- 生成数据概览 -->
+      <GenerationOverview />
+    </div>
 
     <!-- Emby 媒体库横向列表 -->
     <EmbyLibraries ref="embyLibrariesRef" class="mb-6" />

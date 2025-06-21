@@ -14,6 +14,7 @@ declare global {
   const NFormItem: typeof import('naive-ui')['NFormItem']
   const NIcon: typeof import('naive-ui')['NIcon']
   const NInput: typeof import('naive-ui')['NInput']
+  const NNumberAnimation: typeof import('naive-ui')['NNumberAnimation']
   const NPopconfirm: typeof import('naive-ui')['NPopconfirm']
   const NSelect: typeof import('naive-ui')['NSelect']
   const NSpace: typeof import('naive-ui')['NSpace']
@@ -345,6 +346,7 @@ declare module 'vue' {
     readonly NFormItem: UnwrapRef<typeof import('naive-ui')['NFormItem']>
     readonly NIcon: UnwrapRef<typeof import('naive-ui')['NIcon']>
     readonly NInput: UnwrapRef<typeof import('naive-ui')['NInput']>
+    readonly NNumberAnimation: UnwrapRef<typeof import('naive-ui')['NNumberAnimation']>
     readonly NPopconfirm: UnwrapRef<typeof import('naive-ui')['NPopconfirm']>
     readonly NSelect: UnwrapRef<typeof import('naive-ui')['NSelect']>
     readonly NSpace: UnwrapRef<typeof import('naive-ui')['NSpace']>
