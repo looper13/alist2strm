@@ -177,9 +177,9 @@ func (c *WeworkChannel) sendMessage(message string) error {
 	// 构建请求体
 	requestBody := map[string]interface{}{
 		"touser":  c.toUser,
-		"msgtype": "text",
+		"msgtype": "markdown",
 		"agentid": c.agentID,
-		"text": map[string]string{
+		"markdown": map[string]string{
 			"content": message,
 		},
 	}
