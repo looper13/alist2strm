@@ -312,7 +312,7 @@ func (s *StrmGeneratorService) GenerateStrmFiles(taskID uint) error {
 	// 发送通知
 	notifyErr := s.sendNotification(taskInfo, taskLogID, status, durationSeconds, updateData)
 	if notifyErr != nil {
-		s.logger.Error("发送Telegram通知失败", zap.Error(notifyErr))
+		s.logger.Error("发送任务通知失败", zap.Error(notifyErr))
 	}
 
 	return err
@@ -450,6 +450,7 @@ func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmC
 
 			s.stats.Mutex.Lock()
 			s.stats.SkippedFiles++
+			s.stats.SubtitleProcessed++ // 即使未匹配也应该计入已处理字幕文件
 			s.stats.Mutex.Unlock()
 		}
 	}
@@ -514,8 +515,8 @@ func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmC
 		s.queue.FilesMutex.Unlock()
 
 		// 获取已跳过的文件数（已包含在总跳过文件数中）
-		skippedExistingFiles := len(matchedSubtitleEntries)+len(metadataFileEntries)-len(needDownloadEntries)
-		
+		skippedExistingFiles := len(matchedSubtitleEntries) + len(metadataFileEntries) - len(needDownloadEntries)
+
 		s.logger.Info("添加文件到下载队列",
 			zap.Int("需下载文件数", len(needDownloadEntries)),
 			zap.Int("跳过已存在文件数", skippedExistingFiles),
@@ -995,6 +996,13 @@ func (s *StrmGeneratorService) processDownloadFileQueue(taskInfo *task.Task, str
 			}
 		} else {
 			s.stats.SkippedFiles++
+			// 即使下载失败，仍然应该计入处理过的元数据或字幕文件
+			// 保证总文件数 = 已生成STRM文件 + 跳过的文件 + 处理的元数据文件 + 处理的字幕文件
+			if entry.FileType == FileTypeSubtitle {
+				s.stats.SubtitleProcessed++
+			} else if entry.FileType == FileTypeMetadata {
+				s.stats.MetadataProcessed++
+			}
 		}
 		s.stats.Mutex.Unlock()
 

@@ -146,3 +146,30 @@ func (r *NotificationRepository) UpdateNotificationForRetry(id uint, retryCount 
 func (r *NotificationRepository) CleanSentNotifications(beforeTime time.Time) error {
 	return database.DB.Where("status = ? AND updated_at < ?", notification.StatusSent, beforeTime).Delete(&notification.Queue{}).Error
 }
+
+// GetEarliestRetryTime 获取最早需要重试的消息时间
+func (r *NotificationRepository) GetEarliestRetryTime() (time.Time, bool) {
+	var nextRetry notification.Queue
+	result := database.DB.Where("status = ? AND next_retry_time IS NOT NULL", notification.StatusFailed).
+		Order("next_retry_time ASC").
+		First(&nextRetry)
+
+	if result.Error != nil {
+		return time.Time{}, false
+	}
+
+	return *nextRetry.NextRetryTime, true
+}
+
+// HasPendingNotifications 检查是否有未处理的通知
+func (r *NotificationRepository) HasPendingNotifications() (bool, error) {
+	var count int64
+	now := time.Now()
+
+	err := database.DB.Model(&notification.Queue{}).
+		Where("status = ? OR (status = ? AND next_retry_time <= ?)",
+			notification.StatusPending, notification.StatusFailed, now).
+		Count(&count).Error
+
+	return count > 0, err
+}

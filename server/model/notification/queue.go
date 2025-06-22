@@ -47,16 +47,19 @@ type NotificationData interface {
 
 // TaskNotificationData 任务通知数据
 type TaskNotificationData struct {
-	TaskID         uint   `json:"taskId"`
-	TaskName       string `json:"taskName"`
-	Status         string `json:"status"`
-	Duration       int64  `json:"duration"`
-	TotalFiles     int    `json:"totalFiles"`
-	GeneratedFiles int    `json:"generatedFiles"`
-	SkippedFiles   int    `json:"skippedFiles"`
-	MetadataFiles  int    `json:"metadataFiles"`
-	SubtitleFiles  int    `json:"subtitleFiles"`
-	ErrorMessage   string `json:"errorMessage,omitempty"`
+	TaskID         uint      `json:"taskId"`
+	TaskName       string    `json:"taskName"`
+	Status         string    `json:"status"`
+	Duration       int64     `json:"duration"`
+	TotalFiles     int       `json:"totalFiles"`
+	GeneratedFiles int       `json:"generatedFiles"`
+	SkippedFiles   int       `json:"skippedFiles"`
+	MetadataFiles  int       `json:"metadataFiles"`
+	SubtitleFiles  int       `json:"subtitleFiles"`
+	ErrorMessage   string    `json:"errorMessage,omitempty"`
+	EventTime      time.Time `json:"eventTime"`         // 事件发生时间
+	SourcePath     string    `json:"sourcePath"`        // 任务源路径
+	TargetPath     string    `json:"targetPath"`        // 任务目标路径
 }
 
 // GetTaskName 获取任务名称
