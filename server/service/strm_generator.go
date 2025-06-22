@@ -65,10 +65,15 @@ type FileProcessQueue struct {
 // ProcessingStats 文件处理统计信息
 type ProcessingStats struct {
 	TotalFiles             int          // 扫描到的总文件数
-	GeneratedFiles         int          // 成功生成的 STRM 文件
-	SkippedFiles           int          // 跳过的文件
-	MetadataProcessed      int          // 处理的元数据文件
-	SubtitleProcessed      int          // 处理的字幕文件
+	GeneratedFile          int          // 成功生成的 STRM 文件数 (与 TaskLog 字段保持一致)
+	SkipFile               int          // 跳过的 STRM 文件数 (与 TaskLog 字段保持一致)
+	OverwriteFile          int          // 覆盖的文件数 (与 TaskLog 字段保持一致)
+	MetadataDownloaded     int          // 已下载的元数据文件数
+	MetadataSkipped        int          // 已跳过的元数据文件数
+	SubtitleDownloaded     int          // 已下载的字幕文件数
+	SubtitleSkipped        int          // 已跳过的字幕文件数
+	OtherSkipped           int          // 跳过的其他类型文件数
+	FailedCount            int          // 处理失败的文件数 (与 TaskLog 字段保持一致)
 	ScanFinished           bool         // 目录扫描是否已完成
 	StrmProcessingDone     bool         // STRM 文件处理是否已完成
 	DownloadProcessingDone bool         // 下载文件处理是否已完成
@@ -255,10 +260,14 @@ func (s *StrmGeneratorService) GenerateStrmFiles(taskID uint) error {
 
 	// 更新任务日志
 	s.stats.Mutex.RLock()
-	generatedFiles := s.stats.GeneratedFiles
-	skippedFiles := s.stats.SkippedFiles
-	metadataFiles := s.stats.MetadataProcessed
-	subtitleFiles := s.stats.SubtitleProcessed
+	// 计算统计数据
+	generatedFiles := s.stats.GeneratedFile
+	// 所有跳过的文件总和：STRM文件跳过 + 元数据文件跳过 + 字幕文件跳过 + 其他文件跳过
+	skippedFiles := s.stats.SkipFile + s.stats.MetadataSkipped + s.stats.SubtitleSkipped + s.stats.OtherSkipped
+	// 元数据处理总数：下载 + 跳过
+	metadataFiles := s.stats.MetadataDownloaded + s.stats.MetadataSkipped
+	// 字幕处理总数：下载 + 跳过
+	subtitleFiles := s.stats.SubtitleDownloaded + s.stats.SubtitleSkipped
 	s.stats.Mutex.RUnlock()
 
 	endTime := time.Now()
@@ -293,24 +302,56 @@ func (s *StrmGeneratorService) GenerateStrmFiles(taskID uint) error {
 			zap.Uint("taskLogID", taskLogID))
 	}
 
+	s.stats.Mutex.RLock()
+	metadataDownloaded := s.stats.MetadataDownloaded
+	metadataSkipped := s.stats.MetadataSkipped
+	subtitleDownloaded := s.stats.SubtitleDownloaded
+	subtitleSkipped := s.stats.SubtitleSkipped
+	otherSkipped := s.stats.OtherSkipped
+	failedCount := s.stats.FailedCount
+	s.stats.Mutex.RUnlock()
+
+	// 只包含 TaskLog 模型中存在的字段
 	updateData := map[string]interface{}{
-		"status":         status,
-		"message":        message,
-		"end_time":       &endTime,
-		"duration":       durationSeconds,
-		"total_file":     totalFiles,
-		"generated_file": generatedFiles,
-		"skip_file":      skippedFiles,
-		"metadata_count": metadataFiles,
-		"subtitle_count": subtitleFiles,
+		"status":              status,
+		"message":             message,
+		"end_time":            &endTime,
+		"duration":            durationSeconds,
+		"total_file":          totalFiles,
+		"generated_file":      generatedFiles,
+		"skip_file":           skippedFiles,
+		"metadata_count":      metadataFiles,
+		"subtitle_count":      subtitleFiles,
+		"metadata_downloaded": metadataDownloaded,
+		"subtitle_downloaded": subtitleDownloaded,
+		"failed_count":        failedCount,
+	}
+
+	// 额外的统计信息保留在通知中，但不更新到数据库
+	notifyData := map[string]interface{}{
+		"status":              status,
+		"message":             message,
+		"end_time":            &endTime,
+		"duration":            durationSeconds,
+		"total_file":          totalFiles,
+		"generated_file":      generatedFiles,
+		"skip_file":           skippedFiles,
+		"metadata_count":      metadataFiles,
+		"subtitle_count":      subtitleFiles,
+		"metadata_downloaded": metadataDownloaded,
+		"subtitle_downloaded": subtitleDownloaded,
+		"metadata_skipped":    metadataSkipped,
+		"subtitle_skipped":    subtitleSkipped,
+		"other_skipped":       otherSkipped,
+		"failed_count":        failedCount,
 	}
 
 	if updateErr := repository.TaskLog.UpdatePartial(taskLogID, updateData); updateErr != nil {
 		s.logger.Error("更新任务日志失败", zap.Error(updateErr))
 	}
 
-	// 发送通知
-	notifyErr := s.sendNotification(taskInfo, taskLogID, status, durationSeconds, updateData)
+	// 发送通知 - 使用包含额外详细统计信息的notifyData
+	notifyErr := s.sendNotification(taskInfo, taskLogID, status, durationSeconds, notifyData)
 	if notifyErr != nil {
 		s.logger.Error("发送任务通知失败", zap.Error(notifyErr))
 	}
@@ -422,7 +463,7 @@ func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmC
 		default:
 			// 其他文件类型不处理，但计入跳过文件
 			s.stats.Mutex.Lock()
-			s.stats.SkippedFiles++
+			s.stats.OtherSkipped++
 			s.stats.Mutex.Unlock()
 		}
 	}
@@ -449,8 +490,7 @@ func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmC
 				zap.String("path", subEntry.SourcePath))
 
 			s.stats.Mutex.Lock()
-			s.stats.SkippedFiles++
-			s.stats.SubtitleProcessed++ // 即使未匹配也应该计入已处理字幕文件
+			s.stats.SubtitleSkipped++ // 将未匹配的字幕文件计入已跳过的字幕文件
 			s.stats.Mutex.Unlock()
 		}
 	}
@@ -482,8 +522,7 @@ func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmC
 
 			// 更新统计信息
 			s.stats.Mutex.Lock()
-			s.stats.SubtitleProcessed++
-			s.stats.SkippedFiles++ // 将已存在的文件计入跳过文件数
+			s.stats.SubtitleSkipped++ // 计入已跳过的字幕文件
 			s.stats.Mutex.Unlock()
 		}
 	}
@@ -502,8 +541,7 @@ func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmC
 
 			// 更新统计信息
 			s.stats.Mutex.Lock()
-			s.stats.MetadataProcessed++
-			s.stats.SkippedFiles++ // 将已存在的文件计入跳过文件数
+			s.stats.MetadataSkipped++ // 计入已跳过的元数据文件
 			s.stats.Mutex.Unlock()
 		}
 	}
@@ -517,12 +555,14 @@ func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmC
 		// 获取已跳过的文件数（已包含在总跳过文件数中）
 		skippedExistingFiles := len(matchedSubtitleEntries) + len(metadataFileEntries) - len(needDownloadEntries)
 
+		s.stats.Mutex.RLock()
 		s.logger.Info("添加文件到下载队列",
 			zap.Int("需下载文件数", len(needDownloadEntries)),
 			zap.Int("跳过已存在文件数", skippedExistingFiles),
-			zap.Int("已处理字幕文件", s.stats.SubtitleProcessed),
-			zap.Int("已处理元数据文件", s.stats.MetadataProcessed),
-			zap.Int("总跳过文件数", s.stats.SkippedFiles))
+			zap.Int("已跳过字幕文件", s.stats.SubtitleSkipped),
+			zap.Int("已跳过元数据文件", s.stats.MetadataSkipped),
+			zap.Int("跳过其他文件数", s.stats.OtherSkipped))
+		s.stats.Mutex.RUnlock()
 	}
 
 	// 递归处理子目录
@@ -990,18 +1030,17 @@ func (s *StrmGeneratorService) processDownloadFileQueue(taskInfo *task.Task, str
 		s.stats.Mutex.Lock()
 		if processed.Success {
 			if entry.FileType == FileTypeSubtitle {
-				s.stats.SubtitleProcessed++
+				s.stats.SubtitleDownloaded++ // 成功下载的字幕文件
 			} else if entry.FileType == FileTypeMetadata {
-				s.stats.MetadataProcessed++
+				s.stats.MetadataDownloaded++ // 成功下载的元数据文件
 			}
 		} else {
-			s.stats.SkippedFiles++
-			// 即使下载失败，仍然应该计入处理过的元数据或字幕文件
-			// 保证总文件数 = 已生成STRM文件 + 跳过的文件 + 处理的元数据文件 + 处理的字幕文件
+			s.stats.FailedCount++ // 处理失败的文件
+			// 下载失败的文件也应计入相应的跳过类别
 			if entry.FileType == FileTypeSubtitle {
-				s.stats.SubtitleProcessed++
+				s.stats.SubtitleSkipped++ // 下载失败的字幕文件计入已跳过
 			} else if entry.FileType == FileTypeMetadata {
-				s.stats.MetadataProcessed++
+				s.stats.MetadataSkipped++ // 下载失败的元数据文件计入已跳过
 			}
 		}
 		s.stats.Mutex.Unlock()
@@ -1009,10 +1048,15 @@ func (s *StrmGeneratorService) processDownloadFileQueue(taskInfo *task.Task, str
 		// 每处理 10 个文件更新一次数据库
 		if (i+1)%10 == 0 {
 			s.stats.Mutex.RLock()
+			// 计算数据库中需要的汇总数值
+			subtitleCount := s.stats.SubtitleDownloaded + s.stats.SubtitleSkipped
+			metadataCount := s.stats.MetadataDownloaded + s.stats.MetadataSkipped
+			skipFileCount := s.stats.SkipFile + s.stats.MetadataSkipped + s.stats.SubtitleSkipped + s.stats.OtherSkipped
+
 			updateData := map[string]interface{}{
-				"subtitle_count": s.stats.SubtitleProcessed,
-				"metadata_count": s.stats.MetadataProcessed,
-				"skip_file":      s.stats.SkippedFiles,
+				"subtitle_count": subtitleCount,
+				"metadata_count": metadataCount,
+				"skip_file":      skipFileCount,
 			}
 			s.stats.Mutex.RUnlock()
 
@@ -1020,11 +1064,15 @@ func (s *StrmGeneratorService) processDownloadFileQueue(taskInfo *task.Task, str
 				s.logger.Error("更新任务日志进度失败", zap.Error(updateErr))
 			}
 
+			s.stats.Mutex.RLock()
 			s.logger.Info("下载队列处理进度",
 				zap.Int("已处理", i+1),
 				zap.Int("总数", totalDownloadFiles),
-				zap.Int("字幕文件", s.stats.SubtitleProcessed),
-				zap.Int("元数据文件", s.stats.MetadataProcessed))
+				zap.Int("已下载字幕", s.stats.SubtitleDownloaded),
+				zap.Int("已跳过字幕", s.stats.SubtitleSkipped),
+				zap.Int("已下载元数据", s.stats.MetadataDownloaded),
+				zap.Int("已跳过元数据", s.stats.MetadataSkipped))
+			s.stats.Mutex.RUnlock()
 		}
 	}
 
@@ -1033,9 +1081,13 @@ func (s *StrmGeneratorService) processDownloadFileQueue(taskInfo *task.Task, str
 	s.stats.DownloadProcessingDone = true
 	s.stats.Mutex.Unlock()
 
+	s.stats.Mutex.RLock()
 	s.logger.Info("下载文件队列处理完成",
-		zap.Int("字幕文件", s.stats.SubtitleProcessed),
-		zap.Int("元数据文件", s.stats.MetadataProcessed))
+		zap.Int("已下载字幕", s.stats.SubtitleDownloaded),
+		zap.Int("已跳过字幕", s.stats.SubtitleSkipped),
+		zap.Int("已下载元数据", s.stats.MetadataDownloaded),
+		zap.Int("已跳过元数据", s.stats.MetadataSkipped))
+	s.stats.Mutex.RUnlock()
 
 	return nil
 }
@@ -1101,18 +1153,21 @@ func (s *StrmGeneratorService) processStrmFileQueueAsync(taskInfo *task.Task, st
 			// 统计结果
 			s.stats.Mutex.Lock()
 			if result.Success {
-				s.stats.GeneratedFiles++
+				s.stats.GeneratedFile++ // 成功生成的STRM文件
 			} else {
-				s.stats.SkippedFiles++
+				s.stats.SkipFile++ // 跳过的STRM文件
 			}
 			s.stats.Mutex.Unlock()
 
 			// 定期更新任务日志
-			if s.stats.GeneratedFiles%100 == 0 || s.stats.SkippedFiles%100 == 0 {
+			if s.stats.GeneratedFile%100 == 0 || s.stats.SkipFile%100 == 0 {
 				s.stats.Mutex.RLock()
+				// 计算需要更新到数据库的总计数
+				skipFileCount := s.stats.SkipFile + s.stats.MetadataSkipped + s.stats.SubtitleSkipped + s.stats.OtherSkipped
+
 				updateData := map[string]interface{}{
-					"generated_file": s.stats.GeneratedFiles,
-					"skip_file":      s.stats.SkippedFiles,
+					"generated_file": s.stats.GeneratedFile,
+					"skip_file":      skipFileCount,
 				}
 				s.stats.Mutex.RUnlock()
 
@@ -1175,8 +1230,11 @@ func (s *StrmGeneratorService) processStrmFileQueueAsync(taskInfo *task.Task, st
 	s.stats.StrmProcessingDone = true
 	s.stats.Mutex.Unlock()
 
+	s.stats.Mutex.RLock()
 	s.logger.Info("STRM 文件生成队列处理完成",
-		zap.Int("生成文件数", s.stats.GeneratedFiles))
+		zap.Int("生成文件数", s.stats.GeneratedFile),
+		zap.Int("跳过文件数", s.stats.SkipFile))
+	s.stats.Mutex.RUnlock()
 
 	return nil
 }

@@ -47,19 +47,28 @@ type NotificationData interface {
 
 // TaskNotificationData 任务通知数据
 type TaskNotificationData struct {
-	TaskID         uint      `json:"taskId"`
-	TaskName       string    `json:"taskName"`
-	Status         string    `json:"status"`
-	Duration       int64     `json:"duration"`
-	TotalFiles     int       `json:"totalFiles"`
-	GeneratedFiles int       `json:"generatedFiles"`
-	SkippedFiles   int       `json:"skippedFiles"`
-	MetadataFiles  int       `json:"metadataFiles"`
-	SubtitleFiles  int       `json:"subtitleFiles"`
-	ErrorMessage   string    `json:"errorMessage,omitempty"`
-	EventTime      time.Time `json:"eventTime"`         // 事件发生时间
-	SourcePath     string    `json:"sourcePath"`        // 任务源路径
-	TargetPath     string    `json:"targetPath"`        // 任务目标路径
+	TaskID             uint   `json:"taskId"`
+	TaskName           string `json:"taskName"`
+	Status             string `json:"status"`
+	Duration           int64  `json:"duration"`
+	TotalFile          int    `json:"totalFile"`          // 总文件数，与 TaskLog 保持一致
+	GeneratedFile      int    `json:"generatedFile"`      // 生成的文件数，与 TaskLog 保持一致
+	SkipFile           int    `json:"skipFile"`           // 跳过的文件数，与 TaskLog 保持一致
+	OverwriteFile      int    `json:"overwriteFile"`      // 覆盖的文件数，与 TaskLog 保持一致
+	MetadataCount      int    `json:"metadataCount"`      // 元数据文件数，与 TaskLog 保持一致
+	SubtitleCount      int    `json:"subtitleCount"`      // 字幕文件数，与 TaskLog 保持一致
+	MetadataDownloaded int    `json:"metadataDownloaded"` // 已下载的元数据文件数，与 TaskLog 保持一致
+	SubtitleDownloaded int    `json:"subtitleDownloaded"` // 已下载的字幕文件数，与 TaskLog 保持一致
+	FailedCount        int    `json:"failedCount"`        // 处理失败的文件数，与 TaskLog 保持一致
+
+	// 以下字段是为了通知显示更详细信息而保留的额外字段
+	MetadataSkipped int       `json:"metadataSkipped"` // 跳过的元数据文件数
+	SubtitleSkipped int       `json:"subtitleSkipped"` // 跳过的字幕文件数
+	OtherSkipped    int       `json:"otherSkipped"`    // 跳过的其他文件数
+	ErrorMessage    string    `json:"errorMessage,omitempty"`
+	EventTime       time.Time `json:"eventTime"`  // 事件发生时间
+	SourcePath      string    `json:"sourcePath"` // 任务源路径
+	TargetPath      string    `json:"targetPath"` // 任务目标路径
 }
 
 // GetTaskName 获取任务名称

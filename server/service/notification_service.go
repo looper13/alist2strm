@@ -200,21 +200,49 @@ func (s *NotificationService) SendTaskNotification(taskInfo *task.Task, taskLogI
 		TargetPath: taskInfo.TargetPath,
 	}
 
-	// 提取统计数据
-	if totalFiles, ok := stats["total_file"].(int); ok {
-		data.TotalFiles = totalFiles
+	// 提取基础统计数据 (与 task_log.go 中 TaskLog 字段保持一致)
+	if totalFile, ok := stats["total_file"].(int); ok {
+		data.TotalFile = totalFile
 	}
-	if generatedFiles, ok := stats["generated_file"].(int); ok {
-		data.GeneratedFiles = generatedFiles
+	if generatedFile, ok := stats["generated_file"].(int); ok {
+		data.GeneratedFile = generatedFile
 	}
-	if skippedFiles, ok := stats["skip_file"].(int); ok {
-		data.SkippedFiles = skippedFiles
+	if skipFile, ok := stats["skip_file"].(int); ok {
+		data.SkipFile = skipFile
 	}
-	if metadataFiles, ok := stats["metadata_count"].(int); ok {
-		data.MetadataFiles = metadataFiles
+	if overwriteFile, ok := stats["overwrite_file"].(int); ok {
+		data.OverwriteFile = overwriteFile
 	}
-	if subtitleFiles, ok := stats["subtitle_count"].(int); ok {
-		data.SubtitleFiles = subtitleFiles
+	if metadataCount, ok := stats["metadata_count"].(int); ok {
+		data.MetadataCount = metadataCount
+	}
+	if subtitleCount, ok := stats["subtitle_count"].(int); ok {
+		data.SubtitleCount = subtitleCount
+	}
+
+	// 提取细分统计数据
+	// 下载统计
+	if metadataDownloaded, ok := stats["metadata_downloaded"].(int); ok {
+		data.MetadataDownloaded = metadataDownloaded
+	}
+	if subtitleDownloaded, ok := stats["subtitle_downloaded"].(int); ok {
+		data.SubtitleDownloaded = subtitleDownloaded
+	}
+
+	// 跳过统计（额外的详细信息）
+	if metadataSkipped, ok := stats["metadata_skipped"].(int); ok {
+		data.MetadataSkipped = metadataSkipped
+	}
+	if subtitleSkipped, ok := stats["subtitle_skipped"].(int); ok {
+		data.SubtitleSkipped = subtitleSkipped
+	}
+	if otherSkipped, ok := stats["other_skipped"].(int); ok {
+		data.OtherSkipped = otherSkipped
+	}
+
+	// 失败统计
+	if failedCount, ok := stats["failed_count"].(int); ok {
+		data.FailedCount = failedCount
 	}
 
 	// 设置错误信息（如果有）
