@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import type { PropType } from 'vue'
+import { NCard, NForm, NFormItem, NInput, NInputNumber, NSelect, NSwitch, NTabPane, NTabs, NTag, useMessage } from 'naive-ui'
+import { defineComponent, h, ref, watch } from 'vue'
 import { useMobile } from '~/composables'
 
 const props = defineProps<{
@@ -84,6 +86,55 @@ function getChannelConfigFields(type: string) {
   }
   return []
 }
+
+// 复制变量到剪贴板
+const message = useMessage()
+function copyToClipboard(text: string) {
+  navigator.clipboard.writeText(text).then(
+    () => {
+      message.success(`已复制: ${text}`)
+    },
+    (err) => {
+      message.error(`复制失败: ${err}`)
+    },
+  )
+}
+
+// 模板变量项组件
+const TemplateVarItem = defineComponent({
+  name: 'TemplateVarItem',
+  props: {
+    var: {
+      type: String,
+      required: true,
+    },
+    desc: {
+      type: String,
+      required: true,
+    },
+    type: {
+      type: String as PropType<'default' | 'error' | 'info' | 'success' | 'warning' | 'primary'>,
+      default: 'default',
+    },
+  },
+  setup(props) {
+    const handleClick = () => {
+      copyToClipboard(props.var)
+    }
+
+    return () => h('div', {
+      class: 'flex items-center p-1 rounded cursor-pointer transition duration-300 hover:bg-gray-100 dark:hover:bg-gray-800',
+      onClick: handleClick,
+    }, [
+      h(NTag, {
+        size: 'small',
+        type: props.type,
+        class: 'mr-2 cursor-pointer',
+      }, { default: () => props.var }),
+      h('span', { class: 'text-sm' }, props.desc),
+    ])
+  },
+})
 </script>
 
 <template>
@@ -168,6 +219,51 @@ function getChannelConfigFields(type: string) {
                 placeholder="请输入企业微信消息模板"
               />
             </NFormItem>
+
+            <NFormItem label="">
+              <NCard title="可用模板变量" size="small" class="mt-2">
+                <div class="text-xs text-gray-500 mb-2">
+                  点击变量标签可复制到剪贴板
+                </div>
+                <NTabs type="line" size="small" animated>
+                  <NTabPane name="basic" tab="基本信息">
+                    <div class="p-2 gap-2 grid grid-cols-1 sm:grid-cols-2">
+                      <TemplateVarItem var="&#123;&#123;.TaskName&#125;&#125;" desc="任务名称" type="info" />
+                      <TemplateVarItem var="&#123;&#123;.EventTime&#125;&#125;" desc="完成时间" type="info" />
+                      <TemplateVarItem var="&#123;&#123;.Duration&#125;&#125;" desc="处理耗时(秒)" type="info" />
+                      <TemplateVarItem var="&#123;&#123;.Status&#125;&#125;" desc="任务状态" type="info" />
+                    </div>
+                  </NTabPane>
+                  <NTabPane name="files" tab="文件统计">
+                    <div class="p-2 gap-2 grid grid-cols-1 sm:grid-cols-2">
+                      <TemplateVarItem var="&#123;&#123;.TotalFile&#125;&#125;" desc="总文件数" type="success" />
+                      <TemplateVarItem var="&#123;&#123;.GeneratedFile&#125;&#125;" desc="已生成文件数" type="success" />
+                      <TemplateVarItem var="&#123;&#123;.SkipFile&#125;&#125;" desc="已跳过文件数" type="success" />
+                      <TemplateVarItem var="&#123;&#123;.OverwriteFile&#125;&#125;" desc="已覆盖文件数" type="success" />
+                      <TemplateVarItem var="&#123;&#123;.FailedCount&#125;&#125;" desc="失败文件数" type="success" />
+                    </div>
+                  </NTabPane>
+                  <NTabPane name="extras" tab="元数据与字幕">
+                    <div class="p-2 gap-2 grid grid-cols-1 sm:grid-cols-2">
+                      <TemplateVarItem var="&#123;&#123;.MetadataCount&#125;&#125;" desc="元数据总数" type="warning" />
+                      <TemplateVarItem var="&#123;&#123;.MetadataDownloaded&#125;&#125;" desc="已下载元数据" type="warning" />
+                      <TemplateVarItem var="&#123;&#123;.MetadataSkipped&#125;&#125;" desc="已跳过元数据" type="warning" />
+                      <TemplateVarItem var="&#123;&#123;.SubtitleCount&#125;&#125;" desc="字幕总数" type="warning" />
+                      <TemplateVarItem var="&#123;&#123;.SubtitleDownloaded&#125;&#125;" desc="已下载字幕" type="warning" />
+                      <TemplateVarItem var="&#123;&#123;.SubtitleSkipped&#125;&#125;" desc="已跳过字幕" type="warning" />
+                    </div>
+                  </NTabPane>
+                  <NTabPane name="others" tab="其他变量">
+                    <div class="p-2 gap-2 grid grid-cols-1 sm:grid-cols-2">
+                      <TemplateVarItem var="&#123;&#123;.ErrorMessage&#125;&#125;" desc="错误信息" type="error" />
+                      <TemplateVarItem var="&#123;&#123;.OtherSkipped&#125;&#125;" desc="其他跳过文件" type="error" />
+                      <TemplateVarItem var="&#123;&#123;.SourcePath&#125;&#125;" desc="源路径" type="default" />
+                      <TemplateVarItem var="&#123;&#123;.TargetPath&#125;&#125;" desc="目标路径" type="default" />
+                    </div>
+                  </NTabPane>
+                </NTabs>
+              </NCard>
+            </NFormItem>
           </NForm>
         </NTabPane>
       </NTabs>
@@ -193,15 +289,6 @@ function getChannelConfigFields(type: string) {
             v-model:value="notificationConfig.queueSettings.retryInterval"
             :min="10"
             :step="10"
-            class="w-full"
-          />
-        </NFormItem>
-
-        <NFormItem label="并发数">
-          <NInputNumber
-            v-model:value="notificationConfig.queueSettings.concurrency"
-            :min="1"
-            :step="1"
             class="w-full"
           />
         </NFormItem>
