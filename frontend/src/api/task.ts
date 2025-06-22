@@ -59,7 +59,14 @@ export class TaskAPI {
    * 重置任务状态
    */
   async resetStatus(id: number) {
-    return http.post(`${this.baseUrl}/${id}/reset-status`)
+    return http.put(`${this.baseUrl}/${id}/reset`)
+  }
+
+  /**
+   * 启用禁用任务
+   */
+  async toggleEnabled(id: number) {
+    return http.put(`${this.baseUrl}/${id}/toggle`)
   }
 }
 

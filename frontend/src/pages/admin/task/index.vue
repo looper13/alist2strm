@@ -143,12 +143,12 @@ async function loadTasks() {
 async function handleCreate() {
   isEdit.value = false
   currentId.value = null
-  
+
   // 如果还没有加载 STRM 配置，先加载一次
   if (!strmConfig.value) {
     await loadStrmConfig()
   }
-  
+
   formModel.value = {
     name: '',
     mediaType: 'movie',
@@ -270,12 +270,10 @@ async function handleExecute(row: Api.Task.Record) {
   }
 }
 
-async function handleUpdateEnabled(item: Api.Task.Record) {
+async function handleUpdateToggled(id: number) {
   try {
-    await taskAPI.update(item.id, {
-      ...item,
-    })
-    message.success(item.enabled ? '任务已启用' : '任务已停用')
+    await taskAPI.toggleEnabled(id)
+    message.success('操作成功')
     loadTasks()
   }
   catch (error: any) {
@@ -525,7 +523,7 @@ onMounted(() => {
               @delete="handleDelete"
               @execute="handleExecute"
               @logs="handleViewLogs"
-              @update:enabled="handleUpdateEnabled"
+              @update:toggle="handleUpdateToggled"
               @reset="handleReset"
             />
           </template>

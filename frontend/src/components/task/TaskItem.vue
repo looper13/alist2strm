@@ -10,9 +10,10 @@ defineEmits<{
   (e: 'execute', task: Api.Task.Record): void
   (e: 'logs', task: Api.Task.Record): void
   (e: 'delete', task: Api.Task.Record): void
-  (e: 'update:enabled', task: Api.Task.Record): void
+  (e: 'update:toggle', id: number): void
   (e: 'reset', task: Api.Task.Record): void
 }>()
+
 const { isMobile } = useMobile()
 </script>
 
@@ -24,7 +25,7 @@ const { isMobile } = useMobile()
           <NSwitch
             :value="item.enabled"
             :loading="item.running"
-            @update:value="$emit('update:enabled', { ...item, enabled: !item.enabled })"
+            @update:value="$emit('update:toggle', item.id)"
           />
         </template>
         {{ item.enabled ? '已启用' : '已禁用' }}
