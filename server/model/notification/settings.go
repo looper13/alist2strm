@@ -71,18 +71,18 @@ func DefaultSettings() *Settings {
 					"corpId":     "",
 					"agentId":    "",
 					"corpSecret": "",
-					"toUser":     "@all",
+					"toUser":     "",
 				},
 			},
 		},
 		Templates: map[string]TemplateConfig{
 			string(TemplateTypeTaskComplete): {
-				Telegram: "✅ *任务完成通知*\n\n📂 任务：`{{.TaskName}}`\n⏱️ 耗时：{{.Duration}}秒\n📊 处理结果：\n - 总文件：{{.TotalFiles}}个\n - 已生成：{{.GeneratedFiles}}个\n - 已跳过：{{.SkippedFiles}}个\n - 元数据：{{.MetadataFiles}}个\n - 字幕：{{.SubtitleFiles}}个",
-				Wework:   "【任务完成通知】\n\n任务：{{.TaskName}}\n耗时：{{.Duration}}秒\n处理结果：\n- 总文件：{{.TotalFiles}}个\n- 已生成：{{.GeneratedFiles}}个\n- 已跳过：{{.SkippedFiles}}个\n- 元数据：{{.MetadataFiles}}个\n- 字幕：{{.SubtitleFiles}}个",
+				Telegram: "🎬 *任务完成通知* ✅\n\n📋 *基本信息*\n• *任务名称*: `{{.TaskName}}`\n• *完成时间*: {{.EventTime}}\n• *处理耗时*: {{.Duration}}秒\n\n📊 *处理统计*\n• *STRM文件*: 总计 {{.GeneratedFile}}+{{.SkipFile}}\n  - 已生成: {{.GeneratedFile}}\n  - 已跳过: {{.SkipFile}}\n• *元数据*: 总计 {{.MetadataCount}}\n  - 已下载: {{.MetadataDownloaded}}\n  - 已跳过: {{.MetadataSkipped}}\n• *字幕*: 总计 {{.SubtitleCount}}\n  - 已下载: {{.SubtitleDownloaded}}\n  - 已跳过: {{.SubtitleSkipped}}\n\n📁 *路径信息*\n• *源路径*: `{{.SourcePath}}`\n• *目标路径*: `{{.TargetPath}}`",
+				Wework:   "🎬 任务完成通知 ✅\n\n## 📋 任务概览\n**任务名称**：<font color=\"info\">`{{.TaskName}}`</font>\n**完成时间**：{{.EventTime}}\n**处理耗时**：<font color=\"info\">{{.Duration}}</font> 秒\n\n## 📊 处理统计\n**STRM文件** (总计 {{.GeneratedFile}}+{{.SkipFile}})\n> 已生成：<font color=\"info\">{{.GeneratedFile}}</font> | 已跳过：<font color=\"info\">{{.SkipFile}}</font>\n\n**元数据文件** (总计 {{.MetadataCount}})\n> 已下载：<font color=\"info\">{{.MetadataDownloaded}}</font> | 已跳过：<font color=\"info\">{{.MetadataSkipped}}</font>\n\n**字幕文件** (总计 {{.SubtitleCount}})\n> 已下载：<font color=\"info\">{{.SubtitleDownloaded}}</font> | 已跳过：<font color=\"info\">{{.SubtitleSkipped}}</font>\n\n## 📂 路径信息\n**源路径**：`{{.SourcePath}}`\n**目标路径**：`{{.TargetPath}}`",
 			},
 			string(TemplateTypeTaskFailed): {
-				Telegram: "❌ *任务失败通知*\n\n📂 任务：`{{.TaskName}}`\n⏱️ 耗时：{{.Duration}}秒\n❗ 错误信息：\n`{{.ErrorMessage}}`",
-				Wework:   "【任务失败通知】\n\n任务：{{.TaskName}}\n耗时：{{.Duration}}秒\n错误信息：\n{{.ErrorMessage}}",
+				Telegram: "❌ *任务失败通知*\n\n📂 任务：`{{.TaskName}}`\n⏰ 时间：{{.EventTime}}\n⏱️ 耗时：{{.Duration}}秒\n❗ 错误信息：\n`{{.ErrorMessage}}`",
+				Wework:   "❌ *任务失败通知*\n\n📂 任务：`{{.TaskName}}`\n⏰ 时间：{{.EventTime}}\n⏱️ 耗时：{{.Duration}}秒\n❗ 错误信息：\n`{{.ErrorMessage}}`",
 			},
 		},
 		QueueSettings: QueueSettings{

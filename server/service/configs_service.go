@@ -32,6 +32,8 @@ func (s *ConfigService) Create(req *configRequest.ConfigCreateReq) error {
 		Value: req.Value,
 	}
 
+	go GetConfigListenerService().Notify(req.Code)
+
 	return repository.Config.Create(newConfig)
 }
 
@@ -113,7 +115,7 @@ func (s *ConfigService) UpdateConfig(req *configRequest.ConfigUpdateReq) error {
 	if err != nil {
 		return err
 	}
-  go GetConfigListenerService().Notify(configCode)
+	go GetConfigListenerService().Notify(configCode)
 
 	return nil
 }

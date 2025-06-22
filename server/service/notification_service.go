@@ -23,8 +23,6 @@ type NotificationService struct {
 	queueProcessing bool
 	stopChan        chan struct{}
 	doneChan        chan struct{}
-	notifyChan      chan struct{} // 通知信号通道，用于事件驱动处理机制
-	retryTimer      *time.Timer   // 重试定时器
 }
 
 // OnConfigUpdate 实现配置更新监听器接口
@@ -179,9 +177,12 @@ func (s *NotificationService) Reload() error {
 		}
 	}()
 
-	// 如果之前是启动状态，在锁外重新启动处理器
+	// 如果之前是启动状态且通知仍然启用，在锁外重新启动处理器
 	if wasProcessing && settings.Enabled {
 		s.startQueueProcessor()
+
+		// 配置更新后立即检查是否有待处理的通知
+		go s.processQueue()
 	}
 
 	return nil
@@ -195,7 +196,7 @@ func (s *NotificationService) SendTaskNotification(taskInfo *task.Task, taskLogI
 		TaskName:   taskInfo.Name,
 		Status:     status,
 		Duration:   duration,
-		EventTime:  time.Now(),
+		EventTime:  time.Now().Format("2006-01-02 15:04:05"),
 		SourcePath: taskInfo.SourcePath,
 		TargetPath: taskInfo.TargetPath,
 	}
@@ -330,15 +331,12 @@ func (s *NotificationService) SendTaskNotification(taskInfo *task.Task, taskLogI
 		zap.String("templateType", string(templateType)),
 		zap.String("taskName", taskInfo.Name))
 
-	// 发送处理信号，触发即时处理（无需锁）
-	// 使用非阻塞发送确保不会因通道问题而阻塞整个通知流程
-	select {
-	case s.notifyChan <- struct{}{}:
-		// 信号发送成功
-	default:
-		// 通道已满，记录日志但不阻塞
-		s.logger.Warn("通知信号通道已满，将依靠定期检查机制处理")
-	}
+	// 如果当前有进行中的队列处理，触发立即处理新加入的通知
+	go func() {
+		// 短暂延迟，确保通知已写入数据库
+		time.Sleep(100 * time.Millisecond)
+		s.processQueue()
+	}()
 
 	return nil
 }
@@ -354,7 +352,6 @@ func (s *NotificationService) startQueueProcessor() {
 
 	s.stopChan = make(chan struct{})
 	s.doneChan = make(chan struct{})
-	s.notifyChan = make(chan struct{}, 100) // 通知信号通道，设置合理的缓冲区大小
 	s.queueProcessing = true
 	s.mu.Unlock()
 
@@ -363,11 +360,6 @@ func (s *NotificationService) startQueueProcessor() {
 			// 安全地修改队列处理状态
 			s.mu.Lock()
 			s.queueProcessing = false
-			// 关闭并清空通知通道
-			if s.retryTimer != nil {
-				s.retryTimer.Stop()
-				s.retryTimer = nil
-			}
 			s.mu.Unlock()
 
 			// 关闭完成通道
@@ -377,21 +369,16 @@ func (s *NotificationService) startQueueProcessor() {
 		// 启动时先处理一次队列，确保处理未完成的历史消息
 		s.processQueue()
 
-		// 低频率备份检查，以防有漏网之鱼
-		backupTicker := time.NewTicker(5 * time.Minute)
-		defer backupTicker.Stop()
+		// 创建定时检查队列的滴答器
+		// 每10秒定期检查队列，这个频率可以根据实际需求调整
+		queueTicker := time.NewTicker(10 * time.Second)
+		defer queueTicker.Stop()
 
 		for {
 			select {
-			case <-s.notifyChan:
-				// 收到通知信号，立即处理队列
+			case <-queueTicker.C:
+				// 定期处理队列，包括待发送和可重试的通知
 				s.processQueue()
-			case <-backupTicker.C:
-				// 定期检查是否有遗漏的消息
-				hasPending, _ := repository.Notification.HasPendingNotifications()
-				if hasPending {
-					s.processQueue()
-				}
 			case <-s.stopChan:
 				return
 			}
@@ -401,27 +388,15 @@ func (s *NotificationService) startQueueProcessor() {
 
 // stopQueueProcessor 停止队列处理器
 func (s *NotificationService) stopQueueProcessor() {
-	// 检查处理状态，并安全地获取停止通道
-	var shouldStop bool
-	var stopCh, doneCh chan struct{}
-
-	func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-
-		if !s.queueProcessing {
-			return
-		}
-
-		shouldStop = true
-		stopCh = s.stopChan
-		doneCh = s.doneChan
-	}()
-
-	// 如果没有正在运行的处理器，直接返回
-	if !shouldStop {
+	s.mu.Lock()
+	if !s.queueProcessing {
+		s.mu.Unlock()
 		return
 	}
+
+	stopCh := s.stopChan
+	doneCh := s.doneChan
+	s.mu.Unlock()
 
 	// 关闭停止通道，通知处理器退出
 	close(stopCh)
@@ -430,6 +405,7 @@ func (s *NotificationService) stopQueueProcessor() {
 	select {
 	case <-doneCh:
 		// 正常接收到关闭信号
+		s.logger.Info("通知队列处理器已正常停止")
 	case <-time.After(5 * time.Second):
 		s.logger.Warn("等待队列处理器停止超时")
 
@@ -442,16 +418,6 @@ func (s *NotificationService) stopQueueProcessor() {
 
 // processQueue 处理通知队列
 func (s *NotificationService) processQueue() {
-	// 在处理队列前，停止可能正在运行的重试定时器
-	func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		if s.retryTimer != nil {
-			s.retryTimer.Stop()
-			s.retryTimer = nil
-		}
-	}()
-
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -467,7 +433,7 @@ func (s *NotificationService) processQueue() {
 	maxRetries := s.settings.QueueSettings.MaxRetries
 	retryInterval := s.settings.QueueSettings.RetryInterval
 
-	// 获取待处理通知
+	// 获取待处理通知 (包括状态为pending或失败但重试时间已到的通知)
 	notifications, err := repository.Notification.GetPendingNotifications(concurrency)
 	if err != nil {
 		s.logger.Error("获取待处理通知失败", zap.Error(err))
@@ -475,12 +441,11 @@ func (s *NotificationService) processQueue() {
 	}
 
 	if len(notifications) == 0 {
-		// 没有待处理通知，但检查是否有需要稍后重试的消息
-		s.scheduleNextRetry()
+		s.logger.Debug("当前没有待处理的通知")
 		return
 	}
 
-	s.logger.Debug("开始处理通知队列", zap.Int("数量", len(notifications)))
+	s.logger.Info("开始处理通知队列", zap.Int("数量", len(notifications)))
 
 	for _, notif := range notifications {
 		// 更新状态为处理中
@@ -521,14 +486,29 @@ func (s *NotificationService) processQueue() {
 
 			// 检查是否应该重试
 			if notif.RetryCount < maxRetries {
+				// 设置下次重试时间
 				nextRetry := time.Now().Add(time.Duration(retryInterval) * time.Second)
-				repository.Notification.UpdateNotificationForRetry(notif.ID, notif.RetryCount+1, nextRetry, errMsg)
-				s.logger.Info("通知将在稍后重试",
-					zap.Uint("id", notif.ID),
-					zap.Int("retryCount", notif.RetryCount+1),
-					zap.Time("nextRetryTime", nextRetry))
+
+				// 使用新的重新入队方法，将状态设为pending，这样会在未来被自动重新处理
+				err = repository.Notification.RequeueNotification(notif.ID, notif.RetryCount+1, nextRetry, errMsg)
+				if err != nil {
+					s.logger.Error("重新入队通知失败",
+						zap.Error(err),
+						zap.Uint("id", notif.ID))
+				} else {
+					s.logger.Info("通知将在稍后重试",
+						zap.Uint("id", notif.ID),
+						zap.Int("retryCount", notif.RetryCount+1),
+						zap.Time("nextRetryTime", nextRetry))
+				}
 			} else {
-				repository.Notification.UpdateNotificationStatus(notif.ID, notification.StatusFailed, errMsg)
+				// 达到最大重试次数，标记为最终失败
+				err = repository.Notification.UpdateNotificationStatus(notif.ID, notification.StatusFailed, errMsg)
+				if err != nil {
+					s.logger.Error("更新通知状态失败",
+						zap.Error(err),
+						zap.Uint("id", notif.ID))
+				}
 				s.logger.Warn("通知达到最大重试次数，已标记为失败", zap.Uint("id", notif.ID))
 			}
 			continue
@@ -549,59 +529,14 @@ func (s *NotificationService) processQueue() {
 	// 处理完一批后，检查是否有下一批待处理的消息
 	hasPending, err := repository.Notification.HasPendingNotifications()
 	if err == nil && hasPending {
-		// 如果还有消息，立即发送信号，继续处理
-		select {
-		case s.notifyChan <- struct{}{}:
-			// 信号发送成功
-		default:
-			// 通道已满，记录日志但不阻塞
-			s.logger.Warn("通知信号通道已满，无法触发下一批处理")
-		}
-	} else {
-		// 没有待处理消息，检查是否有需要稍后重试的消息
-		s.scheduleNextRetry()
+		// 如果还有消息，立即在后台再次处理
+		go func() {
+			time.Sleep(1 * time.Second) // 短暂延迟，避免过于频繁的处理
+			s.processQueue()
+		}()
 	}
 }
 
-// scheduleNextRetry 安排下一次重试
-func (s *NotificationService) scheduleNextRetry() {
-	nextRetryTime, hasRetry := repository.Notification.GetEarliestRetryTime()
-	if !hasRetry {
-		return
-	}
-
-	// 计算需要等待的时间
-	waitDuration := time.Until(nextRetryTime)
-	if waitDuration < 0 {
-		// 如果已经到了或过了重试时间，立即触发
-		waitDuration = 0
-	}
-
-	// 锁保护定时器创建
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// 如果已经存在定时器，先停止它
-	if s.retryTimer != nil {
-		s.retryTimer.Stop()
-	}
-
-	// 创建新的定时器
-	s.retryTimer = time.AfterFunc(waitDuration, func() {
-		select {
-		case s.notifyChan <- struct{}{}:
-			// 信号发送成功
-		default:
-			// 通道已满，记录日志但不阻塞
-			s.logger.Warn("通知信号通道已满，将在下一轮检查中重试")
-		}
-	})
-
-	if waitDuration > 0 {
-		s.logger.Debug("安排下一次消息重试",
-			zap.Time("重试时间", nextRetryTime),
-			zap.Duration("等待时间", waitDuration))
-	} else {
-		s.logger.Debug("即将触发消息重试")
-	}
-}
+// 不需要单独的scheduleNextRetry函数，因为调度由processQueue直接处理
+// 当通知处理失败时，它会被重新加入队列并设置下次处理时间
+// 定期轮询processQueue会自动处理所有等待中和需要重试的通知

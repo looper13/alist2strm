@@ -70,8 +70,8 @@ export const defaultConfigs = {
         wework: '# 🎬 任务完成通知 ✅\n\n## 📋 任务概览\n**任务名称**：<font color="info">`{{.TaskName}}`</font>\n**完成时间**：{{.EventTime}}\n**处理耗时**：<font color="info">{{.Duration}}</font> 秒\n\n## 📊 处理统计\n**STRM文件** (总计 {{.GeneratedFile}}+{{.SkipFile}})\n> 已生成：<font color="info">{{.GeneratedFile}}</font> | 已跳过：<font color="info">{{.SkipFile}}</font>\n\n**元数据文件** (总计 {{.MetadataCount}})\n> 已下载：<font color="info">{{.MetadataDownloaded}}</font> | 已跳过：<font color="info">{{.MetadataSkipped}}</font>\n\n**字幕文件** (总计 {{.SubtitleCount}})\n> 已下载：<font color="info">{{.SubtitleDownloaded}}</font> | 已跳过：<font color="info">{{.SubtitleSkipped}}</font>\n\n## 📂 路径信息\n**源路径**：`{{.SourcePath}}`\n**目标路径**：`{{.TargetPath}}`',
       },
       taskFailed: {
-        telegram: '❌ *任务失败通知*\n\n📂 任务：`{{.TaskName}}`\n⏱️ 耗时：{{.Duration}}秒\n❗ 错误信息：\n`{{.ErrorMessage}}`',
-        wework: '【任务失败通知】\n\n任务：{{.TaskName}}\n耗时：{{.Duration}}秒\n错误信息：\n{{.ErrorMessage}}',
+        telegram: '❌ *任务失败通知*\n\n📂 任务：`{{.TaskName}}`\n⏰ 时间：{{.EventTime}}\n⏱️ 耗时：{{.Duration}}秒\n❗ 错误信息：\n`{{.ErrorMessage}}`',
+        wework: '❌ *任务失败通知*\n\n📂 任务：`{{.TaskName}}`\n⏰ 时间：{{.EventTime}}\n⏱️ 耗时：{{.Duration}}秒\n❗ 错误信息：\n`{{.ErrorMessage}}`',
       },
     },
     queueSettings: {

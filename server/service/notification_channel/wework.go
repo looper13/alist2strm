@@ -112,7 +112,11 @@ func (c *WeworkChannel) getTemplateContent(templateType notification.TemplateTyp
 
 // renderTemplate 渲染模板
 func (c *WeworkChannel) renderTemplate(templateContent string, data interface{}) (string, error) {
-	tmpl, err := template.New("wework").Parse(templateContent)
+	// 创建模板
+	tmpl := template.New("wework")
+
+	// 解析模板内容
+	tmpl, err := tmpl.Parse(templateContent)
 	if err != nil {
 		return "", err
 	}

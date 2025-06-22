@@ -52,7 +52,7 @@ func ensureLogDirs(baseDir, appName string) error {
 
 // createSugaredLogger 创建糖化日志记录器
 func createSugaredLogger(cfg *config.AppConfig, level string) *zap.SugaredLogger {
-	logPath := filepath.Join(cfg.Log.BaseDir, cfg.Log.AppName, level, level+".log")
+	logPath := filepath.Join(cfg.Log.BaseDir, cfg.Log.AppName, level+".log")
 
 	w := &lumberjack.Logger{
 		Filename:   logPath,

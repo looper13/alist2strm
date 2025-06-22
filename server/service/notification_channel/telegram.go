@@ -76,7 +76,7 @@ func NewTelegramChannel(logger *zap.Logger, settings *notification.Settings) Cha
 // Send 发送通知
 func (c *TelegramChannel) Send(templateType notification.TemplateType, data interface{}) error {
 	if !c.enabled {
-		return fmt.Errorf("Telegram 通知渠道未启用")
+		return fmt.Errorf("telegram 通知渠道未启用")
 	}
 
 	// 获取模板
@@ -106,7 +106,11 @@ func (c *TelegramChannel) getTemplateContent(templateType notification.TemplateT
 
 // renderTemplate 渲染模板
 func (c *TelegramChannel) renderTemplate(templateContent string, data interface{}) (string, error) {
-	tmpl, err := template.New("telegram").Parse(templateContent)
+	// 创建模板
+	tmpl := template.New("telegram")
+
+	// 解析模板内容
+	tmpl, err := tmpl.Parse(templateContent)
 	if err != nil {
 		return "", err
 	}
@@ -148,9 +152,9 @@ func (c *TelegramChannel) sendMessage(message string) error {
 			Description string `json:"description"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&errorResp); err == nil {
-			return fmt.Errorf("Telegram API错误 (HTTP %d): %s", resp.StatusCode, errorResp.Description)
+			return fmt.Errorf("telegram API错误 (HTTP %d): %s", resp.StatusCode, errorResp.Description)
 		}
-		return fmt.Errorf("Telegram API错误 (HTTP %d)", resp.StatusCode)
+		return fmt.Errorf("telegram API错误 (HTTP %d)", resp.StatusCode)
 	}
 
 	return nil
