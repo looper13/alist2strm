@@ -591,7 +591,7 @@ onMounted(() => {
         </NFormItem>
 
         <NFormItem label="cron表达式" path="cron">
-          <NInput v-model:value="formModel.cron" placeholder="*/5 * * * *">
+          <NInput v-model:value="formModel.cron" placeholder="例如：*/5 * * * * （每5分钟一次）">
             <template #prefix>
               <div class="i-carbon-time" />
             </template>
@@ -636,7 +636,7 @@ onMounted(() => {
           >
             <NInput
               v-model:value="formModel.metadataExtensions"
-              placeholder=".nfo,.jpg,.png"
+              placeholder="nfo,jpg,png"
             >
               <template #prefix>
                 <div class="i-ri:information-line" />
@@ -651,7 +651,7 @@ onMounted(() => {
           >
             <NInput
               v-model:value="formModel.subtitleExtensions"
-              placeholder=".srt,.ass,.ssa"
+              placeholder="srt,ass,ssa"
             >
               <template #prefix>
                 <div class="i-ri:subtitle-line" />
