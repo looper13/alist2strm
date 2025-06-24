@@ -356,6 +356,17 @@ func (s *StrmGeneratorService) GenerateStrmFiles(taskID uint) error {
 		s.logger.Error("发送任务通知失败", zap.Error(notifyErr))
 	}
 
+	// 如果任务成功完成，则刷新 Emby 媒体库
+	if status == tasklog.TaskLogStatusCompleted && (generatedFiles > 0 || metadataDownloaded > 0 || subtitleDownloaded > 0) {
+		s.logger.Info("开始刷新 Emby 媒体库", zap.String("taskName", taskInfo.Name))
+		if refreshErr := Emby.RefreshAllLibraries(); refreshErr != nil {
+			s.logger.Error("刷新 Emby 媒体库失败", zap.Error(refreshErr))
+			// 仅记录错误，不影响任务状态
+		} else {
+			s.logger.Info("刷新 Emby 媒体库请求成功", zap.String("taskName", taskInfo.Name))
+		}
+	}
+
 	return err
 }
 
