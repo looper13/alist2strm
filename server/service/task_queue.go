@@ -42,13 +42,30 @@ func GetTaskQueue() *TaskQueue {
 // StartTaskQueue 启动任务队列执行器
 func StartTaskQueue() {
 	tq := GetTaskQueue()
+
+	// 确保执行器状态正确
+	tq.mutex.Lock()
+	tq.running = false
+	tq.mutex.Unlock()
+
 	// 启动任务执行器
 	go tq.executor()
+
 	utils.Info("任务队列执行器已启动")
+
+	// 启动一个后台检查，确保执行器正在运行
+	go func() {
+		time.Sleep(3 * time.Second)
+		utils.Info("任务队列执行器状态检查",
+			"running", tq.IsExecutorRunning(),
+			"queue_length", tq.GetQueueLength())
+	}()
 }
 
 // AddTask 添加任务到队列
 func (tq *TaskQueue) AddTask(taskID uint) {
+	utils.Info("正在尝试添加任务到队列", "task_id", taskID)
+
 	tq.mutex.Lock()
 	defer tq.mutex.Unlock()
 
@@ -60,35 +77,54 @@ func (tq *TaskQueue) AddTask(taskID uint) {
 		}
 	}
 
+	// 检查执行器状态
+	executorRunning := tq.running
+	queueLen := len(tq.queue)
+
 	// 添加到队列
 	tq.queue = append(tq.queue, taskID)
-	utils.Info("任务已添加到队列", "task_id", taskID, "queue_length", len(tq.queue))
+	utils.Info("任务已添加到队列", "task_id", taskID, "queue_length", len(tq.queue), "executor_running", executorRunning)
 
 	// 通知执行器有新任务
+	utils.Info("发送信号通知执行器处理新任务", "task_id", taskID, "queue_before", queueLen, "queue_after", len(tq.queue))
 	tq.cond.Signal()
 }
 
 // executor 任务执行器
 func (tq *TaskQueue) executor() {
+	utils.Info("任务执行器已启动，等待任务...")
+
 	for {
 		var taskID uint
 		var hasTask bool
 
 		// 获取任务
 		tq.mutex.Lock()
+		queueLen := len(tq.queue)
+
+		utils.Info("执行器检查队列", "queue_length", queueLen, "running_state", tq.running)
+
 		// 等待队列中有任务
-		for len(tq.queue) == 0 {
+		if queueLen == 0 {
+			utils.Info("队列为空，执行器进入等待状态")
+
 			// 使用条件变量等待任务或关闭信号
+			waitStart := time.Now()
+
 			// 创建一个通道，用于监听关闭信号
 			shutdownCh := tq.shutdown
 
 			// 在条件变量等待期间已经持有锁，Wait会释放锁并在返回前重新获取锁
 			tq.cond.Wait()
 
+			waitDuration := time.Since(waitStart)
+			utils.Info("执行器收到信号，退出等待状态", "wait_duration", waitDuration.String(), "queue_length", len(tq.queue))
+
 			// 检查是否收到关闭信号 (需要在重新获取锁之后检查，避免竞争)
 			select {
 			case <-shutdownCh:
 				// 收到关闭信号，释放锁并退出
+				utils.Info("执行器收到关闭信号，退出执行")
 				tq.mutex.Unlock()
 				return
 			default:
@@ -111,7 +147,7 @@ func (tq *TaskQueue) executor() {
 			go func(id uint) {
 				// 执行任务（不在锁内执行，避免阻塞其他操作）
 				utils.Info("开始执行任务", "task_id", id)
-                
+
 				// 记录开始时间
 				startTime := time.Now()
 
@@ -121,17 +157,17 @@ func (tq *TaskQueue) executor() {
 				// 计算持续时间（秒）
 				endTime := time.Now()
 				durationSeconds := int64(endTime.Sub(startTime).Seconds())
-                
+
 				// 获取最新的任务日志，更新持续时间
 				taskLogs, total, logErr := repository.TaskLog.GetLatestByTaskID(id, 1)
 				if logErr == nil && total > 0 && len(taskLogs) > 0 {
 					latestLog := taskLogs[0]
-					
+
 					// 更新持续时间
 					updateData := map[string]interface{}{
 						"duration": durationSeconds,
 					}
-					
+
 					if updateErr := repository.TaskLog.UpdatePartial(latestLog.ID, updateData); updateErr != nil {
 						utils.Error("更新任务日志持续时间失败", "task_id", id, "log_id", latestLog.ID, "error", updateErr.Error())
 					} else {
