@@ -40,21 +40,21 @@ func InitLogger(cfg *config.AppConfig) error {
 
 // ensureLogDirs 确保日志目录存在
 func ensureLogDirs(baseDir, appName string) error {
-	dirs := []string{"info", "error", "debug", "warn", "access"}
-	for _, dir := range dirs {
-		logDir := filepath.Join(baseDir, appName, dir)
-		if err := os.MkdirAll(logDir, 0755); err != nil {
-			return err
-		}
+	// 创建主日志目录，不再创建级别子目录
+	logDir := filepath.Join(baseDir, appName)
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return err
 	}
 	return nil
 }
 
 // createSugaredLogger 创建糖化日志记录器
 func createSugaredLogger(cfg *config.AppConfig, level string) *zap.SugaredLogger {
+	// 不再使用子目录，直接放在主目录下
 	logPath := filepath.Join(cfg.Log.BaseDir, cfg.Log.AppName, level+".log")
 
-	w := &lumberjack.Logger{
+	// 文件输出
+	fileWriter := &lumberjack.Logger{
 		Filename:   logPath,
 		MaxSize:    cfg.Log.MaxFileSize, // MB
 		MaxBackups: cfg.Log.MaxBackups,
@@ -65,7 +65,24 @@ func createSugaredLogger(cfg *config.AppConfig, level string) *zap.SugaredLogger
 	// 使用自定义编码器，混合字符串和JSON格式
 	encoder := &customEncoder{appName: cfg.Log.AppName}
 
-	core := zapcore.NewCore(encoder, zapcore.AddSync(w), getLogLevel(level))
+	// 创建多路输出 - 同时写入文件和控制台
+	consoleOut := zapcore.Lock(os.Stdout)
+	fileOut := zapcore.AddSync(fileWriter)
+
+	// 根据不同级别决定是输出到标准输出还是标准错误
+	var consoleWriter zapcore.WriteSyncer
+	if level == "error" {
+		consoleWriter = zapcore.Lock(os.Stderr)
+	} else {
+		consoleWriter = consoleOut
+	}
+
+	// 多路输出核心
+	core := zapcore.NewTee(
+		zapcore.NewCore(encoder, fileOut, getLogLevel(level)),
+		zapcore.NewCore(encoder, consoleWriter, getLogLevel(level)),
+	)
+
 	logger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1), zap.AddStacktrace(zapcore.ErrorLevel))
 
 	return logger.Sugar()
