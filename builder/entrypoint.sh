@@ -12,12 +12,12 @@ mkdir -p /app/data/logs/nginx
 mkdir -p /app/data/db
 
 # 修改用户和组ID
-groupmod -o -g ${PGID} node
-usermod -o -u ${PUID} node
+groupmod -o -g ${PGID} nobody || true
+usermod -o -u ${PUID} nobody || true
 
 # 设置目录权限
-chown -R node:node /app/data
-chown -R node:node /app/server
+chown -R nobody:nobody /app/data
+chown -R nobody:nobody /app/server
 chmod -R 755 /app/data
 
 # 设置 umask
@@ -26,5 +26,5 @@ umask ${UMASK:-022}
 # 启动 Nginx
 nginx
 
-# 使用 node 用户启动后端服务
-exec su-exec node sh -c "cd /app/server && node dist/index.js"
+# 使用 nobody 用户启动后端服务
+exec su-exec nobody /app/server/alist2strm
