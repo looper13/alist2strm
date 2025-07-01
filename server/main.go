@@ -30,6 +30,13 @@ func main() {
 		log.Fatalf("初始化默认用户失败: %v", err)
 	}
 
+	// 初始化默认STRM配置（如果没有配置的话）
+	if err := service.Config.InitializeDefaultConfig(); err != nil {
+		utils.Error("初始化默认STRM配置失败", "error", err.Error())
+		log.Fatalf("初始化默认STRM配置失败: %v", err)
+	}
+	utils.Info("默认STRM配置初始化完成")
+
 	// 初始化服务
 	// 初始化 AList 服务
 	logger := utils.InfoLogger.Desugar()
@@ -47,7 +54,7 @@ func main() {
 	// 初始化任务队列
 	service.GetTaskQueue()
 	utils.Info("任务队列初始化完成")
-	
+
 	// 初始化通知服务
 	notificationService := service.GetNotificationService()
 	if err := notificationService.Initialize(); err != nil {

@@ -156,3 +156,26 @@ func (s *ConfigService) GetConfigList(req *configRequest.ConfigListReq) ([]confi
 
 	return configInfos, nil
 }
+
+// InitializeDefaultStrmConfig 初始化默认STRM配置
+func (s *ConfigService) InitializeDefaultConfig() error {
+	// 检查STRM配置是否已存在
+	exists, err := repository.Config.CheckCodeExists("STRM")
+	if err != nil {
+		return err
+	}
+
+	// 如果已存在，不需要创建
+	if exists {
+		return nil
+	}
+
+	// 创建默认STRM配置
+	defaultStrmConfig := &configs.Config{
+		Name:  "STRM配置",
+		Code:  "STRM",
+		Value: `{"defaultSuffix":"mp4,mkv,avi,mov,rmvb,webm,flv,m3u8","replaceSuffix":true,"urlEncode":true}`,
+	}
+
+	return repository.Config.Create(defaultStrmConfig)
+}
