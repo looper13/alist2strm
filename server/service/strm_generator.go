@@ -373,8 +373,16 @@ func (s *StrmGeneratorService) GenerateStrmFiles(taskID uint) error {
 // loadStrmConfig 加载 STRM 配置
 func (s *StrmGeneratorService) loadStrmConfig() (*StrmConfig, error) {
 	config, err := repository.Config.GetByCode("STRM")
-	if err != nil {
-		return nil, fmt.Errorf("获取 STRM 配置失败: %w", err)
+	if err != nil || config == nil {
+		var errorMessage string
+		if err != nil {
+			s.logger.Error("获取 STRM 配置失败", zap.Error(err))
+			errorMessage = fmt.Sprintf("获取 STRM 配置失败: %v", err)
+		} else {
+			s.logger.Error("STRM 配置未找到")
+			errorMessage = "STRM 配置未找到"
+		}
+		return nil, fmt.Errorf("获取 STRM 配置失败: %s", errorMessage)
 	}
 
 	var strmConfig StrmConfig
