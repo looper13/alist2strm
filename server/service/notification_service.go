@@ -541,18 +541,23 @@ func (s *NotificationService) processNotification(notif *notification.Queue) {
 
 		// 检查是否应该重试
 		if notif.RetryCount < maxRetries {
-			// 增加重试次数
-			notif.RetryCount++
+			// 计算新的重试次数和下次重试时间
+			newRetryCount := notif.RetryCount + 1
 			nextRetry := time.Now().Add(time.Duration(retryInterval) * time.Second)
 
-			// 更新数据库状态为pending，设置下次重试时间
+			// 先更新数据库状态为pending，设置下次重试时间和重试次数
 			if notif.ID > 0 {
-				err = repository.Notification.RequeueNotification(notif.ID, notif.RetryCount, nextRetry, errMsg)
+				err = repository.Notification.RequeueNotification(notif.ID, newRetryCount, nextRetry, errMsg)
 				if err != nil {
 					s.logger.Error("重新入队通知失败", zap.Error(err), zap.Uint("id", notif.ID))
 					return
 				}
 			}
+
+			// 更新内存中的重试次数（与数据库保持一致）
+			notif.RetryCount = newRetryCount
+			notif.Status = notification.StatusPending
+			notif.UpdatedAt = time.Now()
 
 			// 延迟后重新入内存队列
 			go func(retryNotif *notification.Queue, delay time.Duration) {
@@ -564,12 +569,13 @@ func (s *NotificationService) processNotification(notif *notification.Queue) {
 						zap.Int("retryCount", retryNotif.RetryCount))
 				default:
 					s.logger.Warn("内存队列已满，无法重新入队通知", zap.Uint("id", retryNotif.ID))
+					// 如果内存队列满了，通知仍在数据库中保持pending状态，下次服务重启时会重新加载
 				}
 			}(notif, time.Duration(retryInterval)*time.Second)
 
 			s.logger.Info("通知将在稍后重试",
 				zap.Uint("id", notif.ID),
-				zap.Int("retryCount", notif.RetryCount),
+				zap.Int("retryCount", newRetryCount),
 				zap.Time("nextRetryTime", nextRetry))
 		} else {
 			// 达到最大重试次数，标记为最终失败
@@ -586,7 +592,11 @@ func (s *NotificationService) processNotification(notif *notification.Queue) {
 
 	// 发送成功，更新为已发送状态
 	if notif.ID > 0 {
-		repository.Notification.UpdateNotificationStatus(notif.ID, notification.StatusSent, "")
+		err := repository.Notification.UpdateNotificationStatus(notif.ID, notification.StatusSent, "")
+		if err != nil {
+			s.logger.Error("更新通知发送成功状态失败", zap.Error(err), zap.Uint("id", notif.ID))
+			// 虽然发送成功了，但数据库更新失败，记录警告但不影响主流程
+		}
 	}
 	s.logger.Info("通知已成功发送",
 		zap.Uint("id", notif.ID),
