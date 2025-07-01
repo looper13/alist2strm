@@ -1,13 +1,13 @@
 services:
   alist2strm:
-    image: mccray/alist2strm:latest
+    image: mccray/alist2strm-go:1.0.0
     container_name: alist2strm
     restart: unless-stopped
     ports:
       - "3456:80"   # 前端访问端口
       - "4567:3000" # 后端API端口
     volumes:
-      - ./data:/app/data
+      - ./docker:/app/data
     environment:
       - 'PUID=1000'
       - 'PGID=100'

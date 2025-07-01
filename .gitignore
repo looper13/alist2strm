@@ -8,6 +8,7 @@ node_modules
 dist
 dist-ssr
 *.local
+__debug_bin*
 
 # Logs
 logs
@@ -37,3 +38,5 @@ pnpm-debug.log*
 .env.local
 .env.development
 .env.production
+
+*.prompt.md
