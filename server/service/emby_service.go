@@ -133,17 +133,17 @@ func (s *EmbyService) getEmbyConfig() (*configs.EmbyConfig, error) {
 	}
 
 	if config == nil || config.Value == "" {
-		return nil, errors.New("Emby 配置不存在或为空")
+		return nil, errors.New("emby 配置不存在或为空")
 	}
 
 	var embyConfig configs.EmbyConfig
 	if err := json.Unmarshal([]byte(config.Value), &embyConfig); err != nil {
-		return nil, fmt.Errorf("解析 Emby 配置失败: %w", err)
+		return nil, fmt.Errorf("解析 emby 配置失败: %w", err)
 	}
 
 	// 验证配置
 	if embyConfig.EmbyServer == "" || embyConfig.EmbyToken == "" {
-		return nil, errors.New("Emby 服务器地址或 API 密钥未配置")
+		return nil, errors.New("emby 服务器地址或 API 密钥未配置")
 	}
 
 	// 确保服务器地址没有尾部斜杠

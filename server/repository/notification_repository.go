@@ -100,6 +100,24 @@ func (r *NotificationRepository) AddToQueue(channelType string, templateType str
 	return database.DB.Create(queue).Error
 }
 
+// AddToQueueWithID 添加通知到队列并返回ID
+func (r *NotificationRepository) AddToQueueWithID(channelType string, templateType string, payload string) (uint, error) {
+	queue := &notification.Queue{
+		ChannelType:  channelType,
+		TemplateType: templateType,
+		Status:       notification.StatusPending,
+		Payload:      payload,
+		RetryCount:   0,
+	}
+
+	err := database.DB.Create(queue).Error
+	if err != nil {
+		return 0, err
+	}
+
+	return queue.ID, nil
+}
+
 // GetPendingNotifications 获取待处理通知
 func (r *NotificationRepository) GetPendingNotifications(limit int) ([]*notification.Queue, error) {
 	var notifications []*notification.Queue

@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	configRequest "github.com/MccRay-s/alist2strm/model/configs/request"
 	"github.com/MccRay-s/alist2strm/model/notification"
 	"github.com/MccRay-s/alist2strm/model/task"
 	"github.com/MccRay-s/alist2strm/repository"
@@ -16,13 +17,15 @@ import (
 
 // NotificationService 通知服务
 type NotificationService struct {
-	logger          *zap.Logger
-	mu              sync.RWMutex
-	settings        *notification.Settings
-	channels        map[notification.NotificationChannelType]notification_channel.Channel
+	logger   *zap.Logger
+	mu       sync.RWMutex
+	settings *notification.Settings
+	channels map[notification.NotificationChannelType]notification_channel.Channel
+	// 内存队列相关
+	memoryQueue     chan *notification.Queue
 	queueProcessing bool
 	stopChan        chan struct{}
-	doneChan        chan struct{}
+	cleanupStopChan chan struct{}
 }
 
 // OnConfigUpdate 实现配置更新监听器接口
@@ -56,54 +59,49 @@ func GetNotificationService() *NotificationService {
 func (s *NotificationService) Initialize() error {
 	s.logger.Info("初始化通知服务")
 
-	// 加载设置
-	settings, err := repository.Notification.GetSettings()
+	// 1.1 实例化通知服务 (已完成)
+	s.mu.Lock()
+	// 初始化内存队列，设置合理的缓冲区大小
+	s.memoryQueue = make(chan *notification.Queue, 1000)
+	s.mu.Unlock()
+
+	// 1.2 加载 NOTIFICATION_SETTINGS 配置
+	settings, err := s.loadNotificationSettings()
 	if err != nil {
 		s.logger.Error("加载通知设置失败", zap.Error(err))
-		return err
+		// 配置加载失败，但不影响服务初始化
+		s.logger.Info("通知服务初始化完成（配置加载失败）")
+		// 注册配置更新监听器，等待配置修复
+		GetConfigListenerService().Register("NOTIFICATION_SETTINGS", s)
+		return nil
 	}
 
-	// 使用原子操作更新设置
 	s.mu.Lock()
 	s.settings = settings
 	s.mu.Unlock()
 
-	// 如果通知功能被禁用，则不初始化渠道
-	if !settings.Enabled {
-		s.logger.Info("通知功能已禁用")
+	// 如果配置不存在，或通知未开启，亦或没有通知渠道，则不处理配置信息，完成初始化
+	if !s.shouldStartNotificationProcessing(settings) {
+		s.logger.Info("通知服务初始化完成（通知功能未启用或无可用渠道）")
+		// 注册配置更新监听器，等待配置变更
+		GetConfigListenerService().Register("NOTIFICATION_SETTINGS", s)
 		return nil
 	}
 
-	// 创建通道实例（在加锁外）
-	channels := make(map[notification.NotificationChannelType]notification_channel.Channel)
-
-	// 初始化 Telegram 渠道
-	telegramChannel := notification_channel.NewTelegramChannel(s.logger, settings)
-	if telegramChannel.IsEnabled() {
-		channels[telegramChannel.GetType()] = telegramChannel
-		s.logger.Info("Telegram 通知渠道已启用")
+	// 1.3 开启通知，且有通知渠道，则加载配置信息
+	if err := s.initializeNotificationFeatures(settings); err != nil {
+		s.logger.Error("初始化通知功能失败", zap.Error(err))
+		// 功能初始化失败，但服务本身初始化成功
+		s.logger.Info("通知服务初始化完成（功能初始化失败）")
+		// 注册配置更新监听器
+		GetConfigListenerService().Register("NOTIFICATION_SETTINGS", s)
+		return nil
 	}
-
-	// 初始化企业微信渠道
-	weworkChannel := notification_channel.NewWeworkChannel(s.logger, settings)
-	if weworkChannel.IsEnabled() {
-		channels[weworkChannel.GetType()] = weworkChannel
-		s.logger.Info("企业微信通知渠道已启用")
-	}
-
-	// 原子更新通道
-	s.mu.Lock()
-	s.channels = channels
-	s.mu.Unlock()
-
-	s.logger.Info("通知渠道初始化完成", zap.Int("总渠道数", len(channels)))
-
-	// 启动队列处理
-	s.startQueueProcessor()
 
 	// 注册配置更新监听器
 	GetConfigListenerService().Register("NOTIFICATION_SETTINGS", s)
 
+	s.logger.Info("通知服务初始化完成（所有功能已启用）")
 	return nil
 }
 
@@ -111,78 +109,64 @@ func (s *NotificationService) Initialize() error {
 func (s *NotificationService) Reload() error {
 	s.logger.Info("重新加载通知设置")
 
-	// 提前加载设置，避免在持有锁时进行IO操作
-	settings, err := repository.Notification.GetSettings()
+	// 1.2 加载 NOTIFICATION_SETTINGS 配置
+	settings, err := s.loadNotificationSettings()
 	if err != nil {
 		s.logger.Error("加载通知设置失败", zap.Error(err))
+		// 配置加载失败，停止现有功能
+		s.stopNotificationFeatures()
 		return err
 	}
 
-	// 标记队列处理状态
-	var wasProcessing bool
+	// 检查当前处理状态
+	s.mu.RLock()
+	wasProcessing := s.queueProcessing
+	s.mu.RUnlock()
 
-	// 在停止队列处理器前获取状态但不持有完整锁
-	func() {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
-		wasProcessing = s.queueProcessing
-	}()
+	// 判断并执行后续逻辑
+	shouldStart := s.shouldStartNotificationProcessing(settings)
 
-	// 停止现有队列处理器前不持有锁，以避免死锁
-	if wasProcessing {
-		s.stopQueueProcessor()
-	}
-
-	// 为了减少锁持有时间，将所有可能的准备工作放在获取锁之前
-	var newChannels map[notification.NotificationChannelType]notification_channel.Channel
-	if settings.Enabled {
-		// 预先创建新的通道实例（无需锁）
-		newChannels = make(map[notification.NotificationChannelType]notification_channel.Channel)
-
-		// 初始化 Telegram 渠道
-		telegramChannel := notification_channel.NewTelegramChannel(s.logger, settings)
-		if telegramChannel.IsEnabled() {
-			newChannels[telegramChannel.GetType()] = telegramChannel
-		}
-
-		// 初始化企业微信渠道
-		weworkChannel := notification_channel.NewWeworkChannel(s.logger, settings)
-		if weworkChannel.IsEnabled() {
-			newChannels[weworkChannel.GetType()] = weworkChannel
-		}
-	}
-
-	// 使用最短时间持有写锁更新设置和通道
-	func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+	if wasProcessing && !shouldStart {
+		// 之前在运行，现在需要停止
+		s.logger.Info("配置变更，停止通知功能")
+		s.stopNotificationFeatures()
+	} else if !wasProcessing && shouldStart {
+		// 之前未运行，现在需要启动
+		s.logger.Info("配置变更，启动通知功能")
 
 		// 更新设置
+		s.mu.Lock()
 		s.settings = settings
+		s.mu.Unlock()
 
-		// 如果通知功能被禁用，清空通道
-		if !settings.Enabled {
-			s.channels = make(map[notification.NotificationChannelType]notification_channel.Channel)
-			s.logger.Info("通知功能已禁用")
-			return
+		// 初始化通知功能
+		if err := s.initializeNotificationFeatures(settings); err != nil {
+			s.logger.Error("启动通知功能失败", zap.Error(err))
+			return err
 		}
+	} else if wasProcessing && shouldStart {
+		// 之前在运行，现在需要重启（配置可能有变更）
+		s.logger.Info("配置变更，重启通知功能")
 
-		// 更新通道
-		s.channels = newChannels
-		s.logger.Info("通知渠道初始化完成", zap.Int("总渠道数", len(s.channels)))
+		// 停止现有功能
+		s.stopNotificationFeatures()
 
-		// 在锁内重置处理状态
-		if wasProcessing {
-			s.queueProcessing = false
+		// 更新设置
+		s.mu.Lock()
+		s.settings = settings
+		s.mu.Unlock()
+
+		// 重新启动功能
+		if err := s.initializeNotificationFeatures(settings); err != nil {
+			s.logger.Error("重启通知功能失败", zap.Error(err))
+			return err
 		}
-	}()
-
-	// 如果之前是启动状态且通知仍然启用，在锁外重新启动处理器
-	if wasProcessing && settings.Enabled {
-		s.startQueueProcessor()
-
-		// 配置更新后立即检查是否有待处理的通知
-		go s.processQueue()
+	} else {
+		// 都不运行，只更新设置
+		s.mu.Lock()
+		s.settings = settings
+		s.mu.Unlock()
+		s.logger.Info("配置已更新，通知功能保持禁用状态")
 	}
 
 	return nil
@@ -190,7 +174,21 @@ func (s *NotificationService) Reload() error {
 
 // SendTaskNotification 发送任务通知
 func (s *NotificationService) SendTaskNotification(taskInfo *task.Task, taskLogID uint, status string, duration int64, stats map[string]interface{}) error {
-	// 准备通知数据（无需锁，只使用本地变量）
+	// 检查通知功能是否启用
+	s.mu.RLock()
+	enabled := s.settings != nil && s.settings.Enabled && len(s.channels) > 0
+	defaultChannel := ""
+	if s.settings != nil {
+		defaultChannel = s.settings.DefaultChannel
+	}
+	s.mu.RUnlock()
+
+	if !enabled {
+		s.logger.Debug("通知功能已禁用，跳过发送通知")
+		return nil
+	}
+
+	// 准备通知数据
 	data := &notification.TaskNotificationData{
 		TaskID:     taskInfo.ID,
 		TaskName:   taskInfo.Name,
@@ -201,7 +199,7 @@ func (s *NotificationService) SendTaskNotification(taskInfo *task.Task, taskLogI
 		TargetPath: taskInfo.TargetPath,
 	}
 
-	// 提取基础统计数据 (与 task_log.go 中 TaskLog 字段保持一致)
+	// 提取统计数据
 	if totalFile, ok := stats["total_file"].(int); ok {
 		data.TotalFile = totalFile
 	}
@@ -220,17 +218,12 @@ func (s *NotificationService) SendTaskNotification(taskInfo *task.Task, taskLogI
 	if subtitleCount, ok := stats["subtitle_count"].(int); ok {
 		data.SubtitleCount = subtitleCount
 	}
-
-	// 提取细分统计数据
-	// 下载统计
 	if metadataDownloaded, ok := stats["metadata_downloaded"].(int); ok {
 		data.MetadataDownloaded = metadataDownloaded
 	}
 	if subtitleDownloaded, ok := stats["subtitle_downloaded"].(int); ok {
 		data.SubtitleDownloaded = subtitleDownloaded
 	}
-
-	// 跳过统计（额外的详细信息）
 	if metadataSkipped, ok := stats["metadata_skipped"].(int); ok {
 		data.MetadataSkipped = metadataSkipped
 	}
@@ -240,8 +233,6 @@ func (s *NotificationService) SendTaskNotification(taskInfo *task.Task, taskLogI
 	if otherSkipped, ok := stats["other_skipped"].(int); ok {
 		data.OtherSkipped = otherSkipped
 	}
-
-	// 失败统计
 	if failedCount, ok := stats["failed_count"].(int); ok {
 		data.FailedCount = failedCount
 	}
@@ -261,82 +252,162 @@ func (s *NotificationService) SendTaskNotification(taskInfo *task.Task, taskLogI
 		templateType = notification.TemplateTypeTaskFailed
 	}
 
-	// 序列化通知数据（无需锁）
+	// 序列化通知数据
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		s.logger.Error("序列化通知数据失败", zap.Error(err))
 		return err
 	}
 
-	// 短暂加锁检查通知功能是否启用并获取必要的配置信息
-	var isEnabled bool
-	var channelType string
-	var availableChannels map[notification.NotificationChannelType]bool
-
-	func() {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
-
-		if s.settings == nil || !s.settings.Enabled || len(s.channels) == 0 {
-			isEnabled = false
-			return
-		}
-
-		isEnabled = true
-		channelType = s.settings.DefaultChannel
-
-		// 构建可用通道列表（避免在锁外访问 map）
-		availableChannels = make(map[notification.NotificationChannelType]bool)
-		for t := range s.channels {
-			availableChannels[t] = true
-		}
-	}()
-
-	// 如果通知功能未启用，直接返回
-	if !isEnabled {
-		s.logger.Debug("通知功能已禁用，跳过发送通知")
-		return nil
-	}
-
-	// 配置默认渠道（不再需要锁）
+	// 配置默认渠道
+	channelType := defaultChannel
 	if channelType == "" {
 		channelType = string(notification.ChannelTypeTelegram)
 	}
 
-	// 检查默认渠道是否可用（不再需要锁，使用前面复制的可用通道信息）
-	if !availableChannels[notification.NotificationChannelType(channelType)] {
-		// 如果默认渠道不可用，尝试使用任何可用的渠道
-		channelType = ""
-		for t := range availableChannels {
-			channelType = string(t)
+	// 先保存到数据库，获取ID
+	queueID, err := repository.Notification.AddToQueueWithID(channelType, string(templateType), string(jsonData))
+	if err != nil {
+		s.logger.Error("将通知添加到数据库失败", zap.Error(err))
+		return err
+	}
+
+	// 创建内存队列项目，包含数据库ID
+	queueItem := &notification.Queue{
+		ID:           queueID,
+		ChannelType:  channelType,
+		TemplateType: string(templateType),
+		Status:       notification.StatusPending,
+		Payload:      string(jsonData),
+		RetryCount:   0,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	// 添加到内存队列
+	select {
+	case s.memoryQueue <- queueItem:
+		s.logger.Info("通知已加入内存队列",
+			zap.String("channelType", channelType),
+			zap.String("templateType", string(templateType)),
+			zap.String("taskName", taskInfo.Name))
+	default:
+		s.logger.Warn("内存队列已满，通知将稍后处理",
+			zap.String("taskName", taskInfo.Name))
+	}
+
+	return nil
+}
+
+// shouldStartNotificationProcessing 判断是否应该启动通知处理
+func (s *NotificationService) shouldStartNotificationProcessing(settings *notification.Settings) bool {
+	if settings == nil {
+		s.logger.Debug("配置为空，不启动通知处理")
+		return false
+	}
+
+	if !settings.Enabled {
+		s.logger.Info("通知功能已禁用")
+		return false
+	}
+
+	// 检查是否有可用的通知渠道
+	hasAvailableChannel := false
+	for channelName, channelConfig := range settings.Channels {
+		if channelConfig.Enabled {
+			hasAvailableChannel = true
+			s.logger.Debug("发现可用通知渠道", zap.String("channel", channelName))
 			break
 		}
 	}
 
-	// 如果没有可用的渠道，返回错误
-	if channelType == "" {
-		s.logger.Warn("没有可用的通知渠道")
-		return fmt.Errorf("没有可用的通知渠道")
+	if !hasAvailableChannel {
+		s.logger.Info("没有可用的通知渠道")
+		return false
 	}
 
-	// 添加到队列（数据库操作，不需要锁）
-	err = repository.Notification.AddToQueue(channelType, string(templateType), string(jsonData))
+	return true
+}
+
+// initializeNotificationFeatures 初始化通知功能
+func (s *NotificationService) initializeNotificationFeatures(settings *notification.Settings) error {
+	s.logger.Info("开始初始化通知功能")
+
+	// 加载配置信息 - 初始化通知渠道
+	if err := s.initializeChannels(settings); err != nil {
+		return fmt.Errorf("初始化通知渠道失败: %w", err)
+	}
+
+	// 加载数据库通知队列，进入内存队列
+	if err := s.loadPendingNotificationsToMemory(); err != nil {
+		s.logger.Error("加载待处理通知到内存队列失败", zap.Error(err))
+		return fmt.Errorf("加载待处理通知到内存队列失败: %w", err)
+	}
+
+	// 启动通知处理器
+	s.startQueueProcessor()
+
+	// 启动定期清理任务
+	s.mu.Lock()
+	s.cleanupStopChan = make(chan struct{})
+	s.mu.Unlock()
+	go s.startCleanupTask()
+
+	s.logger.Info("通知功能初始化完成")
+	return nil
+}
+
+// initializeChannels 初始化通知渠道
+func (s *NotificationService) initializeChannels(settings *notification.Settings) error {
+	// 创建通道实例
+	channels := make(map[notification.NotificationChannelType]notification_channel.Channel)
+
+	// 初始化 Telegram 渠道
+	telegramChannel := notification_channel.NewTelegramChannel(s.logger, settings)
+	if telegramChannel.IsEnabled() {
+		channels[telegramChannel.GetType()] = telegramChannel
+		s.logger.Info("Telegram 通知渠道已启用")
+	}
+
+	// 初始化企业微信渠道
+	weworkChannel := notification_channel.NewWeworkChannel(s.logger, settings)
+	if weworkChannel.IsEnabled() {
+		channels[weworkChannel.GetType()] = weworkChannel
+		s.logger.Info("企业微信通知渠道已启用")
+	}
+
+	// 更新通道
+	s.mu.Lock()
+	s.channels = channels
+	s.mu.Unlock()
+
+	s.logger.Info("通知渠道初始化完成", zap.Int("总渠道数", len(channels)))
+	return nil
+}
+
+// loadPendingNotificationsToMemory 从数据库加载待处理通知到内存队列
+func (s *NotificationService) loadPendingNotificationsToMemory() error {
+	s.logger.Info("开始加载待处理通知到内存队列")
+
+	// 获取所有待处理的通知（包括需要重试的）
+	notifications, err := repository.Notification.GetPendingNotifications(0) // 0表示获取所有
 	if err != nil {
-		s.logger.Error("将通知添加到队列失败", zap.Error(err))
-		return err
+		return fmt.Errorf("获取待处理通知失败: %w", err)
 	}
 
-	s.logger.Info("通知已加入队列",
-		zap.String("channelType", channelType),
-		zap.String("templateType", string(templateType)),
-		zap.String("taskName", taskInfo.Name))
+	loadedCount := 0
+	for _, notif := range notifications {
+		select {
+		case s.memoryQueue <- notif:
+			loadedCount++
+		default:
+			s.logger.Warn("内存队列已满，无法加载更多通知", zap.Uint("notificationId", notif.ID))
+		}
+	}
 
-	// 如果当前有进行中的队列处理，触发立即处理新加入的通知
-	go func() {
-		// 短暂延迟，确保通知已写入数据库
-		time.Sleep(100 * time.Millisecond)
-		s.processQueue()
-	}()
+	s.logger.Info("已加载待处理通知到内存队列",
+		zap.Int("加载数量", loadedCount),
+		zap.Int("队列中数量", len(s.memoryQueue)))
 
 	return nil
 }
@@ -351,7 +422,6 @@ func (s *NotificationService) startQueueProcessor() {
 	}
 
 	s.stopChan = make(chan struct{})
-	s.doneChan = make(chan struct{})
 	s.queueProcessing = true
 	s.mu.Unlock()
 
@@ -360,26 +430,23 @@ func (s *NotificationService) startQueueProcessor() {
 			// 安全地修改队列处理状态
 			s.mu.Lock()
 			s.queueProcessing = false
+			// 如果 stopChan 还存在，说明是正常退出，需要重置
+			if s.stopChan != nil {
+				s.stopChan = nil
+			}
 			s.mu.Unlock()
-
-			// 关闭完成通道
-			close(s.doneChan)
 		}()
 
-		// 启动时先处理一次队列，确保处理未完成的历史消息
-		s.processQueue()
+		s.logger.Info("通知队列处理器已启动，开始消费内存队列")
 
-		// 创建定时检查队列的滴答器
-		// 每10秒定期检查队列，这个频率可以根据实际需求调整
-		queueTicker := time.NewTicker(10 * time.Second)
-		defer queueTicker.Stop()
-
+		// 无限循环消费内存队列
 		for {
 			select {
-			case <-queueTicker.C:
-				// 定期处理队列，包括待发送和可重试的通知
-				s.processQueue()
+			case notification := <-s.memoryQueue:
+				// 处理单个通知
+				s.processNotification(notification)
 			case <-s.stopChan:
+				s.logger.Info("收到停止信号，通知队列处理器即将退出")
 				return
 			}
 		}
@@ -389,154 +456,236 @@ func (s *NotificationService) startQueueProcessor() {
 // stopQueueProcessor 停止队列处理器
 func (s *NotificationService) stopQueueProcessor() {
 	s.mu.Lock()
-	if !s.queueProcessing {
+	if !s.queueProcessing || s.stopChan == nil {
 		s.mu.Unlock()
 		return
 	}
 
 	stopCh := s.stopChan
-	doneCh := s.doneChan
+	// 重置 stopChan 以防止重复关闭
+	s.stopChan = nil
+	s.queueProcessing = false
 	s.mu.Unlock()
 
 	// 关闭停止通道，通知处理器退出
 	close(stopCh)
 
-	// 添加超时机制，避免可能的死锁
-	select {
-	case <-doneCh:
-		// 正常接收到关闭信号
-		s.logger.Info("通知队列处理器已正常停止")
-	case <-time.After(5 * time.Second):
-		s.logger.Warn("等待队列处理器停止超时")
+	// 等待一段时间让处理器正常退出
+	time.Sleep(100 * time.Millisecond)
 
-		// 在超时时手动标记状态
-		s.mu.Lock()
-		s.queueProcessing = false
-		s.mu.Unlock()
-	}
+	s.logger.Info("通知队列处理器已停止")
 }
 
-// processQueue 处理通知队列
-func (s *NotificationService) processQueue() {
+// processNotification 处理单个通知
+func (s *NotificationService) processNotification(notif *notification.Queue) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	if s.settings == nil || !s.settings.Enabled || len(s.channels) == 0 {
+		s.mu.RUnlock()
+		s.logger.Debug("通知功能已禁用，跳过处理")
 		return
 	}
 
-	// 获取队列设置
-	concurrency := s.settings.QueueSettings.Concurrency
-	if concurrency <= 0 {
-		concurrency = 1
-	}
 	maxRetries := s.settings.QueueSettings.MaxRetries
 	retryInterval := s.settings.QueueSettings.RetryInterval
+	s.mu.RUnlock()
 
-	// 获取待处理通知 (包括状态为pending或失败但重试时间已到的通知)
-	notifications, err := repository.Notification.GetPendingNotifications(concurrency)
-	if err != nil {
-		s.logger.Error("获取待处理通知失败", zap.Error(err))
-		return
-	}
+	s.logger.Debug("开始处理通知",
+		zap.Uint("id", notif.ID),
+		zap.String("channelType", notif.ChannelType),
+		zap.Int("retryCount", notif.RetryCount))
 
-	if len(notifications) == 0 {
-		s.logger.Debug("当前没有待处理的通知")
-		return
-	}
-
-	s.logger.Info("开始处理通知队列", zap.Int("数量", len(notifications)))
-
-	for _, notif := range notifications {
-		// 更新状态为处理中
+	// 更新状态为处理中（仅在数据库中有ID时更新）
+	if notif.ID > 0 {
 		err := repository.Notification.UpdateNotificationStatus(notif.ID, notification.StatusProcessing, "")
 		if err != nil {
 			s.logger.Error("更新通知状态失败", zap.Error(err), zap.Uint("id", notif.ID))
-			continue
+			return
 		}
+	}
 
-		// 获取渠道
-		channelType := notification.NotificationChannelType(notif.ChannelType)
-		channel, ok := s.channels[channelType]
-		if !ok {
-			errMsg := fmt.Sprintf("通知渠道不可用: %s", notif.ChannelType)
-			s.logger.Warn(errMsg, zap.Uint("id", notif.ID))
+	// 获取渠道
+	s.mu.RLock()
+	channelType := notification.NotificationChannelType(notif.ChannelType)
+	channel, ok := s.channels[channelType]
+	s.mu.RUnlock()
+
+	if !ok {
+		errMsg := fmt.Sprintf("通知渠道不可用: %s", notif.ChannelType)
+		s.logger.Warn(errMsg, zap.Uint("id", notif.ID))
+		if notif.ID > 0 {
 			repository.Notification.UpdateNotificationStatus(notif.ID, notification.StatusFailed, errMsg)
-			continue
 		}
+		return
+	}
 
-		// 解析数据
-		var data notification.TaskNotificationData
-		err = json.Unmarshal([]byte(notif.Payload), &data)
-		if err != nil {
-			errMsg := fmt.Sprintf("解析通知数据失败: %v", err)
-			s.logger.Error(errMsg, zap.Uint("id", notif.ID))
+	// 解析数据
+	var data notification.TaskNotificationData
+	err := json.Unmarshal([]byte(notif.Payload), &data)
+	if err != nil {
+		errMsg := fmt.Sprintf("解析通知数据失败: %v", err)
+		s.logger.Error(errMsg, zap.Uint("id", notif.ID))
+		if notif.ID > 0 {
 			repository.Notification.UpdateNotificationStatus(notif.ID, notification.StatusFailed, errMsg)
-			continue
 		}
+		return
+	}
 
-		// 发送通知
-		err = channel.Send(notification.TemplateType(notif.TemplateType), &data)
-		if err != nil {
-			errMsg := fmt.Sprintf("发送通知失败: %v", err)
-			s.logger.Error(errMsg,
-				zap.Uint("id", notif.ID),
-				zap.String("channelType", notif.ChannelType),
-				zap.String("taskName", data.TaskName))
-
-			// 检查是否应该重试
-			if notif.RetryCount < maxRetries {
-				// 设置下次重试时间
-				nextRetry := time.Now().Add(time.Duration(retryInterval) * time.Second)
-
-				// 使用新的重新入队方法，将状态设为pending，这样会在未来被自动重新处理
-				err = repository.Notification.RequeueNotification(notif.ID, notif.RetryCount+1, nextRetry, errMsg)
-				if err != nil {
-					s.logger.Error("重新入队通知失败",
-						zap.Error(err),
-						zap.Uint("id", notif.ID))
-				} else {
-					s.logger.Info("通知将在稍后重试",
-						zap.Uint("id", notif.ID),
-						zap.Int("retryCount", notif.RetryCount+1),
-						zap.Time("nextRetryTime", nextRetry))
-				}
-			} else {
-				// 达到最大重试次数，标记为最终失败
-				err = repository.Notification.UpdateNotificationStatus(notif.ID, notification.StatusFailed, errMsg)
-				if err != nil {
-					s.logger.Error("更新通知状态失败",
-						zap.Error(err),
-						zap.Uint("id", notif.ID))
-				}
-				s.logger.Warn("通知达到最大重试次数，已标记为失败", zap.Uint("id", notif.ID))
-			}
-			continue
-		}
-
-		// 更新为已发送状态
-		repository.Notification.UpdateNotificationStatus(notif.ID, notification.StatusSent, "")
-		s.logger.Info("通知已成功发送",
+	// 发送通知
+	err = channel.Send(notification.TemplateType(notif.TemplateType), &data)
+	if err != nil {
+		errMsg := fmt.Sprintf("发送通知失败: %v", err)
+		s.logger.Error(errMsg,
 			zap.Uint("id", notif.ID),
 			zap.String("channelType", notif.ChannelType),
 			zap.String("taskName", data.TaskName))
+
+		// 检查是否应该重试
+		if notif.RetryCount < maxRetries {
+			// 增加重试次数
+			notif.RetryCount++
+			nextRetry := time.Now().Add(time.Duration(retryInterval) * time.Second)
+
+			// 更新数据库状态为pending，设置下次重试时间
+			if notif.ID > 0 {
+				err = repository.Notification.RequeueNotification(notif.ID, notif.RetryCount, nextRetry, errMsg)
+				if err != nil {
+					s.logger.Error("重新入队通知失败", zap.Error(err), zap.Uint("id", notif.ID))
+					return
+				}
+			}
+
+			// 延迟后重新入内存队列
+			go func(retryNotif *notification.Queue, delay time.Duration) {
+				time.Sleep(delay)
+				select {
+				case s.memoryQueue <- retryNotif:
+					s.logger.Info("通知已重新入队",
+						zap.Uint("id", retryNotif.ID),
+						zap.Int("retryCount", retryNotif.RetryCount))
+				default:
+					s.logger.Warn("内存队列已满，无法重新入队通知", zap.Uint("id", retryNotif.ID))
+				}
+			}(notif, time.Duration(retryInterval)*time.Second)
+
+			s.logger.Info("通知将在稍后重试",
+				zap.Uint("id", notif.ID),
+				zap.Int("retryCount", notif.RetryCount),
+				zap.Time("nextRetryTime", nextRetry))
+		} else {
+			// 达到最大重试次数，标记为最终失败
+			if notif.ID > 0 {
+				err = repository.Notification.UpdateNotificationStatus(notif.ID, notification.StatusFailed, errMsg)
+				if err != nil {
+					s.logger.Error("更新通知状态失败", zap.Error(err), zap.Uint("id", notif.ID))
+				}
+			}
+			s.logger.Warn("通知达到最大重试次数，已标记为失败", zap.Uint("id", notif.ID))
+		}
+		return
 	}
 
-	// 清理较早的已发送通知（30天前）
-	cleanCutoff := time.Now().AddDate(0, 0, -30)
-	repository.Notification.CleanSentNotifications(cleanCutoff)
+	// 发送成功，更新为已发送状态
+	if notif.ID > 0 {
+		repository.Notification.UpdateNotificationStatus(notif.ID, notification.StatusSent, "")
+	}
+	s.logger.Info("通知已成功发送",
+		zap.Uint("id", notif.ID),
+		zap.String("channelType", notif.ChannelType),
+		zap.String("taskName", data.TaskName))
+}
 
-	// 处理完一批后，检查是否有下一批待处理的消息
-	hasPending, err := repository.Notification.HasPendingNotifications()
-	if err == nil && hasPending {
-		// 如果还有消息，立即在后台再次处理
-		go func() {
-			time.Sleep(1 * time.Second) // 短暂延迟，避免过于频繁的处理
-			s.processQueue()
-		}()
+// startCleanupTask 启动定期清理任务
+func (s *NotificationService) startCleanupTask() {
+	// 每24小时清理一次历史数据
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	s.logger.Info("通知清理任务已启动")
+
+	for {
+		select {
+		case <-ticker.C:
+			// 清理30天前的已发送通知
+			cleanCutoff := time.Now().AddDate(0, 0, -30)
+			err := repository.Notification.CleanSentNotifications(cleanCutoff)
+			if err != nil {
+				s.logger.Error("清理已发送通知失败", zap.Error(err))
+			} else {
+				s.logger.Info("已清理历史通知数据")
+			}
+		case <-s.cleanupStopChan:
+			s.logger.Info("收到停止信号，清理任务即将退出")
+			return
+		}
 	}
 }
 
-// 不需要单独的scheduleNextRetry函数，因为调度由processQueue直接处理
-// 当通知处理失败时，它会被重新加入队列并设置下次处理时间
-// 定期轮询processQueue会自动处理所有等待中和需要重试的通知
+// stopNotificationFeatures 停止通知功能
+func (s *NotificationService) stopNotificationFeatures() {
+	s.logger.Info("停止通知功能")
+
+	// 停止队列处理器
+	s.stopQueueProcessor()
+
+	// 停止清理任务
+	s.mu.Lock()
+	s.channels = make(map[notification.NotificationChannelType]notification_channel.Channel)
+	s.mu.Unlock()
+
+	s.logger.Info("通知功能已停止")
+}
+
+// loadNotificationSettings 从配置服务加载通知设置
+func (s *NotificationService) loadNotificationSettings() (*notification.Settings, error) {
+	// 通过配置服务获取通知设置
+	req := &configRequest.ConfigByCodeReq{
+		Code: "NOTIFICATION_SETTINGS",
+	}
+
+	configInfo, err := Config.GetConfigByCode(req)
+	if err != nil {
+		s.logger.Debug("获取通知配置失败，将创建默认配置", zap.Error(err))
+		// 配置不存在，创建默认配置
+		return s.createDefaultNotificationSettings()
+	}
+
+	// 解析 JSON 配置
+	var settings notification.Settings
+	err = json.Unmarshal([]byte(configInfo.Value), &settings)
+	if err != nil {
+		s.logger.Error("解析通知配置JSON失败", zap.Error(err), zap.String("configValue", configInfo.Value))
+		return nil, fmt.Errorf("解析通知配置失败: %w", err)
+	}
+
+	s.logger.Debug("成功加载通知配置")
+	return &settings, nil
+}
+
+// createDefaultNotificationSettings 创建默认通知设置
+func (s *NotificationService) createDefaultNotificationSettings() (*notification.Settings, error) {
+	// 创建默认配置
+	defaultSettings := notification.DefaultSettings()
+
+	// 序列化为 JSON
+	jsonData, err := json.Marshal(defaultSettings)
+	if err != nil {
+		s.logger.Error("序列化默认通知配置失败", zap.Error(err))
+		return nil, fmt.Errorf("序列化默认通知配置失败: %w", err)
+	}
+
+	// 创建配置记录
+	createReq := &configRequest.ConfigCreateReq{
+		Name:  "通知系统配置",
+		Code:  "NOTIFICATION_SETTINGS",
+		Value: string(jsonData),
+	}
+
+	err = Config.Create(createReq)
+	if err != nil {
+		s.logger.Error("创建默认通知配置失败", zap.Error(err))
+		return nil, fmt.Errorf("创建默认通知配置失败: %w", err)
+	}
+
+	s.logger.Info("已创建默认通知配置")
+	return defaultSettings, nil
+}
