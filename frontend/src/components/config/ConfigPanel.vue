@@ -18,7 +18,7 @@ const { isMobile } = useMobile()
 <template>
   <NForm
     :label-placement="isMobile ? 'top' : 'left'"
-    :label-width="isMobile ? 'auto' : 120"
+    :label-width="isMobile ? 'auto' : '140'"
     require-mark-placement="right-hanging"
   >
     <div

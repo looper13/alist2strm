@@ -24,6 +24,7 @@ type StrmConfig struct {
 	DefaultSuffix string `json:"defaultSuffix"` // 默认媒体文件后缀
 	ReplaceSuffix bool   `json:"replaceSuffix"` // 是否替换后缀
 	URLEncode     bool   `json:"urlEncode"`     // 是否URL编码
+	MinFileSize   int64  `json:"minFileSize"`   // 最小文件大小(MB)，用于过滤小文件，0表示不过滤
 }
 
 // FileType 文件类型枚举
@@ -474,7 +475,15 @@ func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmC
 		// 按类型分组
 		switch fileType {
 		case FileTypeMedia:
-			mediaFileEntries = append(mediaFileEntries, entry)
+			// 对于媒体文件，需要检查文件大小是否满足最小要求
+			if s.isMediaFileSizeValid(&file, strmConfig) {
+				mediaFileEntries = append(mediaFileEntries, entry)
+			} else {
+				// 媒体文件大小不满足要求，计入跳过文件
+				s.stats.Mutex.Lock()
+				s.stats.SkipFile++
+				s.stats.Mutex.Unlock()
+			}
 		case FileTypeSubtitle:
 			subtitleFileEntries = append(subtitleFileEntries, entry)
 		case FileTypeMetadata:
@@ -631,6 +640,29 @@ func (s *StrmGeneratorService) determineFileType(file *AListFile, taskInfo *task
 	}
 
 	return FileTypeOther
+}
+
+// isMediaFileSizeValid 检查媒体文件大小是否满足最小大小要求
+func (s *StrmGeneratorService) isMediaFileSizeValid(file *AListFile, strmConfig *StrmConfig) bool {
+	// 如果 minFileSize 为 0，表示不过滤
+	if strmConfig.MinFileSize <= 0 {
+		return true
+	}
+
+	// 将 MB 转换为字节进行比较
+	minFileSizeBytes := strmConfig.MinFileSize * 1024 * 1024
+
+	if file.Size < minFileSizeBytes {
+		s.logger.Debug("媒体文件大小不满足最小要求，跳过处理",
+			zap.String("文件名", file.Name),
+			zap.Int64("文件大小(字节)", file.Size),
+			zap.Int64("最小大小要求(字节)", minFileSizeBytes),
+			zap.String("文件大小(友好显示)", humanizeSize(file.Size)),
+			zap.Int64("最小大小要求(MB)", strmConfig.MinFileSize))
+		return false
+	}
+
+	return true
 }
 
 // processFile 处理单个文件
