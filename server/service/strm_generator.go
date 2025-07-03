@@ -431,28 +431,17 @@ func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmC
 	var metadataFileEntries []FileEntry
 	var directoryFiles []*AListFile
 
-	// 增加总文件计数
-	s.stats.Mutex.Lock()
-	s.stats.TotalFiles += len(files)
-	totalFiles := s.stats.TotalFiles
-	s.stats.Mutex.Unlock()
-
-	// 定期更新任务日志中的总文件数
-	if totalFiles%100 == 0 {
-		updateData := map[string]interface{}{
-			"total_file": totalFiles,
-		}
-		if updateErr := repository.TaskLog.UpdatePartial(taskLogID, updateData); updateErr != nil {
-			s.logger.Error("更新任务日志总文件数失败", zap.Error(updateErr))
-		}
-	}
-
 	// 先对文件进行分类
+	var currentDirectoryFileCount int // 当前目录的文件数量（不包含文件夹）
+
 	for _, file := range files {
 		if file.IsDir {
 			directoryFiles = append(directoryFiles, &file)
 			continue
 		}
+
+		// 只有在这里才增加文件计数（跳过了文件夹）
+		currentDirectoryFileCount++
 
 		// 构建完整路径
 		currentSourcePath := filepath.Join(sourcePath, file.Name)
@@ -495,6 +484,28 @@ func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmC
 			s.stats.Mutex.Unlock()
 		}
 	}
+
+	// 文件分类完成后，增加总文件计数（只统计文件，不包含文件夹）
+	s.stats.Mutex.Lock()
+	s.stats.TotalFiles += currentDirectoryFileCount
+	totalFiles := s.stats.TotalFiles
+	s.stats.Mutex.Unlock()
+
+	// 定期更新任务日志中的总文件数
+	if totalFiles%100 == 0 {
+		updateData := map[string]interface{}{
+			"total_file": totalFiles,
+		}
+		if updateErr := repository.TaskLog.UpdatePartial(taskLogID, updateData); updateErr != nil {
+			s.logger.Error("更新任务日志总文件数失败", zap.Error(updateErr))
+		}
+	}
+
+	s.logger.Debug("当前目录文件统计",
+		zap.String("sourcePath", sourcePath),
+		zap.Int("当前目录文件数", currentDirectoryFileCount),
+		zap.Int("累计总文件数", totalFiles),
+		zap.Int("文件夹数", len(directoryFiles)))
 
 	// 筛选需要处理的字幕文件（需要与媒体文件匹配）
 	var matchedSubtitleEntries []FileEntry
