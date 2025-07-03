@@ -57,19 +57,19 @@ AList2Strm 是一个用于将 AList 媒体文件转换为 Strm 格式的工具�
 ## 界面一览
 
 #### 移动端适配
-[![移动端适配](./screenshot/screenshot20250524011706@2x.png)](https://github.com/MccRay-s/alist2strm/raw/main/screenshot/screenshot20250524011706@2x.png)
+[![移动端适配](./screenshot/mobile-screenshot.png)](https://github.com/MccRay-s/alist2strm/raw/main/screenshot/mobile-screenshot.png)
 
 #### 首页
-[![任务管理](./screenshot/screenshot20250524011249@2x.png)](https://github.com/MccRay-s/alist2strm/raw/main/screenshot/screenshot20250524011249@2x.png)
-
-#### 任务管理
-[![任务管理](./screenshot/screenshot20250524011222@2x.png)](https://github.com/MccRay-s/alist2strm/raw/main/screenshot/screenshot20250524011222@2x.png)
+[![首页纵览](./screenshot/screenshot-1.png)](https://github.com/MccRay-s/alist2strm/raw/main/screenshot/screenshot-1.png)
 
 #### 配置管理
-[![任务管理](./screenshot/screenshot20250524011243@2x.png)](https://github.com/MccRay-s/alist2strm/raw/main/screenshot/screenshot20250524011243@2x.png)
+[![配置管理](./screenshot/screenshot-2.png)](https://github.com/MccRay-s/alist2strm/raw/main/screenshot/screenshot-2.png)
+
+#### 任务管理
+[![任务管理](./screenshot/screenshot-3.png)](https://github.com/MccRay-s/alist2strm/raw/main/screenshot/screenshot-3.png)
 
 #### 文件记录
-[![文件记录](./screenshot/screenshot20250524011029@2x.png)](https://github.com/MccRay-s/alist2strm/raw/main/screenshot/screenshot20250524011029@2x.png)
+[![文件记录](./screenshot/screenshot-4.png)](https://github.com/MccRay-s/alist2strm/raw/main/screenshot/screenshot-4.png)
 
 ## 功能计划
 - [x] 用户授权中心，公网暴露的情况确实挺不安全的 `2025-05-24 22:41`
