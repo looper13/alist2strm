@@ -306,52 +306,74 @@ func (c *AListClient) doRequest(req *http.Request) (*http.Response, error) {
 	return nil, lastErr
 }
 
-// ListFiles 获取指定目录下的所有文件（非递归）
+// ListFiles 获取指定目录下的所有文件（非递归，支持分页查询）
 func (c *AListClient) ListFiles(dirPath string) ([]AListFile, error) {
 	if c.config == nil {
 		return nil, fmt.Errorf("客户端未配置")
 	}
 
-	// 构建请求
-	reqBody := map[string]interface{}{
-		"path":     dirPath,
-		"password": "",
-		"page":     1,
-		"per_page": 0,
-		"refresh":  false,
+	var allFiles []AListFile
+	page := 1
+	perPage := 100 // 每页100个文件，可以根据需要调整
+
+	for {
+		// 构建请求
+		reqBody := map[string]interface{}{
+			"path":     dirPath,
+			"password": "",
+			"page":     page,
+			"per_page": perPage,
+			"refresh":  false,
+		}
+
+		jsonData, err := json.Marshal(reqBody)
+		if err != nil {
+			return nil, err
+		}
+
+		req, err := http.NewRequest("POST", c.config.Host+"/api/fs/list", bytes.NewBuffer(jsonData))
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := c.doRequest(req)
+		if err != nil {
+			return nil, err
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		var listResp AListListResponse
+		if err := json.Unmarshal(body, &listResp); err != nil {
+			return nil, err
+		}
+
+		if listResp.Code != 200 {
+			return nil, fmt.Errorf("API错误: %s", listResp.Message)
+		}
+
+		// 添加当前页的文件到总列表
+		allFiles = append(allFiles, listResp.Data.Content...)
+
+		// 检查是否还有更多页面
+		// 如果当前页返回的文件数量少于每页数量，说明已经是最后一页
+		if len(listResp.Data.Content) < perPage {
+			break
+		}
+
+		// 如果有总数信息，也可以用来判断是否已经获取完所有文件
+		if listResp.Data.Total > 0 && len(allFiles) >= listResp.Data.Total {
+			break
+		}
+
+		page++
 	}
 
-	jsonData, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", c.config.Host+"/api/fs/list", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.doRequest(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var listResp AListListResponse
-	if err := json.Unmarshal(body, &listResp); err != nil {
-		return nil, err
-	}
-
-	if listResp.Code != 200 {
-		return nil, fmt.Errorf("API错误: %s", listResp.Message)
-	}
-
-	return listResp.Data.Content, nil
+	return allFiles, nil
 }
