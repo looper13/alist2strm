@@ -13,7 +13,10 @@ type Response struct {
 }
 
 const (
-	ERROR   = 7
+	ERROR = 500
+	// 未授权
+	UNAUTHORIZED = 401
+	// 成功
 	SUCCESS = 0
 )
 
@@ -47,11 +50,8 @@ func FailWithMessage(message string, c *gin.Context) {
 }
 
 func NoAuth(message string, c *gin.Context) {
-	c.JSON(http.StatusOK, Response{
-		7,
-		nil,
-		message,
-	})
+	Result(UNAUTHORIZED, map[string]interface{}{}, message, c)
+	c.Abort()
 }
 
 func FailWithDetailed(data interface{}, message string, c *gin.Context) {

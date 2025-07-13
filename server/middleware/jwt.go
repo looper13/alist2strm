@@ -15,7 +15,8 @@ func JWTAuth() gin.HandlerFunc {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			utils.Warn("JWT认证失败: 缺少Authorization头", "request_id", c.GetString("request_id"))
-			response.FailWithMessage("未提供认证token", c)
+			// 返回未授权错误
+			response.NoAuth("未提供认证token", c)
 			c.Abort()
 			return
 		}
@@ -23,7 +24,7 @@ func JWTAuth() gin.HandlerFunc {
 		// 检查Bearer前缀
 		if !strings.HasPrefix(authHeader, "Bearer ") {
 			utils.Warn("JWT认证失败: Authorization格式错误", "authorization", authHeader, "request_id", c.GetString("request_id"))
-			response.FailWithMessage("认证token格式错误", c)
+			response.NoAuth("认证token格式错误", c)
 			c.Abort()
 			return
 		}
@@ -32,7 +33,7 @@ func JWTAuth() gin.HandlerFunc {
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 		if tokenString == "" {
 			utils.Warn("JWT认证失败: token为空", "request_id", c.GetString("request_id"))
-			response.FailWithMessage("认证token为空", c)
+			response.NoAuth("认证token为空", c)
 			c.Abort()
 			return
 		}
@@ -40,7 +41,7 @@ func JWTAuth() gin.HandlerFunc {
 		claims, err := utils.ParseToken(tokenString)
 		if err != nil {
 			utils.Warn("JWT认证失败: token解析错误", "error", err.Error(), "request_id", c.GetString("request_id"))
-			response.FailWithMessage("认证token无效", c)
+			response.NoAuth("认证token无效", c)
 			c.Abort()
 			return
 		}

@@ -1,10 +1,11 @@
 import type { AxiosInstance, AxiosRequestConfig } from 'axios'
+import type { Router } from 'vue-router'
 import axios from 'axios'
-import { useRouter } from 'vue-router'
 import { useAuth } from '~/composables'
 
 export class HttpClient {
   private instance: AxiosInstance
+  private router: Router | null = null
   private baseConfig: AxiosRequestConfig = {
     timeout: 30000,
     headers: {
@@ -19,6 +20,30 @@ export class HttpClient {
     })
 
     this.setupInterceptors()
+  }
+
+  // 设置路由实例
+  setRouter(router: Router) {
+    this.router = router
+  }
+
+  private handleAuthError(): void {
+    const { logout } = useAuth()
+    logout() // 清除 token 和用户信息
+
+    // 使用实例中的路由或回退到原生跳转
+    if (this.router && this.router.push) {
+      this.router.push({
+        path: '/auth',
+        query: {
+          redirect: this.router.currentRoute.value.fullPath,
+        },
+      })
+    }
+    else {
+      // 如果路由不可用，直接跳转
+      window.location.href = '/auth'
+    }
   }
 
   private setupInterceptors(): void {
@@ -43,6 +68,11 @@ export class HttpClient {
         if (res.code === 0 || res.code === 200) {
           return response
         }
+        // token 失效
+        else if (res.code === 7 || res.code === 401) {
+          this.handleAuthError()
+        }
+        console.error('HTTP Error:', res)
         return Promise.reject(res)
       },
       (error) => {
@@ -50,15 +80,7 @@ export class HttpClient {
         if (error.response) {
           const { data } = error.response as Api.Common.HttpResponse
           if (data.code === 401) {
-            const { logout } = useAuth()
-            const router = useRouter()
-            logout() // 清除 token 和用户信息
-            router.push({
-              path: '/auth',
-              query: {
-                redirect: router.currentRoute.value.fullPath,
-              },
-            })
+            this.handleAuthError()
             return Promise.reject(error)
           }
         }
