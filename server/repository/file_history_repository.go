@@ -90,3 +90,20 @@ func (r *FileHistoryRepository) UpdateByID(id uint, updateFields map[string]inte
 
 	return database.DB.Model(&filehistory.FileHistory{}).Where("id = ?", id).Updates(updateFields).Error
 }
+
+// GetByFileAttributes 根据文件路径、名称、大小和类型获取文件历史记录
+func (r *FileHistoryRepository) GetByFileAttributes(sourcePath, fileName string, fileSize int64, fileType string) (*filehistory.FileHistory, error) {
+	if sourcePath == "" || fileName == "" {
+		return nil, nil
+	}
+
+	db := database.DB
+	var fileHistory filehistory.FileHistory
+
+	if err := db.Where("source_path = ? AND file_name = ? AND file_size = ? AND file_type = ?",
+		sourcePath, fileName, fileSize, fileType).First(&fileHistory).Error; err != nil {
+		return nil, err
+	}
+
+	return &fileHistory, nil
+}

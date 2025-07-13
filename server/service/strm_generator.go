@@ -935,7 +935,9 @@ func (s *StrmGeneratorService) recordFileHistory(taskID, taskLogID uint, file *A
 	// 获取文件Hash
 	hash := ""
 	if file.HashInfo.Sha1 != "" {
-		hash = file.HashInfo.Sha1
+		// hash = file.HashInfo.Sha1
+		// 测试为 null 的结果
+		hash = ""
 	}
 
 	// 记录文件类型和是否有Hash值
@@ -945,38 +947,85 @@ func (s *StrmGeneratorService) recordFileHistory(taskID, taskLogID uint, file *A
 		zap.Bool("hasHash", hash != ""),
 		zap.String("hash", hash))
 
-	// 根据Hash查找现有记录（只有当Hash有值时才查找）
-	if hash != "" {
-		existingRecord, err := repository.FileHistory.GetByHash(hash)
-		if err == nil && existingRecord != nil {
-			// 找到现有记录，更新而不是创建
-			now := time.Now()
-			updateData := map[string]interface{}{
-				"task_id":     taskID,
-				"task_log_id": taskLogID,
-				"updated_at":  now,
-				"file_size":   file.Size,
-				"modified_at": &file.Modified,
-			}
+	// 查找现有记录 - 支持两种查找方式
+	var existingRecord *filehistory.FileHistory
+	var findErr error
 
-			if err := repository.FileHistory.UpdateByID(existingRecord.ID, updateData); err != nil {
-				s.logger.Error("更新文件历史记录失败",
-					zap.String("fileName", file.Name),
-					zap.String("hash", hash),
-					zap.Error(err))
-			} else {
-				s.logger.Info("更新现有文件历史记录",
-					zap.String("fileName", file.Name),
-					zap.String("hash", hash),
-					zap.String("fileType", fileTypeStr),
-					zap.Uint("oldTaskID", existingRecord.TaskID),
-					zap.Uint("newTaskID", taskID))
-			}
-			return
+	// 1. 优先通过 Hash 查找（如果有 hash）
+	if hash != "" {
+		existingRecord, findErr = repository.FileHistory.GetByHash(hash)
+		if findErr != nil {
+			s.logger.Debug("通过Hash查找文件历史记录失败",
+				zap.String("hash", hash),
+				zap.Error(findErr))
 		}
 	}
 
-	// 没有找到现有记录或者没有Hash，创建新记录
+	// 2. 如果通过 Hash 没找到记录或者没有 hash，则通过文件路径和属性查找
+	if existingRecord == nil {
+		existingRecord, findErr = repository.FileHistory.GetByFileAttributes(sourcePath, file.Name, file.Size, fileTypeStr)
+		if findErr != nil {
+			s.logger.Debug("通过文件属性查找文件历史记录失败",
+				zap.String("sourcePath", sourcePath),
+				zap.String("fileName", file.Name),
+				zap.Int64("fileSize", file.Size),
+				zap.String("fileType", fileTypeStr),
+				zap.Error(findErr))
+		} else if existingRecord != nil {
+			existingHashStr := ""
+			if existingRecord.Hash != nil {
+				existingHashStr = *existingRecord.Hash
+			}
+			s.logger.Debug("通过文件属性找到现有记录",
+				zap.String("fileName", file.Name),
+				zap.String("existingHash", existingHashStr),
+				zap.String("newHash", hash))
+		}
+	}
+
+	// 如果找到现有记录，更新它
+	if existingRecord != nil {
+		now := time.Now()
+		updateData := map[string]interface{}{
+			"task_id":     taskID,
+			"task_log_id": taskLogID,
+			"updated_at":  now,
+			"file_size":   file.Size,
+			"modified_at": &file.Modified,
+		}
+
+		// 处理 hash 字段更新
+		if hash != "" {
+			// 有新的 hash 值，更新它
+			updateData["hash"] = &hash
+		} else if existingRecord.Hash != nil {
+			// 没有新 hash，但保持现有 hash
+			updateData["hash"] = existingRecord.Hash
+		}
+		// 如果 hash 为空且现有记录也没有 hash，则不更新 hash 字段
+
+		if err := repository.FileHistory.UpdateByID(existingRecord.ID, updateData); err != nil {
+			s.logger.Error("更新文件历史记录失败",
+				zap.String("fileName", file.Name),
+				zap.String("hash", hash),
+				zap.Error(err))
+		} else {
+			existingHashStr := ""
+			if existingRecord.Hash != nil {
+				existingHashStr = *existingRecord.Hash
+			}
+			s.logger.Info("更新现有文件历史记录",
+				zap.String("fileName", file.Name),
+				zap.String("newHash", hash),
+				zap.String("existingHash", existingHashStr),
+				zap.String("fileType", fileTypeStr),
+				zap.Uint("oldTaskID", existingRecord.TaskID),
+				zap.Uint("newTaskID", taskID))
+		}
+		return
+	}
+
+	// 没有找到现有记录，创建新记录
 	fileHistory := &filehistory.FileHistory{
 		TaskID:         taskID,
 		TaskLogID:      taskLogID,
@@ -988,13 +1037,33 @@ func (s *StrmGeneratorService) recordFileHistory(taskID, taskLogID uint, file *A
 		FileSuffix:     filepath.Ext(file.Name),
 		IsStrm:         fileType == FileTypeMedia, // 如果是媒体文件类型，则标记为STRM文件
 		ModifiedAt:     &file.Modified,
-		Hash:           hash,
+	}
+
+	// 只有当 hash 不为空时才设置 Hash 字段，否则保持为 nil (数据库中的 NULL)
+	if hash != "" {
+		fileHistory.Hash = &hash
 	}
 
 	if err := repository.FileHistory.Create(fileHistory); err != nil {
-		s.logger.Error("记录文件历史失败",
+		// 检查是否是唯一约束错误（文件已存在）
+		if strings.Contains(strings.ToLower(err.Error()), "unique") ||
+			strings.Contains(strings.ToLower(err.Error()), "duplicate") ||
+			strings.Contains(strings.ToLower(err.Error()), "constraint") {
+			s.logger.Info("文件历史记录已存在（数据库约束），跳过创建",
+				zap.String("fileName", file.Name),
+				zap.String("sourcePath", sourcePath),
+				zap.String("hash", hash),
+				zap.String("errorDetails", err.Error()))
+		} else {
+			s.logger.Error("记录文件历史失败",
+				zap.String("fileName", file.Name),
+				zap.Error(err))
+		}
+	} else {
+		s.logger.Debug("成功创建新文件历史记录",
 			zap.String("fileName", file.Name),
-			zap.Error(err))
+			zap.String("fileType", fileTypeStr),
+			zap.String("hash", hash))
 	}
 }
 
