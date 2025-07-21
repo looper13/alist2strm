@@ -144,6 +144,36 @@ export const CONFIG_ITEMS = [
     ] as ConfigField<Api.Config.AlistConfig>[],
   } as ConfigItem<Api.Config.AlistConfig>,
   {
+    name: 'cloud drive 配置',
+    code: 'CLOUD_DRIVE',
+    fields: [
+      {
+        key: 'host',
+        label: 'host',
+        type: 'text',
+        required: true,
+        placeholder: 'host',
+        describe: '例如：http://192.168.1.100:19798',
+      },
+      {
+        key: 'username',
+        label: '用户名',
+        type: 'text',
+        required: true,
+        placeholder: '用户名',
+        describe: '用户名',
+      },
+      {
+        key: 'password',
+        label: '密码',
+        type: 'text',
+        required: true,
+        placeholder: '密码',
+        describe: '密码',
+      },
+    ] as ConfigField<Api.Config.CloudDriveConfig>[],
+  } as ConfigItem<Api.Config.CloudDriveConfig>,
+  {
     name: 'strm 配置',
     code: 'STRM',
     fields: [

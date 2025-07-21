@@ -47,6 +47,13 @@ func main() {
 		utils.Info("AList 服务初始化完成")
 	}
 
+	driveService := service.InitializeCloudDriveService(logger)
+	if driveService == nil {
+		utils.Warn("CloudDrive 服务初始化失败，部分功能可能不可用")
+	} else {
+		utils.Info("CloudDrive 服务初始化完成")
+	}
+
 	// 初始化 STRM 生成服务
 	strmService := service.GetStrmGeneratorService()
 	strmService.Initialize(logger)

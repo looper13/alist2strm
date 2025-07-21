@@ -14,6 +14,7 @@ const alistConfig = ref<Api.Config.AlistConfig>({ ...defaultConfigs.ALIST })
 const strmConfig = ref<Api.Config.StrmConfig>({ ...defaultConfigs.STRM })
 const embyConfig = ref<Api.Config.EmbyConfig>({ ...defaultConfigs.EMBY })
 const notificationConfig = ref<Api.Config.NotificationConfig>({ ...defaultConfigs.NOTIFICATION_SETTINGS })
+const cloudDriveConfig = ref<Api.Config.CloudDriveConfig>({ ...defaultConfigs.CLOUD_DRIVE })
 const loading = ref(false)
 const saving = ref(false)
 const notification = useNotification()
@@ -31,6 +32,7 @@ onMounted(async () => {
       const strmConfigItem = data.find(item => item.code === 'STRM')
       const embyConfigItem = data.find(item => item.code === 'EMBY')
       const notificationConfigItem = data.find(item => item.code === 'NOTIFICATION_SETTINGS')
+      const cloudDriveConfigItem = data.find(item => item.code === 'CLOUD_DRIVE')
 
       if (alistConfigItem?.value) {
         alistConfig.value = JSON.parse(alistConfigItem.value) as Api.Config.AlistConfig
@@ -43,6 +45,9 @@ onMounted(async () => {
       }
       if (notificationConfigItem?.value) {
         notificationConfig.value = JSON.parse(notificationConfigItem.value) as Api.Config.NotificationConfig
+      }
+      if (cloudDriveConfigItem?.value) {
+        cloudDriveConfig.value = JSON.parse(cloudDriveConfigItem.value) as Api.Config.CloudDriveConfig
       }
     }
   }
@@ -70,6 +75,9 @@ async function handleSave() {
     }
     else if (activeTab.value === 'NOTIFICATION_SETTINGS') {
       configValue = JSON.stringify(notificationConfig.value)
+    }
+    else if (activeTab.value === 'CLOUD_DRIVE') {
+      configValue = JSON.stringify(cloudDriveConfig.value)
     }
 
     if (currentConfig) {
@@ -119,6 +127,11 @@ async function handleSave() {
             v-if="item.code === 'ALIST'"
             v-model="alistConfig"
             :config-item="item as ConfigItem<Api.Config.AlistConfig>"
+          />
+          <ConfigPanel
+            v-if="item.code === 'CLOUD_DRIVE'"
+            v-model="cloudDriveConfig"
+            :config-item="item as ConfigItem<Api.Config.CloudDriveConfig>"
           />
           <ConfigPanel
             v-if="item.code === 'STRM'"

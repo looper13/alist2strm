@@ -57,6 +57,7 @@ const searchForm = reactive({
 const formRef = ref<any>(null)
 const formModel = ref<Api.Task.Create>({
   name: '',
+  configType: 'alist',
   mediaType: 'movie',
   sourcePath: '',
   targetPath: '',
@@ -86,17 +87,7 @@ const rules: FormRules = {
     { required: true, message: '请输入任务名称', trigger: 'blur' },
     { min: 2, max: 50, message: '任务名称长度应在 2-50 个字符之间', trigger: 'blur' },
   ],
-  sourcePath: [
-    { required: true, message: '请输AList路径', trigger: 'blur' },
-    {
-      validator: (_, value) => {
-        if (!value.startsWith('/'))
-          return new Error('路径必须以 / 开头')
-        return true
-      },
-      trigger: 'blur',
-    },
-  ],
+
   targetPath: [
     { required: true, message: '请输入目标路径', trigger: 'blur' },
   ],
@@ -151,6 +142,7 @@ async function handleCreate() {
 
   formModel.value = {
     name: '',
+    configType: 'alist',
     mediaType: 'movie',
     sourcePath: '',
     targetPath: '',
@@ -173,6 +165,7 @@ async function handleEdit(row: Api.Task.Record) {
     isEdit.value = true
     currentId.value = row.id
     formModel.value = {
+      configType: row.configType || 'alist',
       mediaType: row.mediaType || 'movie',
       name: row.name,
       sourcePath: row.sourcePath,
@@ -198,6 +191,7 @@ function handleCopy(row: Api.Task.Record) {
   isEdit.value = false
   currentId.value = null
   formModel.value = {
+    configType: row.configType || 'alist',
     mediaType: row.mediaType || 'movie',
     name: `${row.name}_复制`,
     sourcePath: row.sourcePath,
@@ -220,6 +214,7 @@ async function handleSave() {
     await formRef.value?.validate()
     if (isEdit.value && currentId.value) {
       await taskAPI.update(currentId.value, {
+        configType: formModel.value.configType,
         name: formModel.value.name,
         sourcePath: formModel.value.sourcePath,
         targetPath: formModel.value.targetPath,
@@ -549,6 +544,22 @@ onMounted(() => {
         require-mark-placement="right-hanging"
         :size="isMobile ? 'small' : 'medium'"
       >
+        <NFormItem label="配置类型" path="configType">
+          <NRadioGroup v-model:value="formModel.configType">
+            <NSpace>
+              <NRadio value="alist">
+                Alist
+              </NRadio>
+              <NRadio value="clouddrive">
+                CloudDrive
+              </NRadio>
+              <NRadio value="local">
+                Local
+              </NRadio>
+            </NSpace>
+          </NRadioGroup>
+        </NFormItem>
+
         <NFormItem label="任务名称" path="name">
           <NInput v-model:value="formModel.name" placeholder="请输入任务名称">
             <template #prefix>

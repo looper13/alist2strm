@@ -63,6 +63,7 @@ func (s *TaskService) Create(req *taskRequest.TaskCreateReq) error {
 	// 创建任务
 	newTask := &task.Task{
 		Name:               req.Name,
+		ConfigType:         req.ConfigType,
 		MediaType:          req.MediaType,
 		SourcePath:         req.SourcePath,
 		TargetPath:         req.TargetPath,
@@ -158,6 +159,9 @@ func (s *TaskService) UpdateTask(req *taskRequest.TaskUpdateReq) error {
 	if req.Name != "" {
 		task.Name = req.Name
 		hasUpdate = true
+	}
+	if req.ConfigType != "" {
+		task.ConfigType = req.ConfigType
 	}
 	if req.MediaType != "" {
 		task.MediaType = req.MediaType
@@ -312,6 +316,7 @@ func (s *TaskService) GetAllTasks(req *taskRequest.TaskAllReq) ([]taskResponse.T
 			ID:                 t.ID,
 			CreatedAt:          t.CreatedAt,
 			UpdatedAt:          t.UpdatedAt,
+			ConfigType:         t.ConfigType,
 			Name:               t.Name,
 			MediaType:          t.MediaType,
 			SourcePath:         t.SourcePath,

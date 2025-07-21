@@ -20,32 +20,32 @@ var User = &UserService{}
 // Login 用户登录
 func (s *UserService) Login(req *userRequest.UserLoginReq) (*userResponse.UserLoginResp, error) {
 	// 根据用户名查找用户
-	user, err := repository.User.GetByUsername(req.Username)
+	username, err := repository.User.GetByUsername(req.Username)
 	if err != nil {
 		return nil, err
 	}
-	if user == nil {
+	if username == nil {
 		return nil, errors.New("用户名或密码错误")
 	}
 
 	// 验证密码
-	if !utils.CheckPasswordHash(req.Password, user.Password) {
+	if !utils.CheckPasswordHash(req.Password, username.Password) {
 		return nil, errors.New("用户名或密码错误")
 	}
 
 	// 检查用户状态
-	if user.Status != "active" {
+	if username.Status != "active" {
 		return nil, errors.New("用户已被禁用")
 	}
 
 	// 更新最后登录时间
-	if err := repository.User.UpdateLastLoginAt(user.ID); err != nil {
+	if err := repository.User.UpdateLastLoginAt(username.ID); err != nil {
 		// 记录错误但不影响登录流程
-		utils.Error("更新用户最后登录时间失败", "user_id", user.ID, "error", err.Error())
+		utils.Error("更新用户最后登录时间失败", "user_id", username.ID, "error", err.Error())
 	}
 
 	// 生成JWT令牌
-	token, err := utils.GenerateToken(user.ID, user.Username)
+	token, err := utils.GenerateToken(username.ID, username.Username)
 	if err != nil {
 		return nil, errors.New("生成令牌失败")
 	}
@@ -53,13 +53,13 @@ func (s *UserService) Login(req *userRequest.UserLoginReq) (*userResponse.UserLo
 	// 构建响应
 	resp := &userResponse.UserLoginResp{
 		User: userResponse.UserInfo{
-			ID:          user.ID,
-			Username:    user.Username,
-			Nickname:    user.Nickname,
-			Status:      user.Status,
-			CreatedAt:   user.CreatedAt,
-			UpdatedAt:   user.UpdatedAt,
-			LastLoginAt: user.LastLoginAt,
+			ID:          username.ID,
+			Username:    username.Username,
+			Nickname:    username.Nickname,
+			Status:      username.Status,
+			CreatedAt:   username.CreatedAt,
+			UpdatedAt:   username.UpdatedAt,
+			LastLoginAt: username.LastLoginAt,
 		},
 		Token: token,
 	}

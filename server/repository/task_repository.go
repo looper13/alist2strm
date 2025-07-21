@@ -96,6 +96,10 @@ func (r *TaskRepository) List(req *taskRequest.TaskListReq) ([]task.Task, int64,
 		query = query.Where("running = ?", *req.Running)
 	}
 
+	if req.ConfigType != "" {
+		query = query.Where("config_type = ?", req.ConfigType)
+	}
+
 	// 获取总数
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err

@@ -73,6 +73,7 @@ declare namespace Api {
       nickname?: string
       password?: string
       oldPassword?: string
+      newPassword?: string
     }
   }
 
@@ -103,6 +104,13 @@ declare namespace Api {
       reqInterval: number
       reqRetryCount: number
       reqRetryInterval: number
+    }
+
+    // clouddrive配置
+    export interface CloudDriveConfig {
+      host: string
+      username: string
+      password: string
     }
 
     // Emby 特定配置类型
@@ -149,6 +157,7 @@ declare namespace Api {
     type Record = Common.CommonRecord<{
       name: string
       mediaType: 'movie' | 'tv'
+      configType: 'alist' | 'clouddrive' | 'local'
       sourcePath: string
       targetPath: string
       fileSuffix: string
@@ -165,8 +174,8 @@ declare namespace Api {
     }>
 
     type Query = Pick<Record, 'name' | 'enabled' | 'overwrite'>
-    type Update = Pick<Record, 'id' | 'name' | 'sourcePath' | 'targetPath' | 'fileSuffix' | 'overwrite' | 'enabled' | 'cron' | 'mediaType' | 'downloadMetadata' | 'metadataExtensions' | 'downloadSubtitle' | 'subtitleExtensions'>
-    type Create = Pick<Record, 'name' | 'sourcePath' | 'targetPath' | 'fileSuffix' | 'overwrite' | 'enabled' | 'cron' | 'mediaType' | 'downloadMetadata' | 'metadataExtensions' | 'downloadSubtitle' | 'subtitleExtensions'>
+    type Update = Pick<Record, 'id' | 'configType' | 'name' | 'sourcePath' | 'targetPath' | 'fileSuffix' | 'overwrite' | 'enabled' | 'cron' | 'mediaType' | 'downloadMetadata' | 'metadataExtensions' | 'downloadSubtitle' | 'subtitleExtensions'>
+    type Create = Pick<Record, 'configType' | 'name' | 'sourcePath' | 'targetPath' | 'fileSuffix' | 'overwrite' | 'enabled' | 'cron' | 'mediaType' | 'downloadMetadata' | 'metadataExtensions' | 'downloadSubtitle' | 'subtitleExtensions'>
 
     // 任务统计数据接口
     interface Stats {

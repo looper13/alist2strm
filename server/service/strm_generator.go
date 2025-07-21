@@ -15,6 +15,7 @@ import (
 	"github.com/MccRay-s/alist2strm/model/filehistory"
 	"github.com/MccRay-s/alist2strm/model/task"
 	"github.com/MccRay-s/alist2strm/model/tasklog"
+	"github.com/MccRay-s/alist2strm/model/webhook"
 	"github.com/MccRay-s/alist2strm/repository"
 	"go.uber.org/zap"
 )
@@ -83,11 +84,12 @@ type ProcessingStats struct {
 
 // StrmGeneratorService STRM 文件生成服务
 type StrmGeneratorService struct {
-	alistService *AListService
-	logger       *zap.Logger
-	mu           sync.RWMutex
-	queue        *FileProcessQueue // 文件处理队列
-	stats        *ProcessingStats  // 处理统计
+	alistService      *AListService
+	cloudDriveService *CloudDriveService
+	logger            *zap.Logger
+	mu                sync.RWMutex
+	queue             *FileProcessQueue // 文件处理队列
+	stats             *ProcessingStats  // 处理统计
 }
 
 var (
@@ -115,6 +117,7 @@ func (s *StrmGeneratorService) Initialize(logger *zap.Logger) {
 	defer s.mu.Unlock()
 	s.logger = logger
 	s.alistService = GetAListService()
+	s.cloudDriveService = GetCloudDriveService()
 
 	// 初始化队列和统计信息
 	s.queue = &FileProcessQueue{
@@ -124,6 +127,210 @@ func (s *StrmGeneratorService) Initialize(logger *zap.Logger) {
 	s.stats = &ProcessingStats{}
 
 	logger.Info("STRM 生成服务初始化完成")
+}
+
+// ProcessFileChangeEvent handles a single file change event from a webhook.
+// It's designed to be called asynchronously for individual file creations.
+func (s *StrmGeneratorService) ProcessFileChangeEvent(taskInfo *task.Task, event *webhook.FileChangeEvent) error {
+	s.logger.Info("Processing file change event from webhook",
+		zap.String("task", taskInfo.Name),
+		zap.String("action", event.Action),
+		zap.String("sourceFile", event.SourceFile),
+	)
+
+	// This function currently only handles file creation events.
+	if event.IsDir {
+		s.logger.Info("Event is for a directory, skipping.", zap.String("dir", event.SourceFile))
+		// In the future, this could trigger a limited recursive scan.
+		return nil
+	}
+
+	// 1. Load STRM config
+	strmConfig, err := s.loadStrmConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load strm config: %w", err)
+	}
+
+	// Normalize path separators to / for consistency
+	sourceFileNormalized := strings.ReplaceAll(event.SourceFile, "\\", "/")
+	taskSourcePathNormalized := strings.ReplaceAll(taskInfo.SourcePath, "\\", "/")
+
+	// 2. Get the full file info (AListFile) for the new file.
+	// We do this by listing the parent directory and finding the matching file.
+	parentDir := filepath.Dir(sourceFileNormalized)
+	files, err := s.listFiles(taskInfo, parentDir)
+	if err != nil {
+		return fmt.Errorf("failed to list files in parent directory '%s': %w", parentDir, err)
+	}
+
+	var aListFile *AListFile
+	fileName := filepath.Base(sourceFileNormalized)
+	for i := range files {
+		if files[i].Name == fileName {
+			aListFile = &files[i]
+			break
+		}
+	}
+
+	if aListFile == nil {
+		return fmt.Errorf("could not find file info for '%s' in parent directory listing", sourceFileNormalized)
+	}
+
+	// 3. Determine the target path for the new file.
+	// This is done by replacing the task's source path prefix with the task's target path.
+	// Use the normalized paths for this operation.
+	relativePath := strings.TrimPrefix(sourceFileNormalized, taskSourcePathNormalized)
+	relativePath = strings.TrimPrefix(relativePath, "/") // Ensure no leading slash
+	targetPath := filepath.Join(taskInfo.TargetPath, relativePath)
+
+	// 4. Determine file type and process accordingly.
+	fileType := s.determineFileType(aListFile, taskInfo, strmConfig)
+
+	var success bool
+	var errorMessage string
+
+	s.logger.Info("Determined file type for webhook event",
+		zap.String("file", aListFile.Name),
+		zap.String("type", getFileTypeString(fileType)),
+	)
+
+	switch fileType {
+	case FileTypeMedia:
+		if !s.isMediaFileSizeValid(aListFile, strmConfig) {
+			s.logger.Info("Skipping media file from webhook due to size constraints", zap.String("file", aListFile.Name))
+			return nil
+		}
+		// Pass the original, non-normalized path to generateStrmFile, as it handles its own normalization.
+		success, errorMessage, _ = s.generateStrmFile(aListFile, strmConfig, taskInfo, event.SourceFile, targetPath)
+	case FileTypeMetadata, FileTypeSubtitle:
+		// Pass the original, non-normalized path to downloadFile.
+		success, errorMessage = s.downloadFile(aListFile, event.SourceFile, targetPath, taskInfo)
+	default:
+		s.logger.Info("Skipping file with unhandled type from webhook", zap.String("file", aListFile.Name))
+		return nil // Not an error, just skipping.
+	}
+
+	if !success {
+		return fmt.Errorf("failed to process file from webhook '%s': %s", event.SourceFile, errorMessage)
+	}
+
+	s.logger.Info("Successfully processed file from webhook", zap.String("file", event.SourceFile))
+	return nil
+}
+
+// ProcessFileDeleteEvent handles a file deletion event from a webhook.
+func (s *StrmGeneratorService) ProcessFileDeleteEvent(taskInfo *task.Task, sourceFilePath string) error {
+	s.logger.Info("Processing file delete event from webhook",
+		zap.String("task", taskInfo.Name),
+		zap.String("sourceFile", sourceFilePath),
+	)
+
+	// 1. Calculate the expected target path for the deleted file.
+	sourceFileNormalized := strings.ReplaceAll(sourceFilePath, "\\", "/")
+	taskSourcePathNormalized := strings.ReplaceAll(taskInfo.SourcePath, "\\", "/")
+
+	// Ensure the file is actually within the task's path
+	if !strings.HasPrefix(sourceFileNormalized, taskSourcePathNormalized) {
+		s.logger.Debug("Skipping delete event because file is not within task source path",
+			zap.String("sourceFile", sourceFilePath),
+			zap.String("taskSourcePath", taskInfo.SourcePath))
+		return nil
+	}
+
+	relativePath := strings.TrimPrefix(sourceFileNormalized, taskSourcePathNormalized)
+	relativePath = strings.TrimPrefix(relativePath, "/")
+
+	// This is the path where the media file would have been, which we use to find siblings.
+	targetMediaFilePath := filepath.Join(taskInfo.TargetPath, relativePath)
+	targetDir := filepath.Dir(targetMediaFilePath)
+
+	// 2. Find all related files in the target directory to delete.
+	// This includes the .strm file, .nfo, subtitles, etc.
+	baseName := strings.TrimSuffix(filepath.Base(targetMediaFilePath), filepath.Ext(targetMediaFilePath))
+	filesToDelete, err := filepath.Glob(filepath.Join(targetDir, baseName+".*"))
+	if err != nil {
+		s.logger.Error("Error finding related files to delete via glob", zap.Error(err), zap.String("pattern", filepath.Join(targetDir, baseName+".*")))
+		// Don't return, try to construct strm path manually.
+	}
+
+	// 3. Manually construct the .strm file path to ensure it's on the list.
+	strmConfig, err := s.loadStrmConfig()
+	if err != nil {
+		s.logger.Warn("Could not load strm config for delete event, .strm file might be missed if glob failed", zap.Error(err))
+	} else {
+		var strmFileName string
+		originalFileName := filepath.Base(sourceFilePath)
+		if strmConfig.ReplaceSuffix {
+			nameWithoutExt := strings.TrimSuffix(originalFileName, filepath.Ext(originalFileName))
+			strmFileName = nameWithoutExt + ".strm"
+		} else {
+			strmFileName = originalFileName + ".strm"
+		}
+		strmFilePath := filepath.Join(targetDir, strmFileName)
+
+		// Add to list if not already present
+		found := false
+		for _, f := range filesToDelete {
+			if f == strmFilePath {
+				found = true
+				break
+			}
+		}
+		if !found {
+			filesToDelete = append(filesToDelete, strmFilePath)
+		}
+	}
+
+	if len(filesToDelete) == 0 {
+		s.logger.Info("No corresponding target files found to delete.", zap.String("sourceFile", sourceFilePath))
+		return nil
+	}
+
+	// 4. Delete the files.
+	var lastErr error
+	for _, fileToDel := range filesToDelete {
+		if _, err := os.Stat(fileToDel); err == nil {
+			if err := os.Remove(fileToDel); err != nil {
+				s.logger.Error("Failed to delete target file",
+					zap.String("file", fileToDel),
+					zap.Error(err),
+				)
+				lastErr = err // Keep track of the last error
+			} else {
+				s.logger.Info("Successfully deleted target file", zap.String("file", fileToDel))
+			}
+		}
+	}
+
+	return lastErr
+}
+
+// ProcessFileRenameEvent handles a file rename/move event from a webhook.
+func (s *StrmGeneratorService) ProcessFileRenameEvent(taskInfo *task.Task, event *webhook.FileChangeEvent) error {
+	s.logger.Info("Processing file rename/move event from webhook",
+		zap.String("task", taskInfo.Name),
+		zap.String("from", event.SourceFile),
+		zap.String("to", event.DestinationFile),
+	)
+
+	// 1. Delete the old file(s) based on the source path
+	if err := s.ProcessFileDeleteEvent(taskInfo, event.SourceFile); err != nil {
+		// Log error but continue, as the source might not have been a strm file.
+		s.logger.Warn("Error during delete part of rename event", zap.Error(err), zap.String("source", event.SourceFile))
+	}
+
+	// 2. Create the new file(s) based on the destination path
+	// We can treat the destination file as a new creation event.
+	createEvent := &webhook.FileChangeEvent{
+		Action:     "create",
+		IsDir:      event.IsDir,
+		SourceFile: event.DestinationFile,
+	}
+	if err := s.ProcessFileChangeEvent(taskInfo, createEvent); err != nil {
+		return fmt.Errorf("error during create part of rename event for '%s': %w", event.DestinationFile, err)
+	}
+
+	return nil
 }
 
 // IsInitialized 检查服务是否已初始化
@@ -405,12 +612,67 @@ type FileEntry struct {
 
 // processDirectory 方法已被重构，使用了新的任务队列设计
 
+// listFiles 根据任务配置类型获取文件列表
+func (s *StrmGeneratorService) listFiles(taskInfo *task.Task, path string) ([]AListFile, error) {
+	switch taskInfo.ConfigType {
+	case "alist":
+		if s.alistService == nil {
+			return nil, fmt.Errorf("AList service is not initialized")
+		}
+		return s.alistService.ListFiles(path)
+	case "local":
+		return s.listLocalFiles(path)
+	case "clouddrive":
+		if s.cloudDriveService == nil {
+			return nil, fmt.Errorf("CloudDrive service is not initialized")
+		}
+		return s.cloudDriveService.ListFiles(path)
+	default:
+		return nil, fmt.Errorf("unsupported ConfigType: %s", taskInfo.ConfigType)
+	}
+}
+
+// listLocalFiles 从本地文件系统读取文件列表
+func (s *StrmGeneratorService) listLocalFiles(path string) ([]AListFile, error) {
+	dirEntries, err := os.ReadDir(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read local directory %s: %w", path, err)
+	}
+
+	var files []AListFile
+	for _, entry := range dirEntries {
+		info, err := entry.Info()
+		if err != nil {
+			// 记录错误但继续处理其他文件
+			s.logger.Warn("Failed to get file info for entry, skipping", zap.String("entry", entry.Name()), zap.Error(err))
+			continue
+		}
+
+		// 将 os.FileInfo 转换为 AListFile 结构
+		file := AListFile{
+			Name:     info.Name(),
+			Size:     info.Size(),
+			IsDir:    info.IsDir(),
+			Modified: info.ModTime(),
+			// 以下字段对于本地文件可能不适用，使用零值
+			Sign:  "",
+			Thumb: "",
+			Type:  0,
+			HashInfo: struct {
+				Sha1 string `json:"sha1"`
+			}{},
+		}
+		files = append(files, file)
+	}
+	return files, nil
+}
+
 // scanDirectoryRecursive 递归扫描目录，只收集文件信息，不进行处理
 func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmConfig *StrmConfig,
 	taskLogID uint, sourcePath, targetPath string) error {
 
-	// 获取当前目录的文件列表
-	files, err := s.alistService.ListFiles(sourcePath)
+	// 根据任务类型获取当前目录的文件列表
+	files, err := s.listFiles(taskInfo, sourcePath)
 	if err != nil {
 		return fmt.Errorf("获取目录文件列表失败 [%s]: %w", sourcePath, err)
 	}
@@ -472,6 +734,11 @@ func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmC
 				s.stats.Mutex.Lock()
 				s.stats.SkipFile++
 				s.stats.Mutex.Unlock()
+				s.logger.Debug("跳过不满足大小要求的媒体文件",
+					zap.String("fileName", file.Name),
+					zap.String("path", sourcePath),
+					zap.Int64("fileSize", file.Size),
+					zap.Int64("minSize", strmConfig.MinFileSize*1024*1024))
 			}
 		case FileTypeSubtitle:
 			subtitleFileEntries = append(subtitleFileEntries, entry)
@@ -740,35 +1007,65 @@ func getFileTypeString(fileType FileType) string {
 
 // generateStrmFile 生成 STRM 文件，返回成功状态、错误消息和STRM文件路径
 func (s *StrmGeneratorService) generateStrmFile(file *AListFile, strmConfig *StrmConfig, taskConfig *task.Task, sourcePath, targetPath string) (bool, string, string) {
-	// 处理路径和文件名的 URL 编码
-	dirPath := filepath.Dir(sourcePath)
-	fileName := file.Name
+	var fileURL string
 
-	// 根据 URLEncode 配置决定是否需要对路径进行编码
-	if strmConfig.URLEncode {
-		// 将路径分割为各个部分，对每部分进行单独编码，然后重新连接
-		// 这与 Node.js 版本的处理方式相同: path.split('/').map(encodeURIComponent).join('/')
-		pathParts := strings.Split(dirPath, "/")
-		for i, part := range pathParts {
-			pathParts[i] = url.PathEscape(part)
+	// 根据任务类型构建不同的URL
+	switch taskConfig.ConfigType {
+	case "alist":
+		// 处理路径和文件名的 URL 编码
+		dirPath := filepath.Dir(sourcePath)
+		fileName := file.Name
+
+		// 根据 URLEncode 配置决定是否需要对路径进行编码
+		if strmConfig.URLEncode {
+			dirPath = strings.ReplaceAll(dirPath, "\\", "/")
+			pathParts := strings.Split(dirPath, "/")
+			for i, part := range pathParts {
+				pathParts[i] = url.PathEscape(part)
+			}
+			dirPath = strings.Join(pathParts, "/")
+			fileName = url.PathEscape(fileName)
+			s.logger.Debug("进行了URL编码",
+				zap.String("原路径", filepath.Dir(sourcePath)),
+				zap.String("编码后路径", dirPath),
+				zap.String("原文件名", file.Name),
+				zap.String("编码后文件名", fileName))
 		}
-		dirPath = strings.Join(pathParts, "/")
 
-		// 同样处理文件名
-		fileName = url.PathEscape(fileName)
+		if taskConfig.ConfigType == "alist" {
+			fileURL = s.alistService.GetFileURL(dirPath, fileName, file.Sign)
+		}
+	case "clouddrive":
+		// 处理路径和文件名的 URL 编码
+		dirPath := filepath.Dir(sourcePath)
+		fileName := file.Name
 
-		s.logger.Debug("进行了URL编码",
-			zap.String("原路径", filepath.Dir(sourcePath)),
-			zap.String("编码后路径", dirPath),
-			zap.String("原文件名", file.Name),
-			zap.String("编码后文件名", fileName))
+		// 根据 URLEncode 配置决定是否需要对路径进行编码
+		if strmConfig.URLEncode {
+			dirPath = strings.ReplaceAll(dirPath, "\\", "/")
+			pathParts := strings.Split(dirPath, "/")
+			for i, part := range pathParts {
+				pathParts[i] = url.PathEscape(part)
+			}
+			dirPath = strings.Join(pathParts, "/")
+			fileName = url.PathEscape(fileName)
+			s.logger.Debug("进行了URL编码",
+				zap.String("原路径", filepath.Dir(sourcePath)),
+				zap.String("编码后路径", dirPath),
+				zap.String("原文件名", file.Name),
+				zap.String("编码后文件名", fileName))
+		}
+
+		fileURL = s.cloudDriveService.GetFileURL(dirPath, fileName, file.Sign)
+	case "local":
+		// 本地文件直接使用源路径
+		fileURL = sourcePath
+	default:
+		return false, fmt.Sprintf("不支持的 ConfigType 用于生成 STRM URL: %s", taskConfig.ConfigType), ""
 	}
 
-	// 构建 STRM 文件内容 - 直接使用 AListFile 中的信息，避免多余的 API 调用
-	// 注意：GetFileURL 方法不会发起额外的 API 请求，仅使用配置和参数构建 URL
-	fileURL := s.alistService.GetFileURL(dirPath, fileName, file.Sign)
 	if fileURL == "" {
-		return false, "无法生成文件URL，请检查 AList 配置是否完整", ""
+		return false, fmt.Sprintf("无法为类型 %s 生成文件URL，请检查相关配置是否完整", taskConfig.ConfigType), ""
 	}
 
 	// 生成 STRM 文件名
@@ -816,6 +1113,32 @@ func (s *StrmGeneratorService) downloadFile(file *AListFile, sourcePath, targetP
 		return false, fmt.Sprintf("创建目标目录失败: %v", err)
 	}
 
+	// 对于本地文件，执行文件复制
+	if taskConfig.ConfigType == "local" {
+		in, err := os.Open(sourcePath)
+		if err != nil {
+			return false, fmt.Sprintf("打开源文件失败: %v", err)
+		}
+		defer in.Close()
+
+		out, err := os.Create(targetPath)
+		if err != nil {
+			return false, fmt.Sprintf("创建目标文件失败: %v", err)
+		}
+		defer out.Close()
+
+		_, err = io.Copy(out, in)
+		if err != nil {
+			return false, fmt.Sprintf("复制文件失败: %v", err)
+		}
+		s.logger.Info("复制本地文件成功",
+			zap.String("sourceFile", sourcePath),
+			zap.String("targetPath", targetPath))
+		return true, ""
+	}
+
+	// --- 对于远程文件 (alist, clouddrive)，执行下载 ---
+
 	// 获取 STRM 配置以检查是否需要 URL 编码
 	strmConfig, err := s.loadStrmConfig()
 	if err != nil {
@@ -829,6 +1152,7 @@ func (s *StrmGeneratorService) downloadFile(file *AListFile, sourcePath, targetP
 	// 根据 URLEncode 配置决定是否需要对路径进行编码
 	if strmConfig.URLEncode {
 		// 对路径各部分单独编码
+		dirPath = strings.ReplaceAll(dirPath, "\\", "/")
 		pathParts := strings.Split(dirPath, "/")
 		for i, part := range pathParts {
 			pathParts[i] = url.PathEscape(part)
@@ -839,11 +1163,18 @@ func (s *StrmGeneratorService) downloadFile(file *AListFile, sourcePath, targetP
 		fileName = url.PathEscape(fileName)
 	}
 
-	// 直接使用 AListFile 中的信息构建文件 URL，不需要额外的 API 调用
-	// 注意：GetFileURL 方法不会发起额外的 API 请求，仅使用配置和参数构建 URL
-	fileURL := s.alistService.GetFileURL(dirPath, fileName, file.Sign)
+	var fileURL string
+	switch taskConfig.ConfigType {
+	case "alist":
+		fileURL = s.alistService.GetFileURL(dirPath, fileName, file.Sign)
+	case "clouddrive":
+		fileURL = s.cloudDriveService.GetFileURL(dirPath, fileName, file.Sign)
+	default:
+		return false, fmt.Sprintf("不支持的 ConfigType 用于下载: %s", taskConfig.ConfigType)
+	}
+
 	if fileURL == "" {
-		return false, "无法生成文件下载URL，请检查 AList 配置是否完整"
+		return false, fmt.Sprintf("无法为类型 %s 生成文件下载URL，请检查相关配置", taskConfig.ConfigType)
 	}
 
 	// 实现 HTTP 下载逻辑

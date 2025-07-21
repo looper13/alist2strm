@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { authAPI } from '~/api/auth'
 import { useAuth } from '~/composables/auth'
+
 defineProps<{
   show: boolean
 }>()
@@ -80,7 +81,7 @@ async function handleSubmit() {
       params.nickname = formValue.value.nickname
     if (formValue.value.newPassword) {
       params.oldPassword = formValue.value.oldPassword
-      params.password = formValue.value.newPassword
+      params.newPassword = formValue.value.newPassword
     }
 
     // 如果没有任何修改，直接关闭

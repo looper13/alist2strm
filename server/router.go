@@ -15,6 +15,10 @@ func SetupRoutes() *gin.Engine {
 	r.Use(middleware.AccessLogger()) // 访问日志中间件
 	r.Use(gin.Recovery())            // 错误恢复中间件
 
+	// 注册 POST 路由
+	r.POST("/file_notify", controller.Webhook.FileNotifyHandler)
+	r.POST("/mount_notify", controller.Webhook.MountNotifyHandler)
+
 	// API 路由组
 	api := r.Group("/api")
 	{
@@ -96,7 +100,6 @@ func SetupRoutes() *gin.Engine {
 			{
 				alist.POST("/test", controller.AList.TestConnection) // 测试AList连接
 			}
-
 			// Emby 相关需认证路由
 			emby := auth.Group("/emby")
 			{

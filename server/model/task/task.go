@@ -20,7 +20,8 @@ type Task struct {
 	CreatedAt          time.Time  `json:"createdAt"`
 	UpdatedAt          time.Time  `json:"updatedAt"`
 	Name               string     `json:"name" gorm:"type:VARCHAR(255);not null" validate:"required"`
-	MediaType          string     `json:"mediaType" gorm:"type:VARCHAR(50);not null;default:movie"` // 媒体类型：movie/tv
+	MediaType          string     `json:"mediaType" gorm:"type:VARCHAR(50);not null;default:movie"`  // 媒体类型：movie/tv
+	ConfigType         string     `json:"configType" gorm:"type:VARCHAR(10);not null;default:alist"` // 配置类型：alist/cloudrive/local
 	SourcePath         string     `json:"sourcePath" gorm:"type:VARCHAR(255);not null" validate:"required"`
 	TargetPath         string     `json:"targetPath" gorm:"type:VARCHAR(255);not null" validate:"required"`
 	FileSuffix         string     `json:"fileSuffix" gorm:"type:VARCHAR(255);not null" validate:"required"`
