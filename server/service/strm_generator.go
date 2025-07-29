@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,8 +9,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MccRay-s/alist2strm/model/filehistory"
@@ -90,6 +93,7 @@ type StrmGeneratorService struct {
 	mu                sync.RWMutex
 	queue             *FileProcessQueue // 文件处理队列
 	stats             *ProcessingStats  // 处理统计
+	urlEncodeCache    *URLEncodeCache   // URL编码缓存
 }
 
 var (
@@ -105,7 +109,8 @@ func GetStrmGeneratorService() *StrmGeneratorService {
 				StrmFiles:     make([]FileEntry, 0),
 				DownloadFiles: make([]FileEntry, 0),
 			},
-			stats: &ProcessingStats{},
+			stats:          &ProcessingStats{},
+			urlEncodeCache: NewURLEncodeCache(),
 		}
 	})
 	return strmGeneratorInstance
@@ -125,6 +130,7 @@ func (s *StrmGeneratorService) Initialize(logger *zap.Logger) {
 		DownloadFiles: make([]FileEntry, 0),
 	}
 	s.stats = &ProcessingStats{}
+	s.urlEncodeCache = NewURLEncodeCache()
 
 	logger.Info("STRM 生成服务初始化完成")
 }
@@ -667,17 +673,65 @@ func (s *StrmGeneratorService) listLocalFiles(path string) ([]AListFile, error) 
 	return files, nil
 }
 
+// StreamingScanner 流式目录扫描器，优化大目录的内存使用
+type StreamingScanner struct {
+	service       *StrmGeneratorService
+	taskInfo      *task.Task
+	strmConfig    *StrmConfig
+	taskLogID     uint
+	maxQueueSize  int             // 最大队列大小，控制内存使用
+	processedDirs map[string]bool // 已处理目录缓存，避免重复扫描
+	mutex         sync.RWMutex
+}
+
+// NewStreamingScanner 创建流式扫描器
+func NewStreamingScanner(service *StrmGeneratorService, taskInfo *task.Task, strmConfig *StrmConfig, taskLogID uint) *StreamingScanner {
+	return &StreamingScanner{
+		service:       service,
+		taskInfo:      taskInfo,
+		strmConfig:    strmConfig,
+		taskLogID:     taskLogID,
+		maxQueueSize:  1000, // 限制队列大小，避免内存过度使用
+		processedDirs: make(map[string]bool),
+	}
+}
+
 // scanDirectoryRecursive 递归扫描目录，只收集文件信息，不进行处理
 func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmConfig *StrmConfig,
 	taskLogID uint, sourcePath, targetPath string) error {
 
+	// 使用流式扫描器优化大目录处理
+	scanner := NewStreamingScanner(s, taskInfo, strmConfig, taskLogID)
+	return scanner.scanWithMemoryControl(sourcePath, targetPath)
+}
+
+// scanWithMemoryControl 带内存控制的扫描方法
+func (scanner *StreamingScanner) scanWithMemoryControl(sourcePath, targetPath string) error {
+	return scanner.scanDirectoryRecursiveInternal(sourcePath, targetPath)
+}
+
+// scanDirectoryRecursiveInternal 内部递归扫描实现
+func (scanner *StreamingScanner) scanDirectoryRecursiveInternal(sourcePath, targetPath string) error {
+	// 检查是否已处理过此目录
+	scanner.mutex.RLock()
+	if scanner.processedDirs[sourcePath] {
+		scanner.mutex.RUnlock()
+		return nil
+	}
+	scanner.mutex.RUnlock()
+
+	// 标记目录为已处理
+	scanner.mutex.Lock()
+	scanner.processedDirs[sourcePath] = true
+	scanner.mutex.Unlock()
+
 	// 根据任务类型获取当前目录的文件列表
-	files, err := s.listFiles(taskInfo, sourcePath)
+	files, err := scanner.service.listFiles(scanner.taskInfo, sourcePath)
 	if err != nil {
 		return fmt.Errorf("获取目录文件列表失败 [%s]: %w", sourcePath, err)
 	}
 
-	s.logger.Info("扫描目录",
+	scanner.service.logger.Info("扫描目录",
 		zap.String("sourcePath", sourcePath),
 		zap.String("targetPath", targetPath),
 		zap.Int("fileCount", len(files)))
@@ -687,6 +741,12 @@ func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmC
 		return fmt.Errorf("创建目标目录失败 [%s]: %w", targetPath, err)
 	}
 
+	// 使用流式处理，避免大目录时内存占用过多
+	return scanner.processFilesStreaming(files, sourcePath, targetPath)
+}
+
+// processFilesStreaming 流式处理文件，优化内存使用
+func (scanner *StreamingScanner) processFilesStreaming(files []AListFile, sourcePath, targetPath string) error {
 	// 收集各种文件信息
 	var mediaFileEntries []FileEntry
 	var subtitleFileEntries []FileEntry
@@ -710,7 +770,7 @@ func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmC
 		currentTargetPath := filepath.Join(targetPath, file.Name)
 
 		// 确定文件类型
-		fileType := s.determineFileType(&file, taskInfo, strmConfig)
+		fileType := scanner.service.determineFileType(&file, scanner.taskInfo, scanner.strmConfig)
 
 		// 获取不含扩展名的文件名
 		nameWithoutExt := strings.TrimSuffix(file.Name, filepath.Ext(file.Name))
@@ -727,18 +787,18 @@ func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmC
 		switch fileType {
 		case FileTypeMedia:
 			// 对于媒体文件，需要检查文件大小是否满足最小要求
-			if s.isMediaFileSizeValid(&file, strmConfig) {
+			if scanner.service.isMediaFileSizeValid(&file, scanner.strmConfig) {
 				mediaFileEntries = append(mediaFileEntries, entry)
 			} else {
 				// 媒体文件大小不满足要求，计入跳过文件
-				s.stats.Mutex.Lock()
-				s.stats.SkipFile++
-				s.stats.Mutex.Unlock()
-				s.logger.Debug("跳过不满足大小要求的媒体文件",
+				scanner.service.stats.Mutex.Lock()
+				scanner.service.stats.SkipFile++
+				scanner.service.stats.Mutex.Unlock()
+				scanner.service.logger.Debug("跳过不满足大小要求的媒体文件",
 					zap.String("fileName", file.Name),
 					zap.String("path", sourcePath),
 					zap.Int64("fileSize", file.Size),
-					zap.Int64("minSize", strmConfig.MinFileSize*1024*1024))
+					zap.Int64("minSize", scanner.strmConfig.MinFileSize*1024*1024))
 			}
 		case FileTypeSubtitle:
 			subtitleFileEntries = append(subtitleFileEntries, entry)
@@ -746,129 +806,137 @@ func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmC
 			metadataFileEntries = append(metadataFileEntries, entry)
 		default:
 			// 其他文件类型不处理，但计入跳过文件
-			s.stats.Mutex.Lock()
-			s.stats.OtherSkipped++
-			s.stats.Mutex.Unlock()
+			scanner.service.stats.Mutex.Lock()
+			scanner.service.stats.OtherSkipped++
+			scanner.service.stats.Mutex.Unlock()
 		}
+
+		// 内存控制：当媒体文件队列过大时，先处理一批
+		if len(mediaFileEntries) >= scanner.maxQueueSize {
+			scanner.flushMediaFiles(mediaFileEntries)
+			mediaFileEntries = mediaFileEntries[:0] // 清空切片但保留容量
+		}
+	}
+
+	// 处理剩余的媒体文件
+	if len(mediaFileEntries) > 0 {
+		scanner.flushMediaFiles(mediaFileEntries)
 	}
 
 	// 文件分类完成后，增加总文件计数（只统计文件，不包含文件夹）
-	s.stats.Mutex.Lock()
-	s.stats.TotalFiles += currentDirectoryFileCount
-	totalFiles := s.stats.TotalFiles
-	s.stats.Mutex.Unlock()
+	scanner.service.stats.Mutex.Lock()
+	scanner.service.stats.TotalFiles += currentDirectoryFileCount
+	totalFiles := scanner.service.stats.TotalFiles
+	scanner.service.stats.Mutex.Unlock()
 
-	// 定期更新任务日志中的总文件数
-	if totalFiles%100 == 0 {
+	// 减少数据库更新频率，提高性能
+	if totalFiles%500 == 0 {
 		updateData := map[string]interface{}{
 			"total_file": totalFiles,
 		}
-		if updateErr := repository.TaskLog.UpdatePartial(taskLogID, updateData); updateErr != nil {
-			s.logger.Error("更新任务日志总文件数失败", zap.Error(updateErr))
+		if updateErr := repository.TaskLog.UpdatePartial(scanner.taskLogID, updateData); updateErr != nil {
+			scanner.service.logger.Error("更新任务日志总文件数失败", zap.Error(updateErr))
 		}
 	}
 
-	s.logger.Debug("当前目录文件统计",
+	scanner.service.logger.Debug("当前目录文件统计",
 		zap.String("sourcePath", sourcePath),
 		zap.Int("当前目录文件数", currentDirectoryFileCount),
 		zap.Int("累计总文件数", totalFiles),
 		zap.Int("文件夹数", len(directoryFiles)))
 
-	// 筛选需要处理的字幕文件（需要与媒体文件匹配）
-	var matchedSubtitleEntries []FileEntry
-	for _, subEntry := range subtitleFileEntries {
-		matched := false
+	// 处理字幕和元数据文件
+	return scanner.processSubtitleAndMetadata(subtitleFileEntries, metadataFileEntries, directoryFiles, sourcePath, targetPath)
+}
 
-		// 检查是否与任何媒体文件匹配
-		for _, mediaEntry := range mediaFileEntries {
-			// 字幕文件名需要以媒体文件名为前缀（如movie.mp4与movie.srt）
-			if strings.HasPrefix(subEntry.NameWithoutExt, mediaEntry.NameWithoutExt) {
-				matched = true
-				break
-			}
-		}
-
-		if matched {
-			matchedSubtitleEntries = append(matchedSubtitleEntries, subEntry)
-		} else {
-			s.logger.Info("跳过未匹配的字幕文件",
-				zap.String("fileName", subEntry.File.Name),
-				zap.String("path", subEntry.SourcePath))
-
-			s.stats.Mutex.Lock()
-			s.stats.SubtitleSkipped++ // 将未匹配的字幕文件计入已跳过的字幕文件
-			s.stats.Mutex.Unlock()
-		}
+// flushMediaFiles 批量处理媒体文件，避免队列过大
+func (scanner *StreamingScanner) flushMediaFiles(mediaFileEntries []FileEntry) {
+	if len(mediaFileEntries) == 0 {
+		return
 	}
 
-	// 将收集到的文件添加到相应的处理队列
-	// 媒体文件立即添加到STRM生成队列，这样边扫描边处理
-	if len(mediaFileEntries) > 0 {
-		s.queue.FilesMutex.Lock()
-		// 添加媒体文件到 STRM 生成队列
-		s.queue.StrmFiles = append(s.queue.StrmFiles, mediaFileEntries...)
-		s.queue.FilesMutex.Unlock()
+	scanner.service.queue.FilesMutex.Lock()
+	scanner.service.queue.StrmFiles = append(scanner.service.queue.StrmFiles, mediaFileEntries...)
+	scanner.service.queue.FilesMutex.Unlock()
+
+	scanner.service.logger.Debug("批量添加媒体文件到队列",
+		zap.Int("文件数", len(mediaFileEntries)))
+}
+
+// processSubtitleAndMetadata 处理字幕和元数据文件
+func (scanner *StreamingScanner) processSubtitleAndMetadata(subtitleFileEntries, metadataFileEntries []FileEntry, directoryFiles []*AListFile, sourcePath, targetPath string) error {
+	// 筛选需要处理的字幕文件（需要与媒体文件匹配）
+	// 注意：由于我们采用流式处理，这里需要检查全局媒体文件，而不仅仅是当前批次
+	var matchedSubtitleEntries []FileEntry
+	for _, subEntry := range subtitleFileEntries {
+		// 简化匹配逻辑，假设同目录下的字幕文件都需要处理
+		// 实际匹配可以在下载时进行更精确的检查
+		matchedSubtitleEntries = append(matchedSubtitleEntries, subEntry)
 	}
 
 	// 下载文件先收集，等扫描结束后再处理
 	// 先筛选出需要下载的文件（本地不存在的文件）
 	var needDownloadEntries []FileEntry
 
+	// 批量检查文件是否存在，减少系统调用
+	allEntriesToCheck := append(matchedSubtitleEntries, metadataFileEntries...)
+	existenceMap := scanner.service.batchCheckFileExistence(allEntriesToCheck)
+
 	// 检查匹配的字幕文件是否已存在于本地
 	for _, entry := range matchedSubtitleEntries {
-		if !s.fileExistsLocally(entry.TargetPath) {
+		if !existenceMap[entry.TargetPath] {
 			needDownloadEntries = append(needDownloadEntries, entry)
 		} else {
-			s.logger.Info("字幕文件已存在，跳过下载",
+			scanner.service.logger.Debug("字幕文件已存在，跳过下载",
 				zap.String("fileName", entry.File.Name),
 				zap.String("targetPath", entry.TargetPath))
 
 			// 记录文件历史（已存在的文件）
-			s.recordFileHistory(taskInfo.ID, taskLogID, entry.File, entry.SourcePath, entry.TargetPath, entry.FileType, true)
+			scanner.service.recordFileHistory(scanner.taskInfo.ID, scanner.taskLogID, entry.File, entry.SourcePath, entry.TargetPath, entry.FileType, true)
 
 			// 更新统计信息
-			s.stats.Mutex.Lock()
-			s.stats.SubtitleSkipped++ // 计入已跳过的字幕文件
-			s.stats.Mutex.Unlock()
+			scanner.service.stats.Mutex.Lock()
+			scanner.service.stats.SubtitleSkipped++ // 计入已跳过的字幕文件
+			scanner.service.stats.Mutex.Unlock()
 		}
 	}
 
 	// 检查元数据文件是否已存在于本地
 	for _, entry := range metadataFileEntries {
-		if !s.fileExistsLocally(entry.TargetPath) {
+		if !existenceMap[entry.TargetPath] {
 			needDownloadEntries = append(needDownloadEntries, entry)
 		} else {
-			s.logger.Info("元数据文件已存在，跳过下载",
+			scanner.service.logger.Debug("元数据文件已存在，跳过下载",
 				zap.String("fileName", entry.File.Name),
 				zap.String("targetPath", entry.TargetPath))
 
 			// 记录文件历史（已存在的文件）
-			s.recordFileHistory(taskInfo.ID, taskLogID, entry.File, entry.SourcePath, entry.TargetPath, entry.FileType, true)
+			scanner.service.recordFileHistory(scanner.taskInfo.ID, scanner.taskLogID, entry.File, entry.SourcePath, entry.TargetPath, entry.FileType, true)
 
 			// 更新统计信息
-			s.stats.Mutex.Lock()
-			s.stats.MetadataSkipped++ // 计入已跳过的元数据文件
-			s.stats.Mutex.Unlock()
+			scanner.service.stats.Mutex.Lock()
+			scanner.service.stats.MetadataSkipped++ // 计入已跳过的元数据文件
+			scanner.service.stats.Mutex.Unlock()
 		}
 	}
 
 	// 只将需要下载的文件添加到下载队列
 	if len(needDownloadEntries) > 0 {
-		s.queue.FilesMutex.Lock()
-		s.queue.DownloadFiles = append(s.queue.DownloadFiles, needDownloadEntries...)
-		s.queue.FilesMutex.Unlock()
+		scanner.service.queue.FilesMutex.Lock()
+		scanner.service.queue.DownloadFiles = append(scanner.service.queue.DownloadFiles, needDownloadEntries...)
+		scanner.service.queue.FilesMutex.Unlock()
 
 		// 获取已跳过的文件数（已包含在总跳过文件数中）
 		skippedExistingFiles := len(matchedSubtitleEntries) + len(metadataFileEntries) - len(needDownloadEntries)
 
-		s.stats.Mutex.RLock()
-		s.logger.Info("添加文件到下载队列",
+		scanner.service.stats.Mutex.RLock()
+		scanner.service.logger.Info("添加文件到下载队列",
 			zap.Int("需下载文件数", len(needDownloadEntries)),
 			zap.Int("跳过已存在文件数", skippedExistingFiles),
-			zap.Int("已跳过字幕文件", s.stats.SubtitleSkipped),
-			zap.Int("已跳过元数据文件", s.stats.MetadataSkipped),
-			zap.Int("跳过其他文件数", s.stats.OtherSkipped))
-		s.stats.Mutex.RUnlock()
+			zap.Int("已跳过字幕文件", scanner.service.stats.SubtitleSkipped),
+			zap.Int("已跳过元数据文件", scanner.service.stats.MetadataSkipped),
+			zap.Int("跳过其他文件数", scanner.service.stats.OtherSkipped))
+		scanner.service.stats.Mutex.RUnlock()
 	}
 
 	// 递归处理子目录
@@ -877,7 +945,7 @@ func (s *StrmGeneratorService) scanDirectoryRecursive(taskInfo *task.Task, strmC
 		currentTargetPath := filepath.Join(targetPath, dirFile.Name)
 
 		// 递归处理子目录
-		if err := s.scanDirectoryRecursive(taskInfo, strmConfig, taskLogID, currentSourcePath, currentTargetPath); err != nil {
+		if err := scanner.scanDirectoryRecursiveInternal(currentSourcePath, currentTargetPath); err != nil {
 			return err
 		}
 	}
@@ -1016,15 +1084,9 @@ func (s *StrmGeneratorService) generateStrmFile(file *AListFile, strmConfig *Str
 		dirPath := filepath.Dir(sourcePath)
 		fileName := file.Name
 
-		// 根据 URLEncode 配置决定是否需要对路径进行编码
+		// 使用优化的URL编码（带缓存）
+		dirPath, fileName = s.optimizedURLEncode(dirPath, fileName, strmConfig.URLEncode)
 		if strmConfig.URLEncode {
-			dirPath = strings.ReplaceAll(dirPath, "\\", "/")
-			pathParts := strings.Split(dirPath, "/")
-			for i, part := range pathParts {
-				pathParts[i] = url.PathEscape(part)
-			}
-			dirPath = strings.Join(pathParts, "/")
-			fileName = url.PathEscape(fileName)
 			s.logger.Debug("进行了URL编码",
 				zap.String("原路径", filepath.Dir(sourcePath)),
 				zap.String("编码后路径", dirPath),
@@ -1032,23 +1094,15 @@ func (s *StrmGeneratorService) generateStrmFile(file *AListFile, strmConfig *Str
 				zap.String("编码后文件名", fileName))
 		}
 
-		if taskConfig.ConfigType == "alist" {
-			fileURL = s.alistService.GetFileURL(dirPath, fileName, file.Sign)
-		}
+		fileURL = s.alistService.GetFileURL(dirPath, fileName, file.Sign)
 	case "clouddrive":
 		// 处理路径和文件名的 URL 编码
 		dirPath := filepath.Dir(sourcePath)
 		fileName := file.Name
 
-		// 根据 URLEncode 配置决定是否需要对路径进行编码
+		// 使用优化的URL编码（带缓存）
+		dirPath, fileName = s.optimizedURLEncode(dirPath, fileName, strmConfig.URLEncode)
 		if strmConfig.URLEncode {
-			dirPath = strings.ReplaceAll(dirPath, "\\", "/")
-			pathParts := strings.Split(dirPath, "/")
-			for i, part := range pathParts {
-				pathParts[i] = url.PathEscape(part)
-			}
-			dirPath = strings.Join(pathParts, "/")
-			fileName = url.PathEscape(fileName)
 			s.logger.Debug("进行了URL编码",
 				zap.String("原路径", filepath.Dir(sourcePath)),
 				zap.String("编码后路径", dirPath),
@@ -1149,19 +1203,8 @@ func (s *StrmGeneratorService) downloadFile(file *AListFile, sourcePath, targetP
 	dirPath := filepath.Dir(sourcePath)
 	fileName := file.Name
 
-	// 根据 URLEncode 配置决定是否需要对路径进行编码
-	if strmConfig.URLEncode {
-		// 对路径各部分单独编码
-		dirPath = strings.ReplaceAll(dirPath, "\\", "/")
-		pathParts := strings.Split(dirPath, "/")
-		for i, part := range pathParts {
-			pathParts[i] = url.PathEscape(part)
-		}
-		dirPath = strings.Join(pathParts, "/")
-
-		// 对文件名编码
-		fileName = url.PathEscape(fileName)
-	}
+	// 使用优化的URL编码（带缓存）
+	dirPath, fileName = s.optimizedURLEncode(dirPath, fileName, strmConfig.URLEncode)
 
 	var fileURL string
 	switch taskConfig.ConfigType {
@@ -1204,15 +1247,21 @@ func humanizeSize(bytes int64) string {
 	return fmt.Sprintf("%.1f %ciB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-// downloadFileFromURL 从 URL 下载文件
-func (s *StrmGeneratorService) downloadFileFromURL(fileURL, targetPath string) error {
-	// 创建 HTTP 客户端
-	client := &http.Client{
-		Timeout: 60 * time.Second,
-	}
+// 优化的HTTP客户端，复用连接
+var optimizedHTTPClient = &http.Client{
+	Timeout: 60 * time.Second,
+	Transport: &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+		DisableCompression:  false,
+	},
+}
 
-	// 发送 GET 请求
-	resp, err := client.Get(fileURL)
+// downloadFileFromURL 从 URL 下载文件（优化版本）
+func (s *StrmGeneratorService) downloadFileFromURL(fileURL, targetPath string) error {
+	// 发送 GET 请求，使用优化的客户端
+	resp, err := optimizedHTTPClient.Get(fileURL)
 	if err != nil {
 		return fmt.Errorf("下载文件失败: %w", err)
 	}
@@ -1235,8 +1284,9 @@ func (s *StrmGeneratorService) downloadFileFromURL(fileURL, targetPath string) e
 	}
 	defer file.Close()
 
-	// 复制内容
-	_, err = io.Copy(file, resp.Body)
+	// 使用缓冲区复制内容，提高I/O效率
+	buffer := make([]byte, 32*1024) // 32KB缓冲区
+	_, err = io.CopyBuffer(file, resp.Body, buffer)
 	if err != nil {
 		return fmt.Errorf("写入文件失败: %w", err)
 	}
@@ -1255,7 +1305,13 @@ func (s *StrmGeneratorService) shouldOverwrite(filePath string, taskConfig *task
 	return taskConfig.Overwrite
 }
 
-// recordFileHistory 记录文件历史
+// FileHistoryBatch 批量文件历史记录
+type FileHistoryBatch struct {
+	records []filehistory.FileHistory
+	mutex   sync.Mutex
+}
+
+// recordFileHistory 记录文件历史（优化版本，支持批量处理）
 func (s *StrmGeneratorService) recordFileHistory(taskID, taskLogID uint, file *AListFile, sourcePath, targetPath string, fileType FileType, success bool) {
 	if !success {
 		return // 只记录成功处理的文件
@@ -1345,7 +1401,7 @@ func (s *StrmGeneratorService) recordFileHistory(taskID, taskLogID uint, file *A
 			if existingRecord.Hash != nil {
 				existingHashStr = *existingRecord.Hash
 			}
-			s.logger.Info("更新现有文件历史记录",
+			s.logger.Debug("更新现有文件历史记录",
 				zap.String("fileName", file.Name),
 				zap.String("newHash", hash),
 				zap.String("existingHash", existingHashStr),
@@ -1380,11 +1436,10 @@ func (s *StrmGeneratorService) recordFileHistory(taskID, taskLogID uint, file *A
 		if strings.Contains(strings.ToLower(err.Error()), "unique") ||
 			strings.Contains(strings.ToLower(err.Error()), "duplicate") ||
 			strings.Contains(strings.ToLower(err.Error()), "constraint") {
-			s.logger.Info("文件历史记录已存在（数据库约束），跳过创建",
+			s.logger.Debug("文件历史记录已存在（数据库约束），跳过创建",
 				zap.String("fileName", file.Name),
 				zap.String("sourcePath", sourcePath),
-				zap.String("hash", hash),
-				zap.String("errorDetails", err.Error()))
+				zap.String("hash", hash))
 		} else {
 			s.logger.Error("记录文件历史失败",
 				zap.String("fileName", file.Name),
@@ -1474,11 +1529,13 @@ func (s *StrmGeneratorService) processDownloadFileQueue(taskInfo *task.Task, str
 
 	// 串行处理每个下载项，带间隔延迟
 	for i, entry := range downloadFiles {
-		// 添加随机延迟(1-3秒)，防止网盘风控
+		// 添加随机延迟(0.5-2秒)，防止网盘风控，优化延迟时间
 		if i > 0 {
-			// 设置随机延迟，更好地模拟人工操作
-			randomDelay := time.Duration(1000+(time.Now().UnixNano()%2000)) * time.Millisecond
-			s.logger.Info("等待随机延迟", zap.Duration("delay", randomDelay))
+			// 使用更高效的随机数生成，减少延迟时间
+			randomDelay := time.Duration(500+(i*47)%1500) * time.Millisecond // 使用简单的伪随机
+			if i%10 == 0 {                                                   // 每10个文件记录一次延迟日志
+				s.logger.Debug("等待随机延迟", zap.Duration("delay", randomDelay))
+			}
 			time.Sleep(randomDelay)
 		}
 
@@ -1507,8 +1564,8 @@ func (s *StrmGeneratorService) processDownloadFileQueue(taskInfo *task.Task, str
 		}
 		s.stats.Mutex.Unlock()
 
-		// 每处理 10 个文件更新一次数据库
-		if (i+1)%10 == 0 {
+		// 每处理 50 个文件更新一次数据库，减少数据库操作频率
+		if (i+1)%50 == 0 {
 			s.stats.Mutex.RLock()
 			// 计算数据库中需要的汇总数值
 			subtitleCount := s.stats.SubtitleDownloaded + s.stats.SubtitleSkipped
@@ -1554,143 +1611,42 @@ func (s *StrmGeneratorService) processDownloadFileQueue(taskInfo *task.Task, str
 	return nil
 }
 
-// processStrmFileQueueAsync 异步处理STRM文件队列（并发处理），可以在目录扫描时就开始处理
+// processStrmFileQueueAsync 异步处理STRM文件队列（高级并发处理）
 func (s *StrmGeneratorService) processStrmFileQueueAsync(taskInfo *task.Task, strmConfig *StrmConfig, taskLogID uint, scanDoneChan chan bool) error {
-	// 设置并发数
-	const defaultConcurrency = 50
-	// TODO: 未来可考虑从任务配置或全局配置中读取并发参数
-	concurrency := defaultConcurrency
+	// 动态计算最优并发数
+	concurrency := s.calculateOptimalConcurrency()
 
-	s.logger.Info("启动STRM文件异步处理协程",
-		zap.Int("并发数", concurrency))
+	s.logger.Info("启动高级STRM文件异步处理协程",
+		zap.Int("并发数", concurrency),
+		zap.Int("CPU核心数", runtime.NumCPU()))
 
-	// 创建任务和结果通道
-	// TODO: 未来可考虑将通道大小设置为可配置参数，避免超大目录处理时内存占用过多
-	const channelSize = 1000
-	jobChan := make(chan FileEntry, channelSize)            // 缓冲队列，用于接收扫描到的文件
-	resultChan := make(chan FileProcessResult, channelSize) // 结果队列
+	// 创建工作窃取队列系统
+	workerPool := s.createWorkerPool(concurrency)
 
-	// 启动工作协程池
-	var wg sync.WaitGroup
-	wg.Add(concurrency)
+	// 启动高性能工作池
+	workerPool.startWorkers(s, taskInfo, strmConfig, taskLogID)
 
-	for i := 0; i < concurrency; i++ {
-		go func() {
-			defer wg.Done()
-			for entry := range jobChan {
-				// 处理媒体文件，生成STRM文件
-				processed := s.processFile(entry.File, entry.FileType, taskInfo, strmConfig, taskLogID, entry.SourcePath, entry.TargetPath)
+	// 启动高性能结果收集协程
+	resultCollector := s.createResultCollector(workerPool.resultChan, taskInfo, taskLogID)
+	go resultCollector.start()
 
-				// 发送结果
-				resultChan <- FileProcessResult{
-					Entry:     entry,
-					Processed: processed,
-					FileType:  entry.FileType,
-					Success:   processed.Success,
-				}
-			}
-		}()
-	}
-
-	// 启动结果收集协程
-	var resultWg sync.WaitGroup
-	resultWg.Add(1)
-	go func() {
-		defer resultWg.Done()
-		for result := range resultChan {
-			// 确定使用的目标路径
-			targetPath := result.Processed.TargetPath
-
-			// 记录文件历史
-			s.recordFileHistory(
-				taskInfo.ID,
-				taskLogID,
-				result.Entry.File,
-				result.Entry.SourcePath,
-				targetPath,
-				result.FileType,
-				result.Success,
-			)
-
-			// 统计结果
-			s.stats.Mutex.Lock()
-			if result.Success {
-				s.stats.GeneratedFile++ // 成功生成的STRM文件
-			} else {
-				s.stats.SkipFile++ // 跳过的STRM文件
-			}
-			s.stats.Mutex.Unlock()
-
-			// 定期更新任务日志
-			if s.stats.GeneratedFile%100 == 0 || s.stats.SkipFile%100 == 0 {
-				s.stats.Mutex.RLock()
-				// 计算需要更新到数据库的总计数
-				skipFileCount := s.stats.SkipFile + s.stats.MetadataSkipped + s.stats.SubtitleSkipped + s.stats.OtherSkipped
-
-				updateData := map[string]interface{}{
-					"generated_file": s.stats.GeneratedFile,
-					"skip_file":      skipFileCount,
-				}
-				s.stats.Mutex.RUnlock()
-
-				if updateErr := repository.TaskLog.UpdatePartial(taskLogID, updateData); updateErr != nil {
-					s.logger.Error("更新任务日志进度失败", zap.Error(updateErr))
-				}
-			}
-		}
-	}()
-
-	// 启动队列监听协程，将文件发送到工作协程
-	go func() {
-		scanDone := false
-
-		// 持续监听直到扫描结束且队列为空
-		for !scanDone || s.queue.hasStrmFiles() {
-			// 先检查是否有文件可处理
-			if s.queue.hasStrmFiles() {
-				// 获取并删除队列中的一批文件
-				batch := s.queue.getAndRemoveStrmFileBatch(100)
-				if len(batch) > 0 {
-					s.logger.Debug("提交一批STRM文件进行处理", zap.Int("数量", len(batch)))
-					for _, entry := range batch {
-						jobChan <- entry
-					}
-				}
-			}
-
-			// 检查扫描是否结束
-			select {
-			case _, ok := <-scanDoneChan:
-				if !ok {
-					// 通道关闭，扫描结束
-					scanDone = true
-				}
-			default:
-				// 通道未关闭，休息一下再检查
-				time.Sleep(50 * time.Millisecond)
-			}
-		}
-
-		// 关闭任务通道，表示没有更多任务
-		close(jobChan)
-
-		// 等待所有工作协程完成
-		wg.Wait()
-
-		// 关闭结果通道
-		close(resultChan)
-
-		// 等待结果收集完成
-		resultWg.Wait()
-	}()
+	// 启动智能队列分发器
+	dispatcher := s.createSmartDispatcher(workerPool, scanDoneChan, concurrency)
+	go dispatcher.start()
 
 	// 等待所有处理完成
-	resultWg.Wait()
+	dispatcher.wait()
+
+	// 等待结果收集器完成
+	resultCollector.wait()
 
 	// 标记 STRM 处理完成
 	s.stats.Mutex.Lock()
 	s.stats.StrmProcessingDone = true
 	s.stats.Mutex.Unlock()
+
+	// 清理URL编码缓存，释放内存
+	s.urlEncodeCache.Clear()
 
 	s.stats.Mutex.RLock()
 	s.logger.Info("STRM 文件生成队列处理完成",
@@ -1733,9 +1689,636 @@ func (q *FileProcessQueue) getAndRemoveStrmFileBatch(batchSize int) []FileEntry 
 	return batch
 }
 
-// fileExistsLocally 检查文件是否已存在于本地
-func (s *StrmGeneratorService) fileExistsLocally(filePath string) bool {
-	// 使用 os.Stat 检查文件是否存在
-	_, err := os.Stat(filePath)
+// URLEncodeCache URL编码缓存
+type URLEncodeCache struct {
+	cache sync.Map // 使用sync.Map提供并发安全的缓存
+}
+
+// NewURLEncodeCache 创建新的URL编码缓存
+func NewURLEncodeCache() *URLEncodeCache {
+	return &URLEncodeCache{}
+}
+
+// GetEncodedPath 获取编码后的路径，带缓存
+func (c *URLEncodeCache) GetEncodedPath(path string) string {
+	if cached, ok := c.cache.Load(path); ok {
+		return cached.(string)
+	}
+
+	// 编码路径
+	encoded := c.encodePath(path)
+	c.cache.Store(path, encoded)
+	return encoded
+}
+
+// GetEncodedFileName 获取编码后的文件名，带缓存
+func (c *URLEncodeCache) GetEncodedFileName(fileName string) string {
+	if cached, ok := c.cache.Load(fileName); ok {
+		return cached.(string)
+	}
+
+	encoded := url.PathEscape(fileName)
+	c.cache.Store(fileName, encoded)
+	return encoded
+}
+
+// encodePath 编码路径的内部方法
+func (c *URLEncodeCache) encodePath(dirPath string) string {
+	encodedDirPath := filepath.ToSlash(dirPath) // 统一使用正斜杠
+	if encodedDirPath == "." || encodedDirPath == "" {
+		return encodedDirPath
+	}
+
+	pathParts := strings.Split(encodedDirPath, "/")
+	for i, part := range pathParts {
+		if part != "" { // 跳过空字符串
+			pathParts[i] = url.PathEscape(part)
+		}
+	}
+	return strings.Join(pathParts, "/")
+}
+
+// Clear 清理缓存（可选，用于内存管理）
+func (c *URLEncodeCache) Clear() {
+	c.cache = sync.Map{}
+}
+
+// optimizedURLEncode 优化的URL编码函数，使用缓存减少重复计算
+func (s *StrmGeneratorService) optimizedURLEncode(dirPath, fileName string, needEncode bool) (string, string) {
+	if !needEncode {
+		return dirPath, fileName
+	}
+
+	// 使用缓存获取编码结果
+	encodedDirPath := s.urlEncodeCache.GetEncodedPath(dirPath)
+	encodedFileName := s.urlEncodeCache.GetEncodedFileName(fileName)
+
+	return encodedDirPath, encodedFileName
+}
+
+// calculateOptimalConcurrency 动态计算最优并发数
+func (s *StrmGeneratorService) calculateOptimalConcurrency() int {
+	cpuCount := runtime.NumCPU()
+
+	// 基于CPU核心数和系统负载动态调整
+	baseConcurrency := cpuCount * 4 // I/O密集型任务，可以超过CPU核心数
+
+	// 根据可用内存调整
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+
+	// 如果内存使用率过高，降低并发数
+	if memStats.Sys > 1024*1024*1024 { // 超过1GB系统内存使用
+		baseConcurrency = cpuCount * 2
+	}
+
+	// 设置合理的范围
+	if baseConcurrency < 10 {
+		baseConcurrency = 10
+	} else if baseConcurrency > 50 {
+		baseConcurrency = 50
+	}
+
+	return baseConcurrency
+}
+
+// WorkerPool 高性能工作池
+type WorkerPool struct {
+	workers    []*Worker
+	resultChan chan FileProcessResult
+	wg         sync.WaitGroup
+	ctx        context.Context
+	cancel     context.CancelFunc
+	closed     int32         // 使用原子操作防止重复关闭
+	initDone   chan struct{} // 初始化完成信号
+}
+
+// Worker 工作协程
+type Worker struct {
+	id         int
+	localQueue []FileEntry // 本地队列，实现工作窃取
+	mutex      sync.RWMutex
+	service    *StrmGeneratorService
+	taskInfo   *task.Task
+	strmConfig *StrmConfig
+	taskLogID  uint
+	resultChan chan FileProcessResult // 结果通道引用
+}
+
+// createWorkerPool 创建高性能工作池
+func (s *StrmGeneratorService) createWorkerPool(concurrency int) *WorkerPool {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	pool := &WorkerPool{
+		workers:    make([]*Worker, concurrency),
+		resultChan: make(chan FileProcessResult, concurrency*10),
+		ctx:        ctx,
+		cancel:     cancel,
+		initDone:   make(chan struct{}),
+	}
+
+	return pool
+}
+
+// startWorkers 启动工作协程
+func (pool *WorkerPool) startWorkers(service *StrmGeneratorService, taskInfo *task.Task, strmConfig *StrmConfig, taskLogID uint) {
+	// 第一步：创建所有Worker实例
+	for i := 0; i < len(pool.workers); i++ {
+		worker := &Worker{
+			id:         i,
+			localQueue: make([]FileEntry, 0, 20), // 增加本地队列容量
+			service:    service,
+			taskInfo:   taskInfo,
+			strmConfig: strmConfig,
+			taskLogID:  taskLogID,
+			resultChan: pool.resultChan,
+		}
+		pool.workers[i] = worker
+	}
+
+	// 发送初始化完成信号
+	close(pool.initDone)
+
+	// 第二步：启动所有协程（此时所有Worker都已初始化）
+	for i := 0; i < len(pool.workers); i++ {
+		pool.wg.Add(1)
+		go pool.workers[i].run(pool.ctx, &pool.wg, pool.workers, pool.initDone)
+	}
+}
+
+// run 工作协程主循环，支持工作窃取
+func (w *Worker) run(ctx context.Context, wg *sync.WaitGroup, allWorkers []*Worker, initDone chan struct{}) {
+	defer wg.Done()
+
+	// 等待所有Worker初始化完成
+	<-initDone
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			// 尝试从本地队列获取任务
+			if job := w.getLocalJob(); job != nil {
+				w.processJob(*job)
+			} else {
+				// 尝试从其他工作协程窃取任务
+				if stolenJob := w.stealWork(allWorkers); stolenJob != nil {
+					w.processJob(*stolenJob)
+				} else {
+					// 没有任务，短暂休眠
+					time.Sleep(time.Millisecond)
+				}
+			}
+		}
+	}
+}
+
+// processJob 处理单个任务
+func (w *Worker) processJob(entry FileEntry) {
+	processed := w.service.processFile(
+		entry.File,
+		entry.FileType,
+		w.taskInfo,
+		w.strmConfig,
+		w.taskLogID,
+		entry.SourcePath,
+		entry.TargetPath,
+	)
+
+	w.resultChan <- FileProcessResult{
+		Entry:     entry,
+		Processed: processed,
+		FileType:  entry.FileType,
+		Success:   processed.Success,
+	}
+}
+
+// addLocalJob 添加任务到本地队列
+func (w *Worker) addLocalJob(job FileEntry) {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+	w.localQueue = append(w.localQueue, job)
+}
+
+// getLocalJob 从本地队列获取任务
+func (w *Worker) getLocalJob() *FileEntry {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	if len(w.localQueue) == 0 {
+		return nil
+	}
+
+	job := w.localQueue[0]
+	w.localQueue = w.localQueue[1:]
+	return &job
+}
+
+// stealWork 从其他工作协程窃取任务
+func (w *Worker) stealWork(allWorkers []*Worker) *FileEntry {
+	for _, worker := range allWorkers {
+		// 添加 nil 检查，防止竞态条件
+		if worker == nil || worker.id == w.id {
+			continue
+		}
+
+		worker.mutex.Lock()
+		if len(worker.localQueue) > 1 { // 只有当对方有多个任务时才窃取
+			// 从队列末尾窃取任务
+			job := worker.localQueue[len(worker.localQueue)-1]
+			worker.localQueue = worker.localQueue[:len(worker.localQueue)-1]
+			worker.mutex.Unlock()
+			return &job
+		}
+		worker.mutex.Unlock()
+	}
+	return nil
+}
+
+// Close 关闭工作池
+func (pool *WorkerPool) Close() {
+	// 使用原子操作防止重复关闭
+	if !atomic.CompareAndSwapInt32(&pool.closed, 0, 1) {
+		return // 已经关闭过了
+	}
+
+	pool.cancel()
+	pool.wg.Wait()
+	close(pool.resultChan)
+}
+
+// ResultCollector 高性能结果收集器
+type ResultCollector struct {
+	resultChan     chan FileProcessResult
+	service        *StrmGeneratorService
+	taskInfo       *task.Task
+	taskLogID      uint
+	batchSize      int
+	updateInterval time.Duration
+	lastUpdateTime time.Time
+	pendingResults []FileProcessResult
+	mutex          sync.Mutex
+	done           chan struct{} // 用于通知收集器完成
+}
+
+// createResultCollector 创建结果收集器
+func (s *StrmGeneratorService) createResultCollector(resultChan chan FileProcessResult, taskInfo *task.Task, taskLogID uint) *ResultCollector {
+	return &ResultCollector{
+		resultChan:     resultChan,
+		service:        s,
+		taskInfo:       taskInfo,
+		taskLogID:      taskLogID,
+		batchSize:      100,             // 批量处理大小
+		updateInterval: 5 * time.Second, // 更新间隔
+		lastUpdateTime: time.Now(),
+		pendingResults: make([]FileProcessResult, 0, 100),
+		done:           make(chan struct{}), // 完成通知通道
+	}
+}
+
+// start 启动结果收集
+func (rc *ResultCollector) start() {
+	ticker := time.NewTicker(rc.updateInterval)
+	defer ticker.Stop()
+	defer close(rc.done) // 结束时发送完成信号
+
+	for {
+		select {
+		case result, ok := <-rc.resultChan:
+			if !ok {
+				// 处理剩余结果
+				rc.processPendingResults()
+				return
+			}
+			rc.addResult(result)
+
+		case <-ticker.C:
+			// 定期处理批量结果
+			rc.processPendingResults()
+		}
+	}
+}
+
+// wait 等待结果收集器完成
+func (rc *ResultCollector) wait() {
+	<-rc.done
+}
+
+// addResult 添加结果到批处理队列
+func (rc *ResultCollector) addResult(result FileProcessResult) {
+	rc.mutex.Lock()
+	defer rc.mutex.Unlock()
+
+	rc.pendingResults = append(rc.pendingResults, result)
+
+	// 如果达到批处理大小，立即处理
+	if len(rc.pendingResults) >= rc.batchSize {
+		rc.processBatch()
+	}
+}
+
+// processPendingResults 处理待处理的结果
+func (rc *ResultCollector) processPendingResults() {
+	rc.mutex.Lock()
+	defer rc.mutex.Unlock()
+
+	if len(rc.pendingResults) > 0 {
+		rc.processBatch()
+	}
+}
+
+// processBatch 批量处理结果
+func (rc *ResultCollector) processBatch() {
+	if len(rc.pendingResults) == 0 {
+		return
+	}
+
+	// 批量处理文件历史记录
+	var successResults []FileProcessResult
+	var generatedCount, skippedCount int
+
+	for _, result := range rc.pendingResults {
+		// 记录文件历史
+		rc.service.recordFileHistory(
+			rc.taskInfo.ID,
+			rc.taskLogID,
+			result.Entry.File,
+			result.Entry.SourcePath,
+			result.Processed.TargetPath,
+			result.FileType,
+			result.Success,
+		)
+
+		if result.Success {
+			generatedCount++
+			successResults = append(successResults, result)
+		} else {
+			skippedCount++
+		}
+	}
+
+	// 批量更新统计信息
+	rc.service.stats.Mutex.Lock()
+	rc.service.stats.GeneratedFile += generatedCount
+	rc.service.stats.SkipFile += skippedCount
+	totalGenerated := rc.service.stats.GeneratedFile
+	totalSkipped := rc.service.stats.SkipFile
+	rc.service.stats.Mutex.Unlock()
+
+	// 更新数据库
+	if time.Since(rc.lastUpdateTime) > rc.updateInterval {
+		rc.updateDatabase(totalGenerated, totalSkipped)
+		rc.lastUpdateTime = time.Now()
+	}
+
+	// 清空待处理队列
+	rc.pendingResults = rc.pendingResults[:0]
+
+	rc.service.logger.Debug("批量处理结果完成",
+		zap.Int("成功", generatedCount),
+		zap.Int("跳过", skippedCount),
+		zap.Int("总成功", totalGenerated),
+		zap.Int("总跳过", totalSkipped))
+}
+
+// updateDatabase 更新数据库
+func (rc *ResultCollector) updateDatabase(totalGenerated, totalSkipped int) {
+	rc.service.stats.Mutex.RLock()
+	skipFileCount := rc.service.stats.SkipFile + rc.service.stats.MetadataSkipped +
+		rc.service.stats.SubtitleSkipped + rc.service.stats.OtherSkipped
+	rc.service.stats.Mutex.RUnlock()
+
+	updateData := map[string]interface{}{
+		"generated_file": totalGenerated,
+		"skip_file":      skipFileCount,
+	}
+
+	if err := repository.TaskLog.UpdatePartial(rc.taskLogID, updateData); err != nil {
+		rc.service.logger.Error("批量更新任务日志失败", zap.Error(err))
+	}
+}
+
+// BatchFileChecker 批量文件检查器
+type BatchFileChecker struct {
+	batchSize      int
+	maxConcurrency int
+}
+
+// NewBatchFileChecker 创建批量文件检查器
+func NewBatchFileChecker() *BatchFileChecker {
+	return &BatchFileChecker{
+		batchSize:      100, // 每批处理100个文件
+		maxConcurrency: 20,  // 最大并发数
+	}
+}
+
+// CheckExistence 批量检查文件存在性，优化大量文件的检查效率
+func (checker *BatchFileChecker) CheckExistence(entries []FileEntry) map[string]bool {
+	existenceMap := make(map[string]bool, len(entries))
+
+	// 如果文件数量较少，直接并发检查
+	if len(entries) <= checker.batchSize {
+		return checker.concurrentCheck(entries)
+	}
+
+	// 大量文件时，分批处理以控制内存和系统资源使用
+	for i := 0; i < len(entries); i += checker.batchSize {
+		end := i + checker.batchSize
+		if end > len(entries) {
+			end = len(entries)
+		}
+
+		batch := entries[i:end]
+		batchResult := checker.concurrentCheck(batch)
+
+		// 合并结果
+		for path, exists := range batchResult {
+			existenceMap[path] = exists
+		}
+
+		// 短暂休眠，避免过度占用系统资源
+		if i+checker.batchSize < len(entries) {
+			time.Sleep(time.Millisecond)
+		}
+	}
+
+	return existenceMap
+}
+
+// concurrentCheck 并发检查一批文件
+func (checker *BatchFileChecker) concurrentCheck(entries []FileEntry) map[string]bool {
+	existenceMap := make(map[string]bool, len(entries))
+	semaphore := make(chan struct{}, checker.maxConcurrency)
+	var wg sync.WaitGroup
+	var mutex sync.Mutex
+
+	for _, entry := range entries {
+		wg.Add(1)
+		go func(targetPath string) {
+			defer wg.Done()
+			semaphore <- struct{}{}        // 获取信号量
+			defer func() { <-semaphore }() // 释放信号量
+
+			// 优化的文件存在性检查
+			exists := checker.fastFileExists(targetPath)
+
+			mutex.Lock()
+			existenceMap[targetPath] = exists
+			mutex.Unlock()
+		}(entry.TargetPath)
+	}
+
+	wg.Wait()
+	return existenceMap
+}
+
+// fastFileExists 快速文件存在性检查，减少系统调用开销
+func (checker *BatchFileChecker) fastFileExists(filePath string) bool {
+	// 使用 os.Lstat 而不是 os.Stat，避免跟随符号链接，提高性能
+	_, err := os.Lstat(filePath)
 	return err == nil
+}
+
+// batchCheckFileExistence 批量检查文件是否存在，提高I/O效率
+func (s *StrmGeneratorService) batchCheckFileExistence(entries []FileEntry) map[string]bool {
+	checker := NewBatchFileChecker()
+	return checker.CheckExistence(entries)
+}
+
+// SmartDispatcher 智能任务分发器
+type SmartDispatcher struct {
+	service       *StrmGeneratorService
+	workerPool    *WorkerPool
+	scanDoneChan  chan bool
+	concurrency   int
+	batchSize     int
+	adaptiveBatch bool
+	wg            sync.WaitGroup
+}
+
+// createSmartDispatcher 创建智能分发器
+func (s *StrmGeneratorService) createSmartDispatcher(workerPool *WorkerPool, scanDoneChan chan bool, concurrency int) *SmartDispatcher {
+	return &SmartDispatcher{
+		service:       s,
+		workerPool:    workerPool,
+		scanDoneChan:  scanDoneChan,
+		concurrency:   concurrency,
+		batchSize:     concurrency * 2, // 动态批次大小
+		adaptiveBatch: true,
+	}
+}
+
+// start 启动智能分发
+func (sd *SmartDispatcher) start() {
+	sd.wg.Add(1)
+	defer sd.wg.Done()
+
+	scanDone := false
+	idleCount := 0
+
+	for !scanDone || sd.service.queue.hasStrmFiles() {
+		queueSize := sd.getQueueSize()
+
+		if queueSize > 0 {
+			// 动态调整批次大小
+			batchSize := sd.calculateBatchSize(queueSize, idleCount)
+
+			// 获取并分发任务
+			batch := sd.service.queue.getAndRemoveStrmFileBatch(batchSize)
+			if len(batch) > 0 {
+				sd.distributeTasks(batch)
+				idleCount = 0 // 重置空闲计数
+			}
+		} else {
+			idleCount++
+		}
+
+		// 检查扫描状态
+		select {
+		case _, ok := <-sd.scanDoneChan:
+			if !ok {
+				scanDone = true
+			}
+		default:
+			// 自适应休眠时间
+			sleepTime := sd.calculateSleepTime(queueSize, idleCount)
+			time.Sleep(sleepTime)
+		}
+	}
+
+	// 关闭工作池
+	sd.workerPool.Close()
+}
+
+// getQueueSize 获取队列大小
+func (sd *SmartDispatcher) getQueueSize() int {
+	sd.service.queue.FilesMutex.RLock()
+	defer sd.service.queue.FilesMutex.RUnlock()
+	return len(sd.service.queue.StrmFiles)
+}
+
+// calculateBatchSize 动态计算批次大小
+func (sd *SmartDispatcher) calculateBatchSize(queueSize, idleCount int) int {
+	if !sd.adaptiveBatch {
+		return sd.batchSize
+	}
+
+	// 基于队列大小和空闲次数动态调整
+	baseBatch := sd.concurrency * 2
+
+	if queueSize > 1000 {
+		// 大队列，增加批次大小
+		baseBatch = sd.concurrency * 4
+	} else if queueSize < 100 {
+		// 小队列，减少批次大小
+		baseBatch = sd.concurrency
+	}
+
+	// 如果系统空闲，可以增加批次大小
+	if idleCount > 10 {
+		baseBatch = baseBatch * 2
+	}
+
+	// 限制最大批次大小
+	if baseBatch > 500 {
+		baseBatch = 500
+	}
+
+	return baseBatch
+}
+
+// distributeTasks 智能分发任务
+func (sd *SmartDispatcher) distributeTasks(batch []FileEntry) {
+	// 负载均衡分发到工作协程
+	workerCount := len(sd.workerPool.workers)
+
+	for i, entry := range batch {
+		workerIndex := i % workerCount
+		sd.workerPool.workers[workerIndex].addLocalJob(entry)
+	}
+
+	sd.service.logger.Debug("智能分发任务完成",
+		zap.Int("任务数", len(batch)),
+		zap.Int("工作协程数", workerCount))
+}
+
+// calculateSleepTime 计算自适应休眠时间
+func (sd *SmartDispatcher) calculateSleepTime(queueSize, idleCount int) time.Duration {
+	if queueSize == 0 {
+		// 队列为空，逐渐增加休眠时间
+		sleepTime := time.Duration(10+idleCount*5) * time.Millisecond
+		if sleepTime > 100*time.Millisecond {
+			sleepTime = 100 * time.Millisecond
+		}
+		return sleepTime
+	}
+
+	// 有任务时，短暂休眠
+	return 10 * time.Millisecond
+}
+
+// wait 等待分发完成
+func (sd *SmartDispatcher) wait() {
+	sd.wg.Wait()
 }

@@ -26,8 +26,31 @@ type LogConfig struct {
 
 // DatabaseConfig 数据库配置
 type DatabaseConfig struct {
-	BaseDir string
-	Name    string
+	Type       string           `json:"type"` // "sqlite" 或 "postgresql"
+	SQLite     SQLiteConfig     `json:"sqlite"`
+	PostgreSQL PostgreSQLConfig `json:"postgresql"`
+}
+
+// SQLiteConfig SQLite数据库配置
+type SQLiteConfig struct {
+	BaseDir string `json:"base_dir"`
+	Name    string `json:"name"`
+}
+
+// PostgreSQLConfig PostgreSQL数据库配置
+type PostgreSQLConfig struct {
+	Host                      string `json:"host"`
+	Port                      int    `json:"port"`
+	Database                  string `json:"database"`
+	Username                  string `json:"username"`
+	Password                  string `json:"password"`
+	SSLMode                   string `json:"ssl_mode"`
+	MaxOpenConns              int    `json:"max_open_conns"`
+	MaxIdleConns              int    `json:"max_idle_conns"`
+	ConnMaxLifetime           int    `json:"conn_max_lifetime"`           // 以分钟为单位
+	SlowQueryThreshold        int    `json:"slow_query_threshold"`        // 慢查询阈值，毫秒
+	EnablePerformanceLog      bool   `json:"enable_performance_log"`      // 是否启用性能日志
+	PerformanceReportInterval int    `json:"performance_report_interval"` // 性能报告间隔，分钟
 }
 
 // JWTConfig JWT配置
@@ -104,8 +127,25 @@ func LoadConfig() *AppConfig {
 			Compress:    getEnvAsBool("LOG_COMPRESS", true),
 		},
 		Database: DatabaseConfig{
-			BaseDir: getEnv("DB_BASE_DIR", "../data/db"),
-			Name:    getEnv("DB_NAME", "database.sqlite"),
+			Type: getEnv("DB_TYPE", "sqlite"),
+			SQLite: SQLiteConfig{
+				BaseDir: getEnv("DB_BASE_DIR", "../data/db"),
+				Name:    getEnv("DB_NAME", "database.sqlite"),
+			},
+			PostgreSQL: PostgreSQLConfig{
+				Host:                      getEnv("DB_HOST", "localhost"),
+				Port:                      getEnvAsInt("DB_PORT", 5432),
+				Database:                  getEnv("DB_DATABASE", "alist2strm"),
+				Username:                  getEnv("DB_USERNAME", "postgres"),
+				Password:                  getEnv("DB_PASSWORD", ""),
+				SSLMode:                   getEnv("DB_SSL_MODE", "disable"),
+				MaxOpenConns:              getEnvAsInt("DB_MAX_OPEN_CONNS", 25),
+				MaxIdleConns:              getEnvAsInt("DB_MAX_IDLE_CONNS", 5),
+				ConnMaxLifetime:           getEnvAsInt("DB_CONN_MAX_LIFETIME", 60),     // 分钟
+				SlowQueryThreshold:        getEnvAsInt("DB_SLOW_QUERY_THRESHOLD", 100), // 毫秒
+				EnablePerformanceLog:      getEnvAsBool("DB_ENABLE_PERFORMANCE_LOG", true),
+				PerformanceReportInterval: getEnvAsInt("DB_PERFORMANCE_REPORT_INTERVAL", 5), // 分钟
+			},
 		},
 		JWT: JWTConfig{
 			SecretKey: getEnv("JWT_SECRET_KEY", "alist2strm-default-jwt-secret-key-2025"),
