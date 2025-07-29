@@ -203,7 +203,7 @@ func (s *StrmGeneratorService) ProcessFileChangeEvent(taskInfo *task.Task, event
 	switch fileType {
 	case FileTypeMedia:
 		if !s.isMediaFileSizeValid(aListFile, strmConfig) {
-			s.logger.Info("Skipping media file from webhook due to size constraints", zap.String("file", aListFile.Name))
+			s.logger.Debug("Skipping media file from webhook due to size constraints", zap.String("file", aListFile.Name))
 			return nil
 		}
 		// Pass the original, non-normalized path to generateStrmFile, as it handles its own normalization.
@@ -476,8 +476,10 @@ func (s *StrmGeneratorService) GenerateStrmFiles(taskID uint) error {
 	s.stats.Mutex.RLock()
 	// 计算统计数据
 	generatedFiles := s.stats.GeneratedFile
-	// 所有跳过的文件总和：STRM文件跳过 + 元数据文件跳过 + 字幕文件跳过 + 其他文件跳过
-	skippedFiles := s.stats.SkipFile + s.stats.MetadataSkipped + s.stats.SubtitleSkipped + s.stats.OtherSkipped
+	// 跳过的文件总和：STRM文件跳过 + 其他文件跳过
+	// 注意：元数据和字幕的跳过不计入总跳过数，因为它们有单独的统计字段
+	// 这样确保：总文件数 = 生成文件数 + 跳过文件数 + 元数据文件数 + 字幕文件数
+	skippedFiles := s.stats.SkipFile + s.stats.OtherSkipped
 	// 元数据处理总数：下载 + 跳过
 	metadataFiles := s.stats.MetadataDownloaded + s.stats.MetadataSkipped
 	// 字幕处理总数：下载 + 跳过
@@ -1011,6 +1013,61 @@ func (s *StrmGeneratorService) isMediaFileSizeValid(file *AListFile, strmConfig 
 	return true
 }
 
+// truncateFileName 截断文件名以避免在Linux系统中因文件名过长导致创建失败
+// Linux文件系统通常限制文件名最大长度为255字节
+func (s *StrmGeneratorService) truncateFileName(fileName string) string {
+	const maxFileNameLength = 255
+
+	// 如果文件名长度在限制内，直接返回
+	if len(fileName) <= maxFileNameLength {
+		return fileName
+	}
+
+	// 获取文件扩展名
+	ext := filepath.Ext(fileName)
+	nameWithoutExt := strings.TrimSuffix(fileName, ext)
+
+	// 为了避免截断后的文件名冲突，我们添加一个短哈希后缀
+	// 计算原文件名的哈希值，取前8位作为后缀
+	hash := fmt.Sprintf("%08x", hashString(fileName))
+	hashSuffix := "_" + hash[:8]
+
+	// 计算可用于文件名主体的最大长度（需要为哈希后缀和扩展名预留空间）
+	maxNameLength := maxFileNameLength - len(ext) - len(hashSuffix)
+
+	// 如果扩展名和哈希后缀本身就超过了限制，这种情况很少见，但需要处理
+	if maxNameLength <= 0 {
+		// 如果扩展名过长，截断整个文件名，不添加哈希后缀
+		s.logger.Warn("文件扩展名过长，截断整个文件名",
+			zap.String("原文件名", fileName),
+			zap.String("扩展名", ext),
+			zap.Int("扩展名长度", len(ext)))
+		return fileName[:maxFileNameLength]
+	}
+
+	// 截断文件名主体，添加哈希后缀，保留扩展名
+	truncatedName := nameWithoutExt[:maxNameLength] + hashSuffix + ext
+
+	s.logger.Debug("文件名过长，已截断并添加哈希后缀",
+		zap.String("原文件名", fileName),
+		zap.String("截断后文件名", truncatedName),
+		zap.Int("原长度", len(fileName)),
+		zap.Int("截断后长度", len(truncatedName)),
+		zap.Int("最大允许长度", maxFileNameLength),
+		zap.String("哈希后缀", hashSuffix))
+
+	return truncatedName
+}
+
+// hashString 计算字符串的简单哈希值
+func hashString(s string) uint32 {
+	h := uint32(0)
+	for _, c := range s {
+		h = h*31 + uint32(c)
+	}
+	return h
+}
+
 // processFile 处理单个文件
 func (s *StrmGeneratorService) processFile(file *AListFile, fileType FileType, taskInfo *task.Task, strmConfig *StrmConfig, taskLogID uint, sourcePath, targetPath string) *ProcessedFile {
 	result := &ProcessedFile{
@@ -1133,6 +1190,9 @@ func (s *StrmGeneratorService) generateStrmFile(file *AListFile, strmConfig *Str
 		strmFileName = file.Name + ".strm"
 	}
 
+	// 检查并处理文件名长度，避免在Linux系统中因文件名过长导致创建失败
+	strmFileName = s.truncateFileName(strmFileName)
+
 	// 构建完整的 STRM 文件路径
 	strmFilePath := filepath.Join(filepath.Dir(targetPath), strmFileName)
 
@@ -1162,8 +1222,21 @@ func (s *StrmGeneratorService) generateStrmFile(file *AListFile, strmConfig *Str
 // downloadFile 下载文件（元数据和字幕）
 func (s *StrmGeneratorService) downloadFile(file *AListFile, sourcePath, targetPath string, taskConfig *task.Task) (bool, string) {
 
+	// 检查并处理文件名长度，避免在Linux系统中因文件名过长导致创建失败
+	targetDir := filepath.Dir(targetPath)
+	originalFileName := filepath.Base(targetPath)
+	truncatedFileName := s.truncateFileName(originalFileName)
+
+	// 如果文件名被截断，更新目标路径
+	if truncatedFileName != originalFileName {
+		targetPath = filepath.Join(targetDir, truncatedFileName)
+		s.logger.Debug("下载文件路径已更新",
+			zap.String("原路径", filepath.Join(targetDir, originalFileName)),
+			zap.String("新路径", targetPath))
+	}
+
 	// 确保目标目录存在
-	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return false, fmt.Sprintf("创建目标目录失败: %v", err)
 	}
 
@@ -1570,7 +1643,8 @@ func (s *StrmGeneratorService) processDownloadFileQueue(taskInfo *task.Task, str
 			// 计算数据库中需要的汇总数值
 			subtitleCount := s.stats.SubtitleDownloaded + s.stats.SubtitleSkipped
 			metadataCount := s.stats.MetadataDownloaded + s.stats.MetadataSkipped
-			skipFileCount := s.stats.SkipFile + s.stats.MetadataSkipped + s.stats.SubtitleSkipped + s.stats.OtherSkipped
+			// 跳过文件数只包含STRM文件跳过和其他文件跳过，元数据和字幕有单独的统计字段
+			skipFileCount := s.stats.SkipFile + s.stats.OtherSkipped
 
 			updateData := map[string]interface{}{
 				"subtitle_count": subtitleCount,
@@ -2085,8 +2159,8 @@ func (rc *ResultCollector) processBatch() {
 // updateDatabase 更新数据库
 func (rc *ResultCollector) updateDatabase(totalGenerated, totalSkipped int) {
 	rc.service.stats.Mutex.RLock()
-	skipFileCount := rc.service.stats.SkipFile + rc.service.stats.MetadataSkipped +
-		rc.service.stats.SubtitleSkipped + rc.service.stats.OtherSkipped
+	// 跳过文件数只包含STRM文件跳过和其他文件跳过，元数据和字幕有单独的统计字段
+	skipFileCount := rc.service.stats.SkipFile + rc.service.stats.OtherSkipped
 	rc.service.stats.Mutex.RUnlock()
 
 	updateData := map[string]interface{}{
