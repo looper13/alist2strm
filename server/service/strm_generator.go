@@ -229,6 +229,10 @@ func (s *StrmGeneratorService) ProcessFileChangeEvent(taskInfo *task.Task, event
 		return fmt.Errorf("failed to process file from webhook '%s': %s", event.SourceFile, errorMessage)
 	}
 
+	// Record file history for successfully processed file
+	// Use 0 for taskLogID since this is a webhook event, not a batch task
+	s.recordFileHistory(taskInfo.ID, 0, aListFile, event.SourceFile, targetPath, fileType, true)
+
 	s.logger.Info("Successfully processed file from webhook", zap.String("file", event.SourceFile))
 	return nil
 }
@@ -322,6 +326,10 @@ func (s *StrmGeneratorService) processDirectoryEvent(taskInfo *task.Task, dirPat
 			processedCount++
 			s.logger.Debug("Successfully processed file from directory",
 				zap.String("file", sourceFilePath))
+
+			// Record file history for successfully processed files
+			// Use 0 for taskLogID since this is a webhook event, not a batch task
+			s.recordFileHistory(taskInfo.ID, 0, &file, sourceFilePath, targetFilePath, fileType, true)
 		} else {
 			errorCount++
 			s.logger.Error("Failed to process file from directory",
