@@ -144,10 +144,19 @@ func (s *StrmGeneratorService) ProcessFileChangeEvent(taskInfo *task.Task, event
 		zap.String("sourceFile", event.SourceFile),
 	)
 
-	// This function currently only handles file creation events.
+	// Handle directory events - if it's a new directory, scan it for files
 	if event.IsDir {
-		s.logger.Info("Event is for a directory, skipping.", zap.String("dir", event.SourceFile))
-		// In the future, this could trigger a limited recursive scan.
+		s.logger.Info("Event is for a directory, checking for files inside.", zap.String("dir", event.SourceFile))
+
+		// For directory creation events, we should scan the directory for files
+		if event.Action == "create" || event.Action == "mkdir" {
+			return s.processDirectoryEvent(taskInfo, event.SourceFile)
+		}
+
+		// For other directory events (delete, rename), skip for now
+		s.logger.Info("Directory event is not creation, skipping.",
+			zap.String("dir", event.SourceFile),
+			zap.String("action", event.Action))
 		return nil
 	}
 
@@ -221,6 +230,115 @@ func (s *StrmGeneratorService) ProcessFileChangeEvent(taskInfo *task.Task, event
 	}
 
 	s.logger.Info("Successfully processed file from webhook", zap.String("file", event.SourceFile))
+	return nil
+}
+
+// processDirectoryEvent handles directory creation events by scanning the directory for files
+func (s *StrmGeneratorService) processDirectoryEvent(taskInfo *task.Task, dirPath string) error {
+	s.logger.Info("Processing directory creation event",
+		zap.String("task", taskInfo.Name),
+		zap.String("dirPath", dirPath))
+
+	// Load STRM config
+	strmConfig, err := s.loadStrmConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load strm config: %w", err)
+	}
+
+	// List files in the new directory
+	files, err := s.listFiles(taskInfo, dirPath)
+	if err != nil {
+		return fmt.Errorf("failed to list files in directory '%s': %w", dirPath, err)
+	}
+
+	if len(files) == 0 {
+		s.logger.Info("Directory is empty, nothing to process", zap.String("dirPath", dirPath))
+		return nil
+	}
+
+	s.logger.Info("Found files in new directory",
+		zap.String("dirPath", dirPath),
+		zap.Int("fileCount", len(files)))
+
+	// Normalize path separators for consistency
+	dirPathNormalized := strings.ReplaceAll(dirPath, "\\", "/")
+	taskSourcePathNormalized := strings.ReplaceAll(taskInfo.SourcePath, "\\", "/")
+
+	// Calculate target directory path
+	relativePath := strings.TrimPrefix(dirPathNormalized, taskSourcePathNormalized)
+	relativePath = strings.TrimPrefix(relativePath, "/")
+	targetDirPath := filepath.Join(taskInfo.TargetPath, relativePath)
+
+	// Create target directory if it doesn't exist
+	if err := os.MkdirAll(targetDirPath, 0755); err != nil {
+		return fmt.Errorf("failed to create target directory '%s': %w", targetDirPath, err)
+	}
+
+	// Process each file in the directory
+	var processedCount int
+	var errorCount int
+
+	for _, file := range files {
+		if file.IsDir {
+			// Recursively process subdirectories
+			subDirPath := filepath.Join(dirPath, file.Name)
+			if err := s.processDirectoryEvent(taskInfo, subDirPath); err != nil {
+				s.logger.Error("Failed to process subdirectory",
+					zap.String("subDir", subDirPath),
+					zap.Error(err))
+				errorCount++
+			}
+			continue
+		}
+
+		// Process individual file
+		sourceFilePath := filepath.Join(dirPath, file.Name)
+		targetFilePath := filepath.Join(targetDirPath, file.Name)
+
+		// Determine file type
+		fileType := s.determineFileType(&file, taskInfo, strmConfig)
+
+		var success bool
+		var errorMessage string
+
+		switch fileType {
+		case FileTypeMedia:
+			if !s.isMediaFileSizeValid(&file, strmConfig) {
+				s.logger.Debug("Skipping media file due to size constraints",
+					zap.String("file", file.Name))
+				continue
+			}
+			success, errorMessage, _ = s.generateStrmFile(&file, strmConfig, taskInfo, sourceFilePath, targetFilePath)
+		case FileTypeMetadata, FileTypeSubtitle:
+			success, errorMessage = s.downloadFile(&file, sourceFilePath, targetFilePath, taskInfo)
+		default:
+			s.logger.Debug("Skipping file with unhandled type",
+				zap.String("file", file.Name),
+				zap.String("type", getFileTypeString(fileType)))
+			continue
+		}
+
+		if success {
+			processedCount++
+			s.logger.Debug("Successfully processed file from directory",
+				zap.String("file", sourceFilePath))
+		} else {
+			errorCount++
+			s.logger.Error("Failed to process file from directory",
+				zap.String("file", sourceFilePath),
+				zap.String("error", errorMessage))
+		}
+	}
+
+	s.logger.Info("Completed processing directory",
+		zap.String("dirPath", dirPath),
+		zap.Int("processedFiles", processedCount),
+		zap.Int("errorCount", errorCount))
+
+	if errorCount > 0 {
+		return fmt.Errorf("processed directory with %d errors out of %d files", errorCount, len(files))
+	}
+
 	return nil
 }
 
