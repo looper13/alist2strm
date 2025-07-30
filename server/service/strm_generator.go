@@ -274,7 +274,7 @@ func (s *StrmGeneratorService) processDirectoryEvent(taskInfo *task.Task, dirPat
 	targetDirPath := filepath.Join(taskInfo.TargetPath, relativePath)
 
 	// Create target directory if it doesn't exist
-	if err := os.MkdirAll(targetDirPath, 0755); err != nil {
+	if err := s.safeMkdirAll(targetDirPath, 0755); err != nil {
 		return fmt.Errorf("failed to create target directory '%s': %w", targetDirPath, err)
 	}
 
@@ -876,7 +876,7 @@ func (scanner *StreamingScanner) scanDirectoryRecursiveInternal(sourcePath, targ
 		zap.Int("fileCount", len(files)))
 
 	// 创建目标目录
-	if err := os.MkdirAll(targetPath, 0755); err != nil {
+	if err := scanner.service.safeMkdirAll(targetPath, 0755); err != nil {
 		return fmt.Errorf("创建目标目录失败 [%s]: %w", targetPath, err)
 	}
 
@@ -1197,11 +1197,50 @@ func (s *StrmGeneratorService) truncateFileName(fileName string) string {
 }
 
 // truncatePathLength 处理整个路径长度限制，包括目录名和文件名
-// 不同操作系统的路径长度限制：Windows: 260, Linux: 4096, macOS: 1024
+// 主要处理每个目录名和文件名的长度限制（255字节）
 func (s *StrmGeneratorService) truncatePathLength(fullPath string) string {
-	var maxPathLength int
+	// 首先处理路径中每个组件的长度限制
+	pathComponents := strings.Split(fullPath, string(filepath.Separator))
+	var truncatedComponents []string
+	var pathChanged bool
 
-	// 根据操作系统设置路径长度限制
+	for i, component := range pathComponents {
+		if component == "" {
+			// 保留空组件（如Unix绝对路径的开头）
+			truncatedComponents = append(truncatedComponents, component)
+			continue
+		}
+
+		// 检查组件长度是否超过255字节
+		if len(component) > 255 {
+			truncatedComponent := s.truncateFileName(component)
+			truncatedComponents = append(truncatedComponents, truncatedComponent)
+			pathChanged = true
+
+			s.logger.Debug("截断路径组件",
+				zap.String("原组件", component),
+				zap.String("截断后组件", truncatedComponent),
+				zap.Int("原长度", len(component)),
+				zap.Int("截断后长度", len(truncatedComponent)),
+				zap.Int("组件索引", i))
+		} else {
+			truncatedComponents = append(truncatedComponents, component)
+		}
+	}
+
+	// 重新组装路径
+	newPath := strings.Join(truncatedComponents, string(filepath.Separator))
+
+	if pathChanged {
+		s.logger.Info("路径组件已截断",
+			zap.String("原路径", fullPath),
+			zap.String("新路径", newPath),
+			zap.Int("原长度", len(fullPath)),
+			zap.Int("新长度", len(newPath)))
+	}
+
+	// 检查整体路径长度限制
+	var maxPathLength int
 	switch runtime.GOOS {
 	case "windows":
 		maxPathLength = 260
@@ -1213,42 +1252,12 @@ func (s *StrmGeneratorService) truncatePathLength(fullPath string) string {
 		maxPathLength = 260 // 默认使用最保守的限制
 	}
 
-	// 如果路径长度在限制内，只需要检查文件名长度
-	if len(fullPath) <= maxPathLength {
-		dir := filepath.Dir(fullPath)
-		fileName := filepath.Base(fullPath)
-		truncatedFileName := s.truncateFileName(fileName)
-
-		if truncatedFileName != fileName {
-			return filepath.Join(dir, truncatedFileName)
-		}
-		return fullPath
+	// 如果整体路径仍然过长，进行进一步处理
+	if len(newPath) > maxPathLength {
+		return s.truncateDirectoryPath(filepath.Dir(newPath), filepath.Base(newPath), maxPathLength)
 	}
 
-	// 路径过长，需要同时处理目录和文件名
-	s.logger.Warn("路径长度超过限制，开始处理",
-		zap.String("原路径", fullPath),
-		zap.Int("原长度", len(fullPath)),
-		zap.Int("最大长度", maxPathLength),
-		zap.String("操作系统", runtime.GOOS))
-
-	dir := filepath.Dir(fullPath)
-	fileName := filepath.Base(fullPath)
-
-	// 首先截断文件名
-	truncatedFileName := s.truncateFileName(fileName)
-
-	// 计算截断文件名后的路径长度
-	newPath := filepath.Join(dir, truncatedFileName)
-	if len(newPath) <= maxPathLength {
-		s.logger.Debug("截断文件名后路径长度符合要求",
-			zap.String("新路径", newPath),
-			zap.Int("新长度", len(newPath)))
-		return newPath
-	}
-
-	// 如果仍然过长，需要截断目录路径
-	return s.truncateDirectoryPath(dir, truncatedFileName, maxPathLength)
+	return newPath
 }
 
 // truncateDirectoryPath 截断目录路径以适应路径长度限制
@@ -1333,6 +1342,63 @@ func (s *StrmGeneratorService) truncateDirectoryPath(dir, fileName string, maxPa
 	}
 
 	return newPath
+}
+
+// safeMkdirAll 安全创建目录，处理目录名长度限制
+func (s *StrmGeneratorService) safeMkdirAll(path string, perm os.FileMode) error {
+	// 如果路径为空或已存在，直接返回
+	if path == "" {
+		return nil
+	}
+
+	// 检查目录是否已存在
+	if info, err := os.Stat(path); err == nil && info.IsDir() {
+		return nil
+	}
+
+	// 处理路径长度和目录名长度
+	safePath := s.truncatePathLength(path)
+
+	// 分解路径，逐级检查和创建目录
+	return s.createDirectoryRecursively(safePath, perm)
+}
+
+// createDirectoryRecursively 递归创建目录，确保每个目录名都符合长度限制
+func (s *StrmGeneratorService) createDirectoryRecursively(path string, perm os.FileMode) error {
+	// 获取父目录
+	parent := filepath.Dir(path)
+
+	// 如果父目录不是根目录且不存在，先创建父目录
+	if parent != path && parent != "." && parent != "/" {
+		if _, err := os.Stat(parent); os.IsNotExist(err) {
+			if err := s.createDirectoryRecursively(parent, perm); err != nil {
+				return err
+			}
+		}
+	}
+
+	// 检查当前目录名长度
+	dirName := filepath.Base(path)
+	if len(dirName) > 255 {
+		// 目录名过长，需要截断
+		truncatedDirName := s.truncateFileName(dirName)
+		newPath := filepath.Join(parent, truncatedDirName)
+
+		s.logger.Warn("目录名过长，已截断",
+			zap.String("原目录名", dirName),
+			zap.String("截断后目录名", truncatedDirName),
+			zap.String("原路径", path),
+			zap.String("新路径", newPath))
+
+		path = newPath
+	}
+
+	// 创建目录
+	if err := os.Mkdir(path, perm); err != nil && !os.IsExist(err) {
+		return fmt.Errorf("创建目录失败 [%s]: %w", path, err)
+	}
+
+	return nil
 }
 
 // hashString 计算字符串的简单哈希值
@@ -1478,7 +1544,7 @@ func (s *StrmGeneratorService) generateStrmFile(file *AListFile, strmConfig *Str
 	}
 
 	// 确保目标目录存在
-	if err := os.MkdirAll(filepath.Dir(strmFilePath), 0755); err != nil {
+	if err := s.safeMkdirAll(filepath.Dir(strmFilePath), 0755); err != nil {
 		return false, fmt.Sprintf("创建目标目录失败: %v", err), strmFilePath
 	}
 
@@ -1513,7 +1579,7 @@ func (s *StrmGeneratorService) downloadFile(file *AListFile, sourcePath, targetP
 	targetDir := filepath.Dir(targetPath)
 
 	// 确保目标目录存在
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
+	if err := s.safeMkdirAll(targetDir, 0755); err != nil {
 		return false, fmt.Sprintf("创建目标目录失败: %v", err)
 	}
 
@@ -1623,7 +1689,7 @@ func (s *StrmGeneratorService) downloadFileFromURL(fileURL, targetPath string) e
 	}
 
 	// 确保目标目录存在
-	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+	if err := s.safeMkdirAll(filepath.Dir(targetPath), 0755); err != nil {
 		return fmt.Errorf("创建目标目录失败: %w", err)
 	}
 
