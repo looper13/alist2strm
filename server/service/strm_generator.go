@@ -286,6 +286,17 @@ func (s *StrmGeneratorService) processDirectoryEvent(taskInfo *task.Task, dirPat
 		if file.IsDir {
 			// Recursively process subdirectories
 			subDirPath := filepath.Join(dirPath, file.Name)
+
+			// Check if subdirectory path length is reasonable
+			// If the path is too long, we might need to handle it differently
+			if len(subDirPath) > 4000 { // Conservative limit to prevent issues
+				s.logger.Warn("Subdirectory path is very long, skipping to prevent issues",
+					zap.String("subDir", subDirPath),
+					zap.Int("pathLength", len(subDirPath)))
+				errorCount++
+				continue
+			}
+
 			if err := s.processDirectoryEvent(taskInfo, subDirPath); err != nil {
 				s.logger.Error("Failed to process subdirectory",
 					zap.String("subDir", subDirPath),
@@ -1142,7 +1153,7 @@ func (s *StrmGeneratorService) isMediaFileSizeValid(file *AListFile, strmConfig 
 // truncateFileName 截断文件名以避免在Linux系统中因文件名过长导致创建失败
 // Linux文件系统通常限制文件名最大长度为255字节
 func (s *StrmGeneratorService) truncateFileName(fileName string) string {
-	const maxFileNameLength = 255
+	const maxFileNameLength = 200
 
 	// 如果文件名长度在限制内，直接返回
 	if len(fileName) <= maxFileNameLength {
@@ -1183,6 +1194,145 @@ func (s *StrmGeneratorService) truncateFileName(fileName string) string {
 		zap.String("哈希后缀", hashSuffix))
 
 	return truncatedName
+}
+
+// truncatePathLength 处理整个路径长度限制，包括目录名和文件名
+// 不同操作系统的路径长度限制：Windows: 260, Linux: 4096, macOS: 1024
+func (s *StrmGeneratorService) truncatePathLength(fullPath string) string {
+	var maxPathLength int
+
+	// 根据操作系统设置路径长度限制
+	switch runtime.GOOS {
+	case "windows":
+		maxPathLength = 260
+	case "linux":
+		maxPathLength = 4096
+	case "darwin": // macOS
+		maxPathLength = 1024
+	default:
+		maxPathLength = 260 // 默认使用最保守的限制
+	}
+
+	// 如果路径长度在限制内，只需要检查文件名长度
+	if len(fullPath) <= maxPathLength {
+		dir := filepath.Dir(fullPath)
+		fileName := filepath.Base(fullPath)
+		truncatedFileName := s.truncateFileName(fileName)
+
+		if truncatedFileName != fileName {
+			return filepath.Join(dir, truncatedFileName)
+		}
+		return fullPath
+	}
+
+	// 路径过长，需要同时处理目录和文件名
+	s.logger.Warn("路径长度超过限制，开始处理",
+		zap.String("原路径", fullPath),
+		zap.Int("原长度", len(fullPath)),
+		zap.Int("最大长度", maxPathLength),
+		zap.String("操作系统", runtime.GOOS))
+
+	dir := filepath.Dir(fullPath)
+	fileName := filepath.Base(fullPath)
+
+	// 首先截断文件名
+	truncatedFileName := s.truncateFileName(fileName)
+
+	// 计算截断文件名后的路径长度
+	newPath := filepath.Join(dir, truncatedFileName)
+	if len(newPath) <= maxPathLength {
+		s.logger.Debug("截断文件名后路径长度符合要求",
+			zap.String("新路径", newPath),
+			zap.Int("新长度", len(newPath)))
+		return newPath
+	}
+
+	// 如果仍然过长，需要截断目录路径
+	return s.truncateDirectoryPath(dir, truncatedFileName, maxPathLength)
+}
+
+// truncateDirectoryPath 截断目录路径以适应路径长度限制
+func (s *StrmGeneratorService) truncateDirectoryPath(dir, fileName string, maxPathLength int) string {
+	// 为文件名和路径分隔符预留空间
+	reservedLength := len(fileName) + 1 // +1 for path separator
+	maxDirLength := maxPathLength - reservedLength
+
+	if maxDirLength <= 0 {
+		// 如果文件名本身就太长，只能使用根目录
+		s.logger.Error("文件名过长，无法创建有效路径",
+			zap.String("文件名", fileName),
+			zap.Int("文件名长度", len(fileName)),
+			zap.Int("最大路径长度", maxPathLength))
+		return fileName
+	}
+
+	// 如果目录路径在限制内，直接返回
+	if len(dir) <= maxDirLength {
+		return filepath.Join(dir, fileName)
+	}
+
+	// 需要截断目录路径
+	// 策略：保留路径的开头和结尾部分，中间用哈希替代
+	pathParts := strings.Split(dir, string(filepath.Separator))
+
+	// 如果只有一个目录层级，直接截断
+	if len(pathParts) <= 1 {
+		truncatedDir := dir[:maxDirLength]
+		result := filepath.Join(truncatedDir, fileName)
+		s.logger.Debug("截断单层目录路径",
+			zap.String("原目录", dir),
+			zap.String("截断后目录", truncatedDir),
+			zap.String("最终路径", result))
+		return result
+	}
+
+	// 多层目录：保留第一层和最后一层，中间层用哈希替代
+	firstPart := pathParts[0]
+	lastPart := pathParts[len(pathParts)-1]
+
+	// 计算中间部分的哈希
+	middleParts := strings.Join(pathParts[1:len(pathParts)-1], string(filepath.Separator))
+	hash := fmt.Sprintf("%08x", hashString(middleParts))
+	hashDir := "_" + hash[:8]
+
+	// 构建新的目录路径
+	var newDir string
+	if firstPart == "" {
+		// Unix 绝对路径
+		newDir = string(filepath.Separator) + filepath.Join(hashDir, lastPart)
+	} else {
+		newDir = filepath.Join(firstPart, hashDir, lastPart)
+	}
+
+	// 检查新路径长度
+	newPath := filepath.Join(newDir, fileName)
+	if len(newPath) <= maxPathLength {
+		s.logger.Debug("成功截断多层目录路径",
+			zap.String("原目录", dir),
+			zap.String("新目录", newDir),
+			zap.String("最终路径", newPath),
+			zap.String("哈希目录", hashDir))
+		return newPath
+	}
+
+	// 如果还是太长，进一步截断最后一层目录
+	maxLastPartLength := maxDirLength - len(firstPart) - len(hashDir) - 2 // -2 for separators
+	if maxLastPartLength > 0 && len(lastPart) > maxLastPartLength {
+		truncatedLastPart := lastPart[:maxLastPartLength]
+		if firstPart == "" {
+			newDir = string(filepath.Separator) + filepath.Join(hashDir, truncatedLastPart)
+		} else {
+			newDir = filepath.Join(firstPart, hashDir, truncatedLastPart)
+		}
+		newPath = filepath.Join(newDir, fileName)
+
+		s.logger.Debug("进一步截断最后一层目录",
+			zap.String("原最后层", lastPart),
+			zap.String("截断后最后层", truncatedLastPart),
+			zap.String("最终路径", newPath))
+	}
+
+	return newPath
 }
 
 // hashString 计算字符串的简单哈希值
@@ -1316,11 +1466,11 @@ func (s *StrmGeneratorService) generateStrmFile(file *AListFile, strmConfig *Str
 		strmFileName = file.Name + ".strm"
 	}
 
-	// 检查并处理文件名长度，避免在Linux系统中因文件名过长导致创建失败
-	strmFileName = s.truncateFileName(strmFileName)
-
 	// 构建完整的 STRM 文件路径
 	strmFilePath := filepath.Join(filepath.Dir(targetPath), strmFileName)
+
+	// 检查并处理路径长度，包括目录名和文件名
+	strmFilePath = s.truncatePathLength(strmFilePath)
 
 	// 检查是否需要覆盖现有文件
 	if !s.shouldOverwrite(strmFilePath, taskConfig) {
@@ -1348,18 +1498,19 @@ func (s *StrmGeneratorService) generateStrmFile(file *AListFile, strmConfig *Str
 // downloadFile 下载文件（元数据和字幕）
 func (s *StrmGeneratorService) downloadFile(file *AListFile, sourcePath, targetPath string, taskConfig *task.Task) (bool, string) {
 
-	// 检查并处理文件名长度，避免在Linux系统中因文件名过长导致创建失败
-	targetDir := filepath.Dir(targetPath)
-	originalFileName := filepath.Base(targetPath)
-	truncatedFileName := s.truncateFileName(originalFileName)
+	// 检查并处理路径长度，包括目录名和文件名
+	originalPath := targetPath
+	targetPath = s.truncatePathLength(targetPath)
 
-	// 如果文件名被截断，更新目标路径
-	if truncatedFileName != originalFileName {
-		targetPath = filepath.Join(targetDir, truncatedFileName)
+	// 如果路径被截断，记录日志
+	if targetPath != originalPath {
 		s.logger.Debug("下载文件路径已更新",
-			zap.String("原路径", filepath.Join(targetDir, originalFileName)),
+			zap.String("原路径", originalPath),
 			zap.String("新路径", targetPath))
 	}
+
+	// 获取目标目录路径
+	targetDir := filepath.Dir(targetPath)
 
 	// 确保目标目录存在
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
