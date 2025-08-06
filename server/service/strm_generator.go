@@ -135,8 +135,8 @@ func (s *StrmGeneratorService) Initialize(logger *zap.Logger) {
 	logger.Info("STRM 生成服务初始化完成")
 }
 
-// ProcessFileChangeEvent handles a single file change event from a webhook.
-// It's designed to be called asynchronously for individual file creations.
+// ProcessFileChangeEvent 处理来自 webhook 的单个文件变更事件。
+// 该方法设计为可异步调用，用于处理单个文件的创建事件。
 func (s *StrmGeneratorService) ProcessFileChangeEvent(taskInfo *task.Task, event *webhook.FileChangeEvent) error {
 	s.logger.Info("Processing file change event from webhook",
 		zap.String("task", taskInfo.Name),
@@ -144,34 +144,34 @@ func (s *StrmGeneratorService) ProcessFileChangeEvent(taskInfo *task.Task, event
 		zap.String("sourceFile", event.SourceFile),
 	)
 
-	// Handle directory events - if it's a new directory, scan it for files
+	// 处理目录事件 - 如果是新目录，则扫描其中的文件
 	if event.IsDir {
 		s.logger.Info("Event is for a directory, checking for files inside.", zap.String("dir", event.SourceFile))
 
-		// For directory creation events, we should scan the directory for files
+		// 对于目录创建事件，我们应该扫描目录中的文件
 		if event.Action == "create" || event.Action == "mkdir" {
 			return s.processDirectoryEvent(taskInfo, event.SourceFile)
 		}
 
-		// For other directory events (delete, rename), skip for now
+		// 对于其他目录事件（删除、重命名），暂时跳过
 		s.logger.Info("Directory event is not creation, skipping.",
 			zap.String("dir", event.SourceFile),
 			zap.String("action", event.Action))
 		return nil
 	}
 
-	// 1. Load STRM config
+	// 1. 加载 STRM 配置
 	strmConfig, err := s.loadStrmConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load strm config: %w", err)
 	}
 
-	// Normalize path separators to / for consistency
+	// 标准化路径分隔符为 / 以保持一致性
 	sourceFileNormalized := strings.ReplaceAll(event.SourceFile, "\\", "/")
 	taskSourcePathNormalized := strings.ReplaceAll(taskInfo.SourcePath, "\\", "/")
 
-	// 2. Get the full file info (AListFile) for the new file.
-	// We do this by listing the parent directory and finding the matching file.
+	// 2. 获取新文件的完整文件信息（AListFile）。
+	// 我们通过列出父目录并找到匹配的文件来实现这一点。
 	parentDir := filepath.Dir(sourceFileNormalized)
 	files, err := s.listFiles(taskInfo, parentDir)
 	if err != nil {
@@ -191,14 +191,14 @@ func (s *StrmGeneratorService) ProcessFileChangeEvent(taskInfo *task.Task, event
 		return fmt.Errorf("could not find file info for '%s' in parent directory listing", sourceFileNormalized)
 	}
 
-	// 3. Determine the target path for the new file.
-	// This is done by replacing the task's source path prefix with the task's target path.
-	// Use the normalized paths for this operation.
+	// 3. 确定新文件的目标路径。
+	// 这是通过用任务的目标路径替换任务的源路径前缀来完成的。
+	// 使用标准化路径进行此操作。
 	relativePath := strings.TrimPrefix(sourceFileNormalized, taskSourcePathNormalized)
-	relativePath = strings.TrimPrefix(relativePath, "/") // Ensure no leading slash
+	relativePath = strings.TrimPrefix(relativePath, "/") // 确保没有前导斜杠
 	targetPath := filepath.Join(taskInfo.TargetPath, relativePath)
 
-	// 4. Determine file type and process accordingly.
+	// 4. 确定文件类型并进行相应处理。
 	fileType := s.determineFileType(aListFile, taskInfo, strmConfig)
 
 	var success bool
@@ -215,41 +215,41 @@ func (s *StrmGeneratorService) ProcessFileChangeEvent(taskInfo *task.Task, event
 			s.logger.Debug("Skipping media file from webhook due to size constraints", zap.String("file", aListFile.Name))
 			return nil
 		}
-		// Pass the original, non-normalized path to generateStrmFile, as it handles its own normalization.
+		// 将原始的、非标准化的路径传递给 generateStrmFile，因为它会处理自己的标准化。
 		success, errorMessage, _ = s.generateStrmFile(aListFile, strmConfig, taskInfo, event.SourceFile, targetPath)
 	case FileTypeMetadata, FileTypeSubtitle:
-		// Pass the original, non-normalized path to downloadFile.
+		// 将原始的、非标准化的路径传递给 downloadFile。
 		success, errorMessage = s.downloadFile(aListFile, event.SourceFile, targetPath, taskInfo)
 	default:
 		s.logger.Info("Skipping file with unhandled type from webhook", zap.String("file", aListFile.Name))
-		return nil // Not an error, just skipping.
+		return nil // 不是错误，只是跳过。
 	}
 
 	if !success {
 		return fmt.Errorf("failed to process file from webhook '%s': %s", event.SourceFile, errorMessage)
 	}
 
-	// Record file history for successfully processed file
-	// Use 0 for taskLogID since this is a webhook event, not a batch task
+	// 记录成功处理文件的文件历史
+	// 使用 0 作为 taskLogID，因为这是 webhook 事件，不是批处理任务
 	s.recordFileHistory(taskInfo.ID, 0, aListFile, event.SourceFile, targetPath, fileType, true)
 
 	s.logger.Info("Successfully processed file from webhook", zap.String("file", event.SourceFile))
 	return nil
 }
 
-// processDirectoryEvent handles directory creation events by scanning the directory for files
+// processDirectoryEvent 通过扫描目录中的文件来处理目录创建事件
 func (s *StrmGeneratorService) processDirectoryEvent(taskInfo *task.Task, dirPath string) error {
 	s.logger.Info("Processing directory creation event",
 		zap.String("task", taskInfo.Name),
 		zap.String("dirPath", dirPath))
 
-	// Load STRM config
+	// 加载 STRM 配置
 	strmConfig, err := s.loadStrmConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load strm config: %w", err)
 	}
 
-	// List files in the new directory
+	// 列出新目录中的文件
 	files, err := s.listFiles(taskInfo, dirPath)
 	if err != nil {
 		return fmt.Errorf("failed to list files in directory '%s': %w", dirPath, err)
@@ -264,32 +264,32 @@ func (s *StrmGeneratorService) processDirectoryEvent(taskInfo *task.Task, dirPat
 		zap.String("dirPath", dirPath),
 		zap.Int("fileCount", len(files)))
 
-	// Normalize path separators for consistency
+	// 标准化路径分隔符以保持一致性
 	dirPathNormalized := strings.ReplaceAll(dirPath, "\\", "/")
 	taskSourcePathNormalized := strings.ReplaceAll(taskInfo.SourcePath, "\\", "/")
 
-	// Calculate target directory path
+	// 计算目标目录路径
 	relativePath := strings.TrimPrefix(dirPathNormalized, taskSourcePathNormalized)
 	relativePath = strings.TrimPrefix(relativePath, "/")
 	targetDirPath := filepath.Join(taskInfo.TargetPath, relativePath)
 
-	// Create target directory if it doesn't exist
+	// 如果目标目录不存在则创建
 	if err := s.safeMkdirAll(targetDirPath, 0755); err != nil {
 		return fmt.Errorf("failed to create target directory '%s': %w", targetDirPath, err)
 	}
 
-	// Process each file in the directory
+	// 处理目录中的每个文件
 	var processedCount int
 	var errorCount int
 
 	for _, file := range files {
 		if file.IsDir {
-			// Recursively process subdirectories
+			// 递归处理子目录
 			subDirPath := filepath.Join(dirPath, file.Name)
 
-			// Check if subdirectory path length is reasonable
-			// If the path is too long, we might need to handle it differently
-			if len(subDirPath) > 4000 { // Conservative limit to prevent issues
+			// 检查子目录路径长度是否合理
+			// 如果路径过长，我们可能需要以不同方式处理
+			if len(subDirPath) > 4000 { // 防止问题的保守限制
 				s.logger.Warn("Subdirectory path is very long, skipping to prevent issues",
 					zap.String("subDir", subDirPath),
 					zap.Int("pathLength", len(subDirPath)))
@@ -306,11 +306,11 @@ func (s *StrmGeneratorService) processDirectoryEvent(taskInfo *task.Task, dirPat
 			continue
 		}
 
-		// Process individual file
+		// 处理单个文件
 		sourceFilePath := filepath.Join(dirPath, file.Name)
 		targetFilePath := filepath.Join(targetDirPath, file.Name)
 
-		// Determine file type
+		// 确定文件类型
 		fileType := s.determineFileType(&file, taskInfo, strmConfig)
 
 		var success bool
@@ -338,8 +338,8 @@ func (s *StrmGeneratorService) processDirectoryEvent(taskInfo *task.Task, dirPat
 			s.logger.Debug("Successfully processed file from directory",
 				zap.String("file", sourceFilePath))
 
-			// Record file history for successfully processed files
-			// Use 0 for taskLogID since this is a webhook event, not a batch task
+			// 记录成功处理文件的文件历史
+			// 使用 0 作为 taskLogID，因为这是 webhook 事件，不是批处理任务
 			s.recordFileHistory(taskInfo.ID, 0, &file, sourceFilePath, targetFilePath, fileType, true)
 		} else {
 			errorCount++
@@ -361,18 +361,18 @@ func (s *StrmGeneratorService) processDirectoryEvent(taskInfo *task.Task, dirPat
 	return nil
 }
 
-// ProcessFileDeleteEvent handles a file deletion event from a webhook.
+// ProcessFileDeleteEvent 处理来自 webhook 的文件删除事件。
 func (s *StrmGeneratorService) ProcessFileDeleteEvent(taskInfo *task.Task, sourceFilePath string) error {
 	s.logger.Info("Processing file delete event from webhook",
 		zap.String("task", taskInfo.Name),
 		zap.String("sourceFile", sourceFilePath),
 	)
 
-	// 1. Calculate the expected target path for the deleted file.
+	// 1. 计算已删除文件的预期目标路径。
 	sourceFileNormalized := strings.ReplaceAll(sourceFilePath, "\\", "/")
 	taskSourcePathNormalized := strings.ReplaceAll(taskInfo.SourcePath, "\\", "/")
 
-	// Ensure the file is actually within the task's path
+	// 确保文件实际上在任务的路径内
 	if !strings.HasPrefix(sourceFileNormalized, taskSourcePathNormalized) {
 		s.logger.Debug("Skipping delete event because file is not within task source path",
 			zap.String("sourceFile", sourceFilePath),
@@ -383,20 +383,20 @@ func (s *StrmGeneratorService) ProcessFileDeleteEvent(taskInfo *task.Task, sourc
 	relativePath := strings.TrimPrefix(sourceFileNormalized, taskSourcePathNormalized)
 	relativePath = strings.TrimPrefix(relativePath, "/")
 
-	// This is the path where the media file would have been, which we use to find siblings.
+	// 这是媒体文件本应在的路径，我们用它来查找相关文件。
 	targetMediaFilePath := filepath.Join(taskInfo.TargetPath, relativePath)
 	targetDir := filepath.Dir(targetMediaFilePath)
 
-	// 2. Find all related files in the target directory to delete.
-	// This includes the .strm file, .nfo, subtitles, etc.
+	// 2. 查找目标目录中所有需要删除的相关文件。
+	// 这包括 .strm 文件、.nfo 文件、字幕文件等。
 	baseName := strings.TrimSuffix(filepath.Base(targetMediaFilePath), filepath.Ext(targetMediaFilePath))
 	filesToDelete, err := filepath.Glob(filepath.Join(targetDir, baseName+".*"))
 	if err != nil {
 		s.logger.Error("Error finding related files to delete via glob", zap.Error(err), zap.String("pattern", filepath.Join(targetDir, baseName+".*")))
-		// Don't return, try to construct strm path manually.
+		// 不要返回，尝试手动构建 strm 路径。
 	}
 
-	// 3. Manually construct the .strm file path to ensure it's on the list.
+	// 3. 手动构建 .strm 文件路径以确保它在列表中。
 	strmConfig, err := s.loadStrmConfig()
 	if err != nil {
 		s.logger.Warn("Could not load strm config for delete event, .strm file might be missed if glob failed", zap.Error(err))
@@ -411,7 +411,7 @@ func (s *StrmGeneratorService) ProcessFileDeleteEvent(taskInfo *task.Task, sourc
 		}
 		strmFilePath := filepath.Join(targetDir, strmFileName)
 
-		// Add to list if not already present
+		// 如果尚未存在，则添加到列表中
 		found := false
 		for _, f := range filesToDelete {
 			if f == strmFilePath {
@@ -429,7 +429,7 @@ func (s *StrmGeneratorService) ProcessFileDeleteEvent(taskInfo *task.Task, sourc
 		return nil
 	}
 
-	// 4. Delete the files.
+	// 4. 删除文件。
 	var lastErr error
 	for _, fileToDel := range filesToDelete {
 		if _, err := os.Stat(fileToDel); err == nil {
@@ -438,7 +438,7 @@ func (s *StrmGeneratorService) ProcessFileDeleteEvent(taskInfo *task.Task, sourc
 					zap.String("file", fileToDel),
 					zap.Error(err),
 				)
-				lastErr = err // Keep track of the last error
+				lastErr = err // 记录最后一个错误
 			} else {
 				s.logger.Info("Successfully deleted target file", zap.String("file", fileToDel))
 			}
@@ -448,7 +448,7 @@ func (s *StrmGeneratorService) ProcessFileDeleteEvent(taskInfo *task.Task, sourc
 	return lastErr
 }
 
-// ProcessFileRenameEvent handles a file rename/move event from a webhook.
+// ProcessFileRenameEvent 处理来自 webhook 的文件重命名/移动事件。
 func (s *StrmGeneratorService) ProcessFileRenameEvent(taskInfo *task.Task, event *webhook.FileChangeEvent) error {
 	s.logger.Info("Processing file rename/move event from webhook",
 		zap.String("task", taskInfo.Name),
@@ -456,14 +456,14 @@ func (s *StrmGeneratorService) ProcessFileRenameEvent(taskInfo *task.Task, event
 		zap.String("to", event.DestinationFile),
 	)
 
-	// 1. Delete the old file(s) based on the source path
+	// 1. 基于源路径删除旧文件
 	if err := s.ProcessFileDeleteEvent(taskInfo, event.SourceFile); err != nil {
-		// Log error but continue, as the source might not have been a strm file.
+		// 记录错误但继续，因为源文件可能不是 strm 文件。
 		s.logger.Warn("Error during delete part of rename event", zap.Error(err), zap.String("source", event.SourceFile))
 	}
 
-	// 2. Create the new file(s) based on the destination path
-	// We can treat the destination file as a new creation event.
+	// 2. 基于目标路径创建新文件
+	// 我们可以将目标文件视为新的创建事件。
 	createEvent := &webhook.FileChangeEvent{
 		Action:     "create",
 		IsDir:      event.IsDir,
@@ -1509,7 +1509,7 @@ func (s *StrmGeneratorService) generateStrmFile(file *AListFile, strmConfig *Str
 				zap.String("编码后文件名", fileName))
 		}
 
-		fileURL = s.cloudDriveService.GetFileURL(dirPath, fileName, file.Sign)
+		fileURL = s.alistService.GetFileURL(dirPath, fileName, file.Sign)
 	case "local":
 		// 本地文件直接使用源路径
 		fileURL = sourcePath
